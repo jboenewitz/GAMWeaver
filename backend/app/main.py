@@ -1,0 +1,299 @@
+"""FastAPI main application for Bike Rental Prediction API."""
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from typing import List, Dict, Any
+
+from .models import (
+    PredictionInput,
+    PredictionOutput,
+    BatchPredictionInput,
+    BatchPredictionOutput,
+    ModelMetrics,
+    ShapeFunctionData,
+    DataSummary,
+    TrainModelRequest,
+    TrainModelResponse,
+    EditedShapeFunctionsRequest,
+    PredictionComparisonResponse,
+    ComparisonMetrics,
+)
+from .ml_service import ml_service
+
+app = FastAPI(
+    title="Bike Rental Prediction API",
+    description="API for predicting bike rentals using IGANN (Interpretable Generalized Additive Neural Networks)",
+    version="1.0.0",
+)
+
+# CORS middleware for React frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "message": "Bike Rental Prediction API",
+        "version": "1.0.0",
+        "docs": "/docs",
+        "endpoints": {
+            "load_data": "/api/data/load",
+            "train_model": "/api/model/train",
+            "predict": "/api/predict",
+            "shape_functions": "/api/model/shape-functions",
+            "metrics": "/api/model/metrics",
+        }
+    }
+
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "model_trained": ml_service.is_trained}
+
+
+@app.post("/api/data/load")
+async def load_data():
+    """Load and prepare the dataset."""
+    try:
+        result = ml_service.load_data()
+        return {"success": True, "data": result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/data/summary")
+async def get_data_summary():
+    """Get summary statistics of the dataset."""
+    try:
+        summary = ml_service.get_data_summary()
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/data/distributions")
+async def get_feature_distributions():
+    """Get feature distributions for visualization."""
+    try:
+        distributions = ml_service.get_feature_distributions()
+        return distributions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/data/hourly-pattern")
+async def get_hourly_pattern():
+    """Get hourly bike rental pattern."""
+    try:
+        pattern = ml_service.get_hourly_pattern()
+        return pattern
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/model/train", response_model=TrainModelResponse)
+async def train_model(request: TrainModelRequest = None):
+    """Train the IGANN model."""
+    try:
+        if request is None:
+            request = TrainModelRequest()
+        
+        # Load data if not already loaded
+        if ml_service.X_train is None:
+            ml_service.load_data()
+        
+        # Train the model
+        metrics = ml_service.train_model(n_estimators=request.n_estimators)
+        
+        return TrainModelResponse(
+            success=True,
+            message="Model trained successfully",
+            metrics=ModelMetrics(**metrics)
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/model/metrics", response_model=ModelMetrics)
+async def get_model_metrics():
+    """Get model performance metrics."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        metrics = ml_service.evaluate_model()
+        return ModelMetrics(**metrics)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/model/shape-functions")
+async def get_shape_functions():
+    """Get shape function data for all features."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        shape_functions = ml_service.get_shape_functions()
+        return {"shape_functions": shape_functions}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/model/predictions-vs-actual")
+async def get_predictions_vs_actual():
+    """Get predictions vs actual values for visualization."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        data = ml_service.get_predictions_vs_actual()
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/predict", response_model=PredictionOutput)
+async def predict(input_data: PredictionInput):
+    """Make a single bike rental prediction."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet. Call /api/model/train first.")
+        
+        features = {
+            "temperature": input_data.temperature,
+            "humidity": input_data.humidity,
+            "windspeed": input_data.windspeed,
+            "time_of_day": input_data.time_of_day,
+            "type_of_day": input_data.type_of_day,
+            "weathersituation": input_data.weathersituation,
+        }
+        
+        prediction = ml_service.predict(features)
+        
+        return PredictionOutput(
+            predicted_count=max(0, prediction),  # Ensure non-negative
+            input_features=features
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/predict/batch", response_model=BatchPredictionOutput)
+async def batch_predict(input_data: BatchPredictionInput):
+    """Make batch predictions."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        features_list = [
+            {
+                "temperature": p.temperature,
+                "humidity": p.humidity,
+                "windspeed": p.windspeed,
+                "time_of_day": p.time_of_day,
+                "type_of_day": p.type_of_day,
+                "weathersituation": p.weathersituation,
+            }
+            for p in input_data.predictions
+        ]
+        
+        predictions = ml_service.batch_predict(features_list)
+        predictions = [max(0, p) for p in predictions]  # Ensure non-negative
+        
+        return BatchPredictionOutput(predictions=predictions)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/model/status")
+async def get_model_status():
+    """Get the current status of the model."""
+    return {
+        "is_trained": ml_service.is_trained,
+        "data_loaded": ml_service.X_train is not None,
+        "features": ml_service.feature_names if ml_service.feature_names else [],
+        "train_size": len(ml_service.X_train) if ml_service.X_train is not None else 0,
+        "test_size": len(ml_service.X_test) if ml_service.X_test is not None else 0,
+    }
+
+
+@app.post("/api/model/update-shape-functions")
+async def update_shape_functions(request: EditedShapeFunctionsRequest):
+    """Update shape functions with user edits."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        # Convert to dict format
+        edited_sfs = [
+            {
+                "feature_name": sf.feature_name,
+                "feature_type": sf.feature_type,
+                "edited_points": [
+                    {"x_value": p.x_value, "y_value": p.y_value}
+                    for p in sf.edited_points
+                ]
+            }
+            for sf in request.edited_shape_functions
+        ]
+        
+        ml_service.update_shape_functions(edited_sfs)
+        return {"success": True, "message": "Shape functions updated"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/model/predictions-comparison")
+async def get_predictions_comparison():
+    """Get comparison between original and interactive predictions."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        comparison = ml_service.get_predictions_comparison()
+        return comparison
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/model/reset-shape-functions")
+async def reset_shape_functions():
+    """Reset shape function edits to original values."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        ml_service.shape_function_offsets = {}
+        return {"success": True, "message": "Shape functions reset to original"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

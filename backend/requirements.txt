@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pandas>=2.2.0
+numpy>=1.26.0
+scikit-learn>=1.5.0
+python-multipart==0.0.12
+pydantic>=2.5.0
+igann @ git+https://github.com/MathiasKraus/igann.git@GAM_wrapper
+plotly>=5.18.0
+dash
+dash-bootstrap-components
+i2dgraph
