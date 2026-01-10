@@ -106,3 +106,41 @@ class PredictionComparisonResponse(BaseModel):
     interactive_predictions: List[float]
     actual_values: List[float]
     metrics: ComparisonMetrics
+
+
+# ==================== User-related Models ====================
+
+class UserLoginRequest(BaseModel):
+    """Request to login or create a user."""
+    name: str
+
+
+class UserResponse(BaseModel):
+    """Response with user information."""
+    id: int
+    name: str
+    created_at: str
+    is_new: bool = False
+
+
+class UserListResponse(BaseModel):
+    """Response with list of users."""
+    users: List[UserResponse]
+
+
+class UserEditsRequest(BaseModel):
+    """Request to save user edits."""
+    user_id: int
+    edited_shape_functions: List[EditedShapeFunction]
+
+
+class CombinedEditsResponse(BaseModel):
+    """Response with combined edits from all users."""
+    total_users_with_edits: int
+    shape_functions: List[Dict[str, Any]]
+
+
+class ResetDatabaseResponse(BaseModel):
+    """Response after resetting the database."""
+    success: bool
+    message: str

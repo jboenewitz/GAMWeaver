@@ -91,6 +91,64 @@ export const apiService = {
     const response = await api.post("/predict/batch", { predictions });
     return response.data;
   },
+
+  // ==================== User endpoints ====================
+
+  loginOrCreateUser: async (name) => {
+    const response = await api.post("/users/login", { name });
+    return response.data;
+  },
+
+  getAllUsers: async () => {
+    const response = await api.get("/users");
+    return response.data;
+  },
+
+  getUser: async (userId) => {
+    const response = await api.get(`/users/${userId}`);
+    return response.data;
+  },
+
+  getUserEdits: async (userId) => {
+    const response = await api.get(`/users/${userId}/edits`);
+    return response.data;
+  },
+
+  saveUserEdits: async (userId, editedShapeFunctions) => {
+    const response = await api.post(`/users/${userId}/edits`, {
+      edited_shape_functions: editedShapeFunctions,
+    });
+    return response.data;
+  },
+
+  clearUserEdits: async (userId) => {
+    const response = await api.delete(`/users/${userId}/edits`);
+    return response.data;
+  },
+
+  loadUserEditsToModel: async (userId) => {
+    const response = await api.post(`/users/${userId}/load-edits`);
+    return response.data;
+  },
+
+  // ==================== Combined results endpoints ====================
+
+  getCombinedEdits: async () => {
+    const response = await api.get("/combined/edits");
+    return response.data;
+  },
+
+  getCombinedPredictionsComparison: async () => {
+    const response = await api.get("/combined/predictions-comparison");
+    return response.data;
+  },
+
+  // ==================== Database management ====================
+
+  resetDatabase: async () => {
+    const response = await api.post("/database/reset");
+    return response.data;
+  },
 };
 
 export default apiService;

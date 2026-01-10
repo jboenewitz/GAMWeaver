@@ -1,0 +1,12 @@
+Defaulting to user installation because normal site-packages is not writeable
+Collecting sqlalchemy
+  Downloading sqlalchemy-2.0.45-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (9.5 kB)
+Collecting greenlet>=1 (from sqlalchemy)
+  Downloading greenlet-3.3.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (4.1 kB)
+Requirement already satisfied: typing-extensions>=4.6.0 in /usr/lib/python3.13/site-packages (from sqlalchemy) (4.12.2)
+Downloading sqlalchemy-2.0.45-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (3.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.3/3.3 MB 6.7 MB/s eta 0:00:00
+Downloading greenlet-3.3.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (612 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 612.8/612.8 kB 5.8 MB/s eta 0:00:00
+Installing collected packages: greenlet, sqlalchemy
+Successfully installed greenlet-3.3.0 sqlalchemy-2.0.45

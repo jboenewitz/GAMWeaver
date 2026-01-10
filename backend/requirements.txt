@@ -10,3 +10,4 @@ plotly>=5.18.0
 dash
 dash-bootstrap-components
 i2dgraph
+sqlalchemy>=2.0.0

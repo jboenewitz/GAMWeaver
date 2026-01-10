@@ -17,8 +17,15 @@ from .models import (
     EditedShapeFunctionsRequest,
     PredictionComparisonResponse,
     ComparisonMetrics,
+    UserLoginRequest,
+    UserResponse,
+    UserListResponse,
+    UserEditsRequest,
+    CombinedEditsResponse,
+    ResetDatabaseResponse,
 )
 from .ml_service import ml_service
+from .db_service import db_service
 
 app = FastAPI(
     title="Bike Rental Prediction API",
@@ -290,6 +297,199 @@ async def reset_shape_functions():
         return {"success": True, "message": "Shape functions reset to original"}
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== User Endpoints ====================
+
+@app.post("/api/users/login", response_model=UserResponse)
+async def login_or_create_user(request: UserLoginRequest):
+    """Login or create a new user."""
+    try:
+        if not request.name or not request.name.strip():
+            raise HTTPException(status_code=400, detail="Name is required")
+        
+        user = db_service.get_or_create_user(request.name.strip())
+        return UserResponse(**user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users", response_model=UserListResponse)
+async def get_all_users():
+    """Get all users."""
+    try:
+        users = db_service.get_all_users()
+        return UserListResponse(users=users)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users/{user_id}")
+async def get_user(user_id: int):
+    """Get a specific user by ID."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users/{user_id}/edits")
+async def get_user_edits(user_id: int):
+    """Get all edits for a specific user."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        edits = db_service.get_user_edits_as_list(user_id)
+        return {"user_id": user_id, "edits": edits}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/users/{user_id}/edits")
+async def save_user_edits(user_id: int, request: EditedShapeFunctionsRequest):
+    """Save shape function edits for a specific user."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Convert to dict format
+        edited_sfs = [
+            {
+                "feature_name": sf.feature_name,
+                "feature_type": sf.feature_type,
+                "edited_points": [
+                    {"x_value": p.x_value, "y_value": p.y_value}
+                    for p in sf.edited_points
+                ]
+            }
+            for sf in request.edited_shape_functions
+        ]
+        
+        db_service.save_user_edits(user_id, edited_sfs)
+        
+        # Also update the ML service offsets for immediate feedback
+        if ml_service.is_trained:
+            ml_service.update_shape_functions(edited_sfs)
+        
+        return {"success": True, "message": "Edits saved successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/users/{user_id}/edits")
+async def clear_user_edits(user_id: int):
+    """Clear all edits for a specific user."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        db_service.clear_user_edits(user_id)
+        ml_service.shape_function_offsets = {}
+        
+        return {"success": True, "message": "User edits cleared"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/users/{user_id}/load-edits")
+async def load_user_edits_to_model(user_id: int):
+    """Load a user's saved edits into the ML service for visualization."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        edits = db_service.get_user_edits_as_list(user_id)
+        if edits:
+            ml_service.update_shape_functions(edits)
+        else:
+            ml_service.shape_function_offsets = {}
+        
+        return {"success": True, "message": "User edits loaded", "edits": edits}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Combined Results Endpoints ====================
+
+@app.get("/api/combined/edits")
+async def get_combined_edits():
+    """Get combined edits from all users."""
+    try:
+        combined = db_service.get_combined_edits_detailed()
+        return combined
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/combined/predictions-comparison")
+async def get_combined_predictions_comparison():
+    """Get predictions comparison using combined edits from all users."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        # Get combined edits
+        combined_edits = db_service.get_combined_edits()
+        
+        # Temporarily apply combined edits
+        original_offsets = ml_service.shape_function_offsets.copy()
+        ml_service.shape_function_offsets = combined_edits
+        
+        # Get comparison
+        comparison = ml_service.get_predictions_comparison()
+        
+        # Restore original offsets
+        ml_service.shape_function_offsets = original_offsets
+        
+        # Add combined edit info
+        combined_details = db_service.get_combined_edits_detailed()
+        comparison["total_users_with_edits"] = combined_details["total_users_with_edits"]
+        comparison["combined_shape_functions"] = combined_details["shape_functions"]
+        
+        return comparison
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Database Management ====================
+
+@app.post("/api/database/reset", response_model=ResetDatabaseResponse)
+async def reset_database():
+    """Reset the entire database (users and edits)."""
+    try:
+        db_service.reset_all_data()
+        ml_service.shape_function_offsets = {}
+        return ResetDatabaseResponse(
+            success=True,
+            message="Database reset successfully. All users and edits have been deleted."
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

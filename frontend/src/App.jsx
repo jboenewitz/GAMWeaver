@@ -9,8 +9,14 @@ import PredictionChart from "./components/PredictionChart";
 import PredictionComparisonChart from "./components/PredictionComparisonChart";
 import HourlyPatternChart from "./components/HourlyPatternChart";
 import DataSummaryCard from "./components/DataSummaryCard";
+import UserLogin from "./components/UserLogin";
+import CombinedResultsPage from "./components/CombinedResultsPage";
 
 function App() {
+  // User state
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined'
+
   // State
   const [modelStatus, setModelStatus] = useState(null);
   const [dataSummary, setDataSummary] = useState(null);
@@ -29,10 +35,61 @@ function App() {
   // Error state
   const [error, setError] = useState(null);
 
-  // Fetch initial status
+  // Check for saved user on mount
   useEffect(() => {
-    fetchModelStatus();
+    const savedUser = localStorage.getItem("currentUser");
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        setCurrentUser(user);
+        setCurrentPage("main");
+      } catch (e) {
+        localStorage.removeItem("currentUser");
+      }
+    }
   }, []);
+
+  // Fetch initial status when on main page
+  useEffect(() => {
+    if (currentPage === "main" && currentUser) {
+      fetchModelStatus();
+    }
+  }, [currentPage, currentUser]);
+
+  const handleLogin = async (name) => {
+    const user = await apiService.loginOrCreateUser(name);
+    setCurrentUser(user);
+    localStorage.setItem("currentUser", JSON.stringify(user));
+    setCurrentPage("main");
+
+    // Load user's previous edits if they exist
+    if (!user.is_new) {
+      try {
+        await apiService.loadUserEditsToModel(user.id);
+      } catch (e) {
+        console.log("No previous edits to load");
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem("currentUser");
+    setCurrentPage("login");
+    // Reset all state
+    setModelStatus(null);
+    setDataSummary(null);
+    setMetrics(null);
+    setShapeFunctions([]);
+    setPredictionsData(null);
+    setHourlyPattern(null);
+    setComparisonData(null);
+  };
+
+  const handleResetDatabase = async () => {
+    await apiService.resetDatabase();
+    handleLogout();
+  };
 
   const fetchModelStatus = async () => {
     try {
@@ -50,6 +107,16 @@ function App() {
         fetchMetrics();
         fetchShapeFunctions();
         fetchPredictionsVsActual();
+
+        // Load user's saved edits
+        if (currentUser) {
+          try {
+            await apiService.loadUserEditsToModel(currentUser.id);
+            await fetchComparisonData();
+          } catch (e) {
+            console.log("No previous edits to load");
+          }
+        }
       }
     } catch (err) {
       console.error("Failed to fetch model status:", err);
@@ -123,8 +190,13 @@ function App() {
       setComparisonLoading(true);
       setError(null);
 
-      // Send edited shape functions to backend
+      // Send edited shape functions to backend (temporary update)
       await apiService.updateShapeFunctions(editedShapeFunctions);
+
+      // Save to user's database record
+      if (currentUser) {
+        await apiService.saveUserEdits(currentUser.id, editedShapeFunctions);
+      }
 
       // Fetch updated comparison data
       await fetchComparisonData();
@@ -145,6 +217,11 @@ function App() {
 
       // Reset shape functions on backend
       await apiService.resetShapeFunctions();
+
+      // Clear user's edits in database
+      if (currentUser) {
+        await apiService.clearUserEdits(currentUser.id);
+      }
 
       // Fetch updated comparison data (should show same values for both)
       await fetchComparisonData();
@@ -209,9 +286,74 @@ function App() {
     }
   };
 
+  // Render login page
+  if (currentPage === "login") {
+    return <UserLogin onLogin={handleLogin} />;
+  }
+
+  // Render combined results page
+  if (currentPage === "combined") {
+    return (
+      <CombinedResultsPage
+        onBack={() => setCurrentPage("main")}
+        onResetDatabase={handleResetDatabase}
+      />
+    );
+  }
+
+  // Render main app
   return (
     <div className="min-h-screen bg-gray-50">
       <Header modelStatus={modelStatus} />
+
+      {/* User Bar */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                <span className="text-primary-600 font-medium text-sm">
+                  {currentUser?.name?.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <span className="text-sm text-gray-600">Logged in as </span>
+                <span className="font-medium text-gray-800">
+                  {currentUser?.name}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setCurrentPage("combined")}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+              >
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                  />
+                </svg>
+                <span>View Combined Results</span>
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <main className="container mx-auto px-4 py-8">
         {/* Error Alert */}
