@@ -25,6 +25,7 @@ function App() {
   const [predictionsData, setPredictionsData] = useState(null);
   const [hourlyPattern, setHourlyPattern] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
+  const [userSavedEdits, setUserSavedEdits] = useState({}); // User's saved edits for display
 
   // Loading states
   const [loading, setLoading] = useState(false);
@@ -37,16 +38,32 @@ function App() {
 
   // Check for saved user on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem("currentUser");
-    if (savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        setCurrentUser(user);
-        setCurrentPage("main");
-      } catch (e) {
-        localStorage.removeItem("currentUser");
+    const validateAndLoadUser = async () => {
+      const savedUser = localStorage.getItem("currentUser");
+      if (savedUser) {
+        try {
+          const user = JSON.parse(savedUser);
+          // Verify user still exists in database by trying to get their info
+          try {
+            const validatedUser = await apiService.getUser(user.id);
+            if (validatedUser) {
+              setCurrentUser(user);
+              setCurrentPage("main");
+            } else {
+              // User no longer exists, clear localStorage
+              localStorage.removeItem("currentUser");
+            }
+          } catch (err) {
+            // User not found in DB, clear localStorage
+            console.log("Saved user no longer exists, logging out");
+            localStorage.removeItem("currentUser");
+          }
+        } catch (e) {
+          localStorage.removeItem("currentUser");
+        }
       }
-    }
+    };
+    validateAndLoadUser();
   }, []);
 
   // Fetch initial status when on main page
@@ -106,17 +123,35 @@ function App() {
       if (status.is_trained) {
         fetchMetrics();
         fetchShapeFunctions();
-        fetchPredictionsVsActual();
 
-        // Load user's saved edits
+        // Load user's saved edits FIRST, then fetch comparison data
         if (currentUser) {
           try {
-            await apiService.loadUserEditsToModel(currentUser.id);
-            await fetchComparisonData();
+            const result = await apiService.loadUserEditsToModel(
+              currentUser.id
+            );
+            // Convert the edits to the format expected by EditableShapeFunctionsGrid
+            if (result.edits && result.edits.length > 0) {
+              const editsMap = {};
+              for (const sf of result.edits) {
+                editsMap[sf.feature_name] = sf.edited_points.map((p) => ({
+                  x_value: p.x_value,
+                  y_value: p.y_value,
+                }));
+              }
+              setUserSavedEdits(editsMap);
+            } else {
+              setUserSavedEdits({});
+            }
           } catch (e) {
             console.log("No previous edits to load");
+            setUserSavedEdits({});
           }
         }
+
+        // Now fetch predictions data (with user edits already applied)
+        fetchPredictionsVsActual();
+        await fetchComparisonData();
       }
     } catch (err) {
       console.error("Failed to fetch model status:", err);
@@ -196,6 +231,13 @@ function App() {
       // Save to user's database record
       if (currentUser) {
         await apiService.saveUserEdits(currentUser.id, editedShapeFunctions);
+
+        // Update local state with saved edits
+        const editsMap = {};
+        for (const sf of editedShapeFunctions) {
+          editsMap[sf.feature_name] = sf.edited_points;
+        }
+        setUserSavedEdits(editsMap);
       }
 
       // Fetch updated comparison data
@@ -222,6 +264,9 @@ function App() {
       if (currentUser) {
         await apiService.clearUserEdits(currentUser.id);
       }
+
+      // Clear local saved edits
+      setUserSavedEdits({});
 
       // Fetch updated comparison data (should show same values for both)
       await fetchComparisonData();
@@ -412,6 +457,7 @@ function App() {
             loading={chartLoading}
             onShapeFunctionsEdit={handleShapeFunctionsEdit}
             onReset={handleResetShapeFunctions}
+            initialEditedPoints={userSavedEdits}
           />
         </div>
 

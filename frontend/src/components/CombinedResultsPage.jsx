@@ -20,7 +20,7 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
     try {
       const [comparison, usersData] = await Promise.all([
         apiService.getCombinedPredictionsComparison(),
-        apiService.getAllUsers(),
+        apiService.getUsersWithEdits(),
       ]);
       setComparisonData(comparison);
       setUsers(usersData.users || []);
@@ -134,7 +134,7 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
     return (
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Predictions Comparison (Combined User Edits)
+          Predictions Over Time (Combined User Edits)
         </h3>
         <Plot
           data={[
@@ -179,43 +179,241 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
     );
   };
 
+  const renderScatterPlot = () => {
+    if (!comparisonData) return null;
+
+    const { original_predictions, interactive_predictions, actual_values } =
+      comparisonData;
+
+    // Calculate min/max for the diagonal line
+    const allValues = [
+      ...actual_values,
+      ...original_predictions,
+      ...interactive_predictions,
+    ];
+    const minVal = Math.min(...allValues);
+    const maxVal = Math.max(...allValues);
+
+    return (
+      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Predicted vs Actual (Scatter Plot)
+        </h3>
+        <Plot
+          data={[
+            // Perfect prediction line
+            {
+              x: [minVal, maxVal],
+              y: [minVal, maxVal],
+              type: "scatter",
+              mode: "lines",
+              name: "Perfect Prediction",
+              line: { color: "#d1d5db", width: 2, dash: "dash" },
+            },
+            // Original predictions
+            {
+              x: actual_values,
+              y: original_predictions,
+              type: "scatter",
+              mode: "markers",
+              name: "Original Model",
+              marker: { color: "#f59e0b", size: 6, opacity: 0.6 },
+            },
+            // Combined predictions
+            {
+              x: actual_values,
+              y: interactive_predictions,
+              type: "scatter",
+              mode: "markers",
+              name: "Combined Edits",
+              marker: { color: "#10b981", size: 6, opacity: 0.6 },
+            },
+          ]}
+          layout={{
+            autosize: true,
+            height: 400,
+            margin: { l: 60, r: 30, t: 20, b: 60 },
+            xaxis: { title: "Actual Bike Rentals" },
+            yaxis: { title: "Predicted Bike Rentals" },
+            legend: { orientation: "h", y: -0.2 },
+            hovermode: "closest",
+          }}
+          config={{ responsive: true }}
+          style={{ width: "100%" }}
+        />
+        <p className="text-sm text-gray-500 mt-2 text-center">
+          Points closer to the diagonal line indicate better predictions.
+          Compare how the combined user edits affect prediction accuracy.
+        </p>
+      </div>
+    );
+  };
+
   const renderCombinedShapeFunctions = () => {
-    if (!comparisonData?.combined_shape_functions?.length) {
+    if (!comparisonData?.combined_shape_functions_display?.length) {
       return (
         <div className="bg-white rounded-xl shadow-md p-6 text-center text-gray-500">
-          No user edits have been made yet.
+          No shape function data available.
         </div>
       );
     }
 
+    // Check if there are any edits
+    const hasEdits = comparisonData.combined_shape_functions?.length > 0;
+
     return (
       <div className="bg-white rounded-xl shadow-md p-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Combined Shape Function Edits
+          Shape Functions: Original vs Combined Edits
+        </h3>
+        {!hasEdits && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg">
+            No user edits have been made yet. The charts below show the original
+            shape functions.
+          </div>
+        )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {comparisonData.combined_shape_functions_display.map((sf, idx) => {
+            const isNumeric = sf.feature_type === "numeric";
+            const hasChanges = sf.y_values.some(
+              (y, i) => Math.abs(y - sf.original_y_values[i]) > 0.0001
+            );
+
+            return (
+              <div
+                key={idx}
+                className={`border rounded-lg p-4 ${
+                  hasChanges
+                    ? "border-green-300 bg-green-50"
+                    : "border-gray-200"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-gray-700">
+                    {sf.feature_name}
+                  </h4>
+                  {hasChanges && (
+                    <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                      Modified
+                    </span>
+                  )}
+                </div>
+                <div style={{ minHeight: 200 }}>
+                  <Plot
+                    data={
+                      isNumeric
+                        ? [
+                            {
+                              x: sf.x_values,
+                              y: sf.original_y_values,
+                              type: "scatter",
+                              mode: "lines",
+                              name: "Original",
+                              line: { color: "#9ca3af", width: 2, dash: "dot" },
+                            },
+                            {
+                              x: sf.x_values,
+                              y: sf.y_values,
+                              type: "scatter",
+                              mode: "lines",
+                              name: "Combined",
+                              line: { color: "#10b981", width: 2 },
+                            },
+                          ]
+                        : [
+                            {
+                              x: sf.x_values,
+                              y: sf.original_y_values,
+                              type: "bar",
+                              name: "Original",
+                              marker: { color: "#9ca3af" },
+                              opacity: 0.7,
+                            },
+                            {
+                              x: sf.x_values,
+                              y: sf.y_values,
+                              type: "bar",
+                              name: "Combined",
+                              marker: { color: "#10b981" },
+                            },
+                          ]
+                    }
+                    layout={{
+                      autosize: true,
+                      height: 200,
+                      margin: { l: 40, r: 10, t: 10, b: 40 },
+                      xaxis: {
+                        title: { text: sf.feature_name, font: { size: 10 } },
+                        tickangle: isNumeric ? 0 : -45,
+                        tickfont: { size: 9 },
+                      },
+                      yaxis: {
+                        title: { text: "Effect", font: { size: 10 } },
+                        tickfont: { size: 9 },
+                      },
+                      legend: {
+                        orientation: "h",
+                        y: -0.3,
+                        font: { size: 9 },
+                      },
+                      showlegend: true,
+                      barmode: "group",
+                    }}
+                    config={{ responsive: true, displayModeBar: false }}
+                    style={{ width: "100%" }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderEditsSummary = () => {
+    if (!comparisonData?.combined_shape_functions?.length) {
+      return null;
+    }
+
+    return (
+      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+          Edit Points Summary
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {comparisonData.combined_shape_functions.map((sf, idx) => (
-            <div key={idx} className="border rounded-lg p-4">
+            <div key={idx} className="border rounded-lg p-4 bg-gray-50">
               <h4 className="font-medium text-gray-700 mb-2">
                 {sf.feature_name}
+                <span className="ml-2 text-sm text-gray-500">
+                  ({sf.edited_points.length} points)
+                </span>
               </h4>
-              <div className="text-sm text-gray-500 space-y-1">
+              <div className="text-sm text-gray-500 space-y-1 max-h-32 overflow-y-auto">
                 {sf.edited_points.slice(0, 5).map((point, pidx) => (
-                  <div key={pidx} className="flex justify-between">
-                    <span>
+                  <div key={pidx} className="flex justify-between text-xs">
+                    <span className="font-mono">
                       x:{" "}
                       {typeof point.x_value === "number"
                         ? point.x_value.toFixed(2)
                         : point.x_value}
                     </span>
-                    <span>Avg offset: {point.y_value.toFixed(4)}</span>
+                    <span
+                      className={`font-mono ${
+                        point.y_value >= 0 ? "text-green-600" : "text-red-600"
+                      }`}
+                    >
+                      {point.y_value >= 0 ? "+" : ""}
+                      {point.y_value.toFixed(3)}
+                    </span>
                     <span className="text-gray-400">
-                      ({point.user_count} users)
+                      {point.user_count} user{point.user_count > 1 ? "s" : ""}
                     </span>
                   </div>
                 ))}
                 {sf.edited_points.length > 5 && (
-                  <div className="text-gray-400 italic">
+                  <div className="text-gray-400 italic text-xs">
                     ... and {sf.edited_points.length - 5} more points
                   </div>
                 )}
@@ -356,11 +554,17 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
             {/* Metrics Comparison */}
             {renderMetricsComparison()}
 
-            {/* Prediction Chart */}
+            {/* Scatter Plot - Predicted vs Actual */}
+            {renderScatterPlot()}
+
+            {/* Prediction Chart - Time Series */}
             {renderPredictionChart()}
 
-            {/* Combined Shape Functions */}
+            {/* Combined Shape Functions Visualization */}
             {renderCombinedShapeFunctions()}
+
+            {/* Edit Points Summary */}
+            {renderEditsSummary()}
           </>
         )}
       </main>

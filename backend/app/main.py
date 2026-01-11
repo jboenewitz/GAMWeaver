@@ -366,6 +366,9 @@ async def save_user_edits(user_id: int, request: EditedShapeFunctionsRequest):
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
         
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+        
         # Convert to dict format
         edited_sfs = [
             {
@@ -379,11 +382,12 @@ async def save_user_edits(user_id: int, request: EditedShapeFunctionsRequest):
             for sf in request.edited_shape_functions
         ]
         
-        db_service.save_user_edits(user_id, edited_sfs)
+        # Update the ML service offsets for immediate feedback
+        ml_service.update_shape_functions(edited_sfs)
         
-        # Also update the ML service offsets for immediate feedback
-        if ml_service.is_trained:
-            ml_service.update_shape_functions(edited_sfs)
+        # Convert to storage format (with indices and offsets) before saving to DB
+        storage_format = ml_service.convert_edits_for_storage(edited_sfs)
+        db_service.save_user_edits(user_id, storage_format)
         
         return {"success": True, "message": "Edits saved successfully"}
     except HTTPException:
@@ -421,13 +425,34 @@ async def load_user_edits_to_model(user_id: int):
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet")
         
-        edits = db_service.get_user_edits_as_list(user_id)
-        if edits:
-            ml_service.update_shape_functions(edits)
+        # Get stored edits (with indices and offsets)
+        storage_edits = db_service.get_user_edits_as_list(user_id)
+        
+        if storage_edits:
+            # Apply to ML service for predictions
+            ml_service.shape_function_offsets = {}
+            for sf in storage_edits:
+                feature_name = sf["feature_name"]
+                feature_type = sf["feature_type"]
+                ml_service.shape_function_offsets[feature_name] = {}
+                for point in sf["edited_points"]:
+                    x_val = point["x_value"]
+                    offset = point["y_value"]
+                    if feature_type == "categorical":
+                        ml_service.shape_function_offsets[feature_name][str(x_val)] = offset
+                    else:
+                        try:
+                            ml_service.shape_function_offsets[feature_name][int(x_val)] = offset
+                        except ValueError:
+                            pass
+            
+            # Convert to display format for frontend
+            display_edits = ml_service.convert_storage_to_display_format(storage_edits)
         else:
             ml_service.shape_function_offsets = {}
+            display_edits = []
         
-        return {"success": True, "message": "User edits loaded", "edits": edits}
+        return {"success": True, "message": "User edits loaded", "edits": display_edits}
     except HTTPException:
         raise
     except Exception as e:
@@ -446,12 +471,26 @@ async def get_combined_edits():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/combined/users")
+async def get_users_with_edits():
+    """Get all users who have made edits."""
+    try:
+        users = db_service.get_users_with_edits()
+        return {"users": users}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/combined/predictions-comparison")
 async def get_combined_predictions_comparison():
     """Get predictions comparison using combined edits from all users."""
     try:
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet")
+        
+        # Ensure shape functions are loaded (needed for visualization)
+        if not ml_service.original_shape_functions:
+            ml_service.get_shape_functions()
         
         # Get combined edits
         combined_edits = db_service.get_combined_edits()
@@ -470,6 +509,38 @@ async def get_combined_predictions_comparison():
         combined_details = db_service.get_combined_edits_detailed()
         comparison["total_users_with_edits"] = combined_details["total_users_with_edits"]
         comparison["combined_shape_functions"] = combined_details["shape_functions"]
+        
+        # Add original shape functions for visualization
+        comparison["original_shape_functions"] = list(ml_service.original_shape_functions.values())
+        
+        # Add combined (modified) shape functions for visualization
+        combined_shape_functions_display = []
+        for sf in ml_service.original_shape_functions.values():
+            feature_name = sf["feature_name"]
+            x_values = sf["x_values"]
+            original_y = sf["y_values"]
+            feature_type = sf["feature_type"]
+            
+            # Apply combined offsets
+            modified_y = []
+            for i, (x, y) in enumerate(zip(x_values, original_y)):
+                offset = 0.0
+                if feature_name in combined_edits:
+                    if feature_type == "categorical":
+                        offset = combined_edits[feature_name].get(str(x), 0.0)
+                    else:
+                        offset = combined_edits[feature_name].get(i, 0.0)
+                modified_y.append(y + offset)
+            
+            combined_shape_functions_display.append({
+                "feature_name": feature_name,
+                "feature_type": feature_type,
+                "x_values": x_values,
+                "y_values": modified_y,
+                "original_y_values": original_y
+            })
+        
+        comparison["combined_shape_functions_display"] = combined_shape_functions_display
         
         return comparison
     except HTTPException:

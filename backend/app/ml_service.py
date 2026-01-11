@@ -331,6 +331,116 @@ class MLService:
                     original_y_val = original_y[closest_idx]
                     offset = new_y - original_y_val
                     self.shape_function_offsets[feature_name][closest_idx] = offset
+
+    def convert_edits_for_storage(self, edited_shape_functions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Convert edited shape functions to a format suitable for database storage.
+        For numeric features, converts x_value to index and y_value to offset.
+        """
+        result = []
+        
+        for edited_sf in edited_shape_functions:
+            feature_name = edited_sf["feature_name"]
+            feature_type = edited_sf["feature_type"]
+            edited_points = edited_sf["edited_points"]
+            
+            if feature_name not in self.original_shape_functions:
+                continue
+            
+            original = self.original_shape_functions[feature_name]
+            original_x = original["x_values"]
+            original_y = original["y_values"]
+            
+            converted_points = []
+            for edited_point in edited_points:
+                x_val = edited_point["x_value"]
+                new_y = edited_point["y_value"]
+                
+                if feature_type == "categorical":
+                    x_str = str(x_val)
+                    if x_str in original_x:
+                        idx = original_x.index(x_str)
+                        original_y_val = original_y[idx]
+                        offset = new_y - original_y_val
+                        converted_points.append({
+                            "x_value": x_str,  # Keep as string for categorical
+                            "y_value": offset   # Store as offset
+                        })
+                else:
+                    x_float = float(x_val)
+                    closest_idx = int(np.argmin(np.abs(np.array(original_x) - x_float)))
+                    original_y_val = original_y[closest_idx]
+                    offset = new_y - original_y_val
+                    converted_points.append({
+                        "x_value": closest_idx,  # Store as index for numeric
+                        "y_value": offset        # Store as offset
+                    })
+            
+            if converted_points:
+                result.append({
+                    "feature_name": feature_name,
+                    "feature_type": feature_type,
+                    "edited_points": converted_points
+                })
+        
+        return result
+
+    def convert_storage_to_display_format(self, storage_edits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Convert stored edits (with indices and offsets) back to display format
+        (with actual x_values and full y_values) for the frontend.
+        """
+        result = []
+        
+        for stored_sf in storage_edits:
+            feature_name = stored_sf["feature_name"]
+            feature_type = stored_sf["feature_type"]
+            stored_points = stored_sf.get("edited_points", [])
+            
+            if feature_name not in self.original_shape_functions:
+                continue
+            
+            original = self.original_shape_functions[feature_name]
+            original_x = original["x_values"]
+            original_y = original["y_values"]
+            
+            display_points = []
+            for stored_point in stored_points:
+                x_val = stored_point["x_value"]
+                offset = stored_point["y_value"]  # This is the offset
+                
+                if feature_type == "categorical":
+                    # For categorical, x_val is the category string
+                    x_str = str(x_val)
+                    if x_str in original_x:
+                        idx = original_x.index(x_str)
+                        original_y_val = original_y[idx]
+                        display_points.append({
+                            "x_value": x_str,
+                            "y_value": original_y_val + offset  # Convert offset to full y value
+                        })
+                else:
+                    # For numeric, x_val is the index
+                    try:
+                        idx = int(x_val)
+                        if 0 <= idx < len(original_x):
+                            actual_x = original_x[idx]
+                            original_y_val = original_y[idx]
+                            display_points.append({
+                                "x_value": actual_x,  # Convert index to actual x value
+                                "y_value": original_y_val + offset  # Convert offset to full y value
+                            })
+                    except (ValueError, IndexError):
+                        continue
+            
+            if display_points:
+                result.append({
+                    "feature_name": feature_name,
+                    "feature_type": feature_type,
+                    "edited_points": display_points
+                })
+        
+        return result
     
     def _get_offset_for_value(self, feature_name: str, value: Any) -> float:
         """Get the offset to apply for a given feature value."""
@@ -357,9 +467,14 @@ class MLService:
             value_float = float(value)
             
             # If we have offsets, interpolate
-            indices = sorted(offsets.keys())
-            offset_values = [offsets[i] for i in indices]
-            x_positions = [original_x[i] for i in indices]
+            # Ensure keys are integers (indices)
+            try:
+                indices = sorted([int(k) if isinstance(k, str) else k for k in offsets.keys()])
+                offset_values = [offsets.get(i, offsets.get(str(i), 0.0)) for i in indices]
+                x_positions = [original_x[i] for i in indices]
+            except (ValueError, IndexError, TypeError) as e:
+                print(f"Error processing offsets for {feature_name}: {e}")
+                return 0.0
             
             if len(indices) == 1:
                 return offset_values[0]

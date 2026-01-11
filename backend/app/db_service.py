@@ -84,6 +84,29 @@ class DatabaseService:
         finally:
             db.close()
 
+    def get_users_with_edits(self) -> List[Dict[str, Any]]:
+        """Get all users who have made at least one edit."""
+        db = self.get_db()
+        try:
+            # Get distinct user IDs from edits
+            user_ids_with_edits = db.query(ShapeFunctionEdit.user_id).distinct().all()
+            user_ids = [uid[0] for uid in user_ids_with_edits]
+            
+            if not user_ids:
+                return []
+            
+            users = db.query(User).filter(User.id.in_(user_ids)).all()
+            return [
+                {
+                    "id": user.id,
+                    "name": user.name,
+                    "created_at": user.created_at.isoformat()
+                }
+                for user in users
+            ]
+        finally:
+            db.close()
+
     # ==================== Edit Operations ====================
 
     def save_user_edits(self, user_id: int, edited_shape_functions: List[Dict[str, Any]]) -> bool:
@@ -181,10 +204,12 @@ class DatabaseService:
 
     # ==================== Aggregation Operations ====================
 
-    def get_combined_edits(self) -> Dict[str, Dict[str, float]]:
+    def get_combined_edits(self) -> Dict[str, Dict[Any, float]]:
         """
         Get combined edits from all users.
         For each feature/x_value combination, average the y_offsets from all users.
+        Returns format compatible with ml_service.shape_function_offsets:
+        {feature_name: {x_value_or_index: offset}}
         """
         db = self.get_db()
         try:
@@ -205,7 +230,19 @@ class DatabaseService:
             for row in results:
                 if row.feature_name not in combined:
                     combined[row.feature_name] = {}
-                combined[row.feature_name][row.x_value] = row.avg_offset
+                
+                # For numeric features, the x_value stored is actually the index (as string)
+                # For categorical features, x_value is the category string
+                if row.feature_type == "categorical":
+                    combined[row.feature_name][row.x_value] = float(row.avg_offset)
+                else:
+                    # Convert string index back to int for numeric features
+                    try:
+                        idx = int(row.x_value)
+                        combined[row.feature_name][idx] = float(row.avg_offset)
+                    except ValueError:
+                        # If it's not an int, try to use it as is
+                        combined[row.feature_name][row.x_value] = float(row.avg_offset)
             
             return combined
         finally:

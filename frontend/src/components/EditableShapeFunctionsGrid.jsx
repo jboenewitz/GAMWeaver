@@ -429,16 +429,22 @@ const EditableShapeFunctionsGrid = ({
   loading,
   onShapeFunctionsEdit,
   onReset,
+  initialEditedPoints = {},
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPoints, setEditedPoints] = useState({});
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Reset when shape functions change
+  // Initialize with saved edits when shape functions or initialEditedPoints change
   useEffect(() => {
-    setEditedPoints({});
-    setHasChanges(false);
-  }, [shapeFunctions]);
+    if (Object.keys(initialEditedPoints).length > 0) {
+      setEditedPoints(initialEditedPoints);
+      setHasChanges(false); // These are saved edits, not new changes
+    } else {
+      setEditedPoints({});
+      setHasChanges(false);
+    }
+  }, [shapeFunctions, initialEditedPoints]);
 
   const handlePointEdit = useCallback(
     (featureName, xValue, yValue, featureType) => {

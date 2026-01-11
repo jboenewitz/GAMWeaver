@@ -138,6 +138,11 @@ export const apiService = {
     return response.data;
   },
 
+  getUsersWithEdits: async () => {
+    const response = await api.get("/combined/users");
+    return response.data;
+  },
+
   getCombinedPredictionsComparison: async () => {
     const response = await api.get("/combined/predictions-comparison");
     return response.data;
