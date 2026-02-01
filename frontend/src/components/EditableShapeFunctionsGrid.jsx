@@ -53,7 +53,7 @@ const EditableShapeFunctionChart = ({
     editedPoints &&
     editedPoints.some((p) => {
       const idx = x_values.findIndex(
-        (x) => String(x) === String(p.x_value) || x === p.x_value
+        (x) => String(x) === String(p.x_value) || x === p.x_value,
       );
       return idx !== -1 && Math.abs(y_values[idx] - p.y_value) > 0.001;
     });
@@ -75,7 +75,7 @@ const EditableShapeFunctionChart = ({
     if (!containerRef.current) return;
 
     const plotArea = containerRef.current.querySelector(
-      ".js-plotly-plot .plot-container"
+      ".js-plotly-plot .plot-container",
     );
     if (!plotArea) return;
 
@@ -164,7 +164,7 @@ const EditableShapeFunctionChart = ({
       setLocalYValues([...getCurrentYValues()]);
       setIsDragging(true);
     },
-    [isEditing, getCurrentYValues, updatePlotBounds]
+    [isEditing, getCurrentYValues, updatePlotBounds],
   );
 
   // Handle hover to track which point is under cursor
@@ -185,7 +185,7 @@ const EditableShapeFunctionChart = ({
         setHoveredPoint(null);
       }
     },
-    [isEditing, hasEdits]
+    [isEditing, hasEdits],
   );
 
   const handleUnhover = useCallback(() => {
@@ -203,7 +203,7 @@ const EditableShapeFunctionChart = ({
       e.preventDefault();
       startDrag(hoveredPoint);
     },
-    [isEditing, hoveredPoint, startDrag]
+    [isEditing, hoveredPoint, startDrag],
   );
 
   // Handle double-click for precise value entry
@@ -219,7 +219,7 @@ const EditableShapeFunctionChart = ({
 
       const newY = prompt(
         `Enter new effect value for ${feature_name} = ${xValue}:`,
-        currentY.toFixed(4)
+        currentY.toFixed(4),
       );
 
       if (newY !== null && !isNaN(parseFloat(newY))) {
@@ -234,7 +234,7 @@ const EditableShapeFunctionChart = ({
       feature_name,
       feature_type,
       onPointEdit,
-    ]
+    ],
   );
 
   // Build traces
@@ -355,10 +355,10 @@ const EditableShapeFunctionChart = ({
         isDragging
           ? "border-red-400 ring-2 ring-red-200"
           : hasEdits
-          ? "border-green-300 ring-2 ring-green-100"
-          : isEditing
-          ? "border-blue-300 ring-2 ring-blue-100"
-          : "border-gray-200"
+            ? "border-green-300 ring-2 ring-green-100"
+            : isEditing
+              ? "border-blue-300 ring-2 ring-blue-100"
+              : "border-gray-200"
       }`}
       style={{ userSelect: "none" }}
       onMouseDown={handleMouseDown}
@@ -424,6 +424,124 @@ const EditableShapeFunctionChart = ({
   );
 };
 
+// Sureness Rating Modal Component
+const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
+  const [sureness, setSureness] = useState(5);
+
+  if (!isOpen) return null;
+
+  const handleConfirm = () => {
+    onConfirm(sureness / 10); // Convert 1-10 to 0.1-1.0
+    setSureness(5); // Reset for next time
+  };
+
+  const handleClose = () => {
+    setSureness(5);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+          Rate Your Confidence
+        </h3>
+        <p className="text-sm text-gray-600 mb-4">
+          How confident are you in your edits to <strong>{featureName}</strong>?
+        </p>
+        <p className="text-xs text-gray-500 mb-4">
+          Higher confidence means your edit will have more weight when combined
+          with other users' edits.
+        </p>
+
+        <div className="mb-6">
+          <div className="flex justify-between text-sm text-gray-500 mb-2">
+            <span>Not sure</span>
+            <span className="font-bold text-lg text-blue-600">{sureness}</span>
+            <span>Very sure</span>
+          </div>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={sureness}
+            onChange={(e) => setSureness(parseInt(e.target.value))}
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+            style={{
+              background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${
+                (sureness - 1) * 11.11
+              }%, #e5e7eb ${(sureness - 1) * 11.11}%, #e5e7eb 100%)`,
+            }}
+          />
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <span>1</span>
+            <span>5</span>
+            <span>10</span>
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleClose}
+            className="flex-1 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            className="flex-1 px-4 py-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium"
+          >
+            Submit Edit
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Individual Feature Card with its own submit button
+const FeatureEditCard = ({
+  shapeFunction,
+  editedPoints,
+  onPointEdit,
+  onFeatureSubmit,
+  isEditing,
+}) => {
+  const hasEdits =
+    editedPoints &&
+    editedPoints.length > 0 &&
+    editedPoints.some((p) => {
+      const idx = shapeFunction.x_values.findIndex(
+        (x) => String(x) === String(p.x_value) || x === p.x_value,
+      );
+      return (
+        idx !== -1 && Math.abs(shapeFunction.y_values[idx] - p.y_value) > 0.001
+      );
+    });
+
+  return (
+    <div className="relative">
+      <EditableShapeFunctionChart
+        shapeFunction={shapeFunction}
+        editedPoints={editedPoints}
+        onPointEdit={onPointEdit}
+        isEditing={isEditing}
+      />
+      {hasEdits && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={() => onFeatureSubmit(shapeFunction.feature_name)}
+            className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
+          >
+            <span>✓</span>
+            <span>Submit {shapeFunction.feature_name}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const EditableShapeFunctionsGrid = ({
   shapeFunctions,
   loading,
@@ -434,6 +552,8 @@ const EditableShapeFunctionsGrid = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editedPoints, setEditedPoints] = useState({});
   const [hasChanges, setHasChanges] = useState(false);
+  const [showSurenessModal, setShowSurenessModal] = useState(false);
+  const [pendingFeatureSubmit, setPendingFeatureSubmit] = useState(null);
 
   // Initialize with saved edits when shape functions or initialEditedPoints change
   useEffect(() => {
@@ -451,7 +571,7 @@ const EditableShapeFunctionsGrid = ({
       setEditedPoints((prev) => {
         const featurePoints = prev[featureName] || [];
         const existingIndex = featurePoints.findIndex(
-          (p) => String(p.x_value) === String(xValue)
+          (p) => String(p.x_value) === String(xValue),
         );
 
         let newPoints;
@@ -466,25 +586,62 @@ const EditableShapeFunctionsGrid = ({
       });
       setHasChanges(true);
     },
-    []
+    [],
   );
 
-  const handleApplyChanges = useCallback(() => {
-    const editedShapeFunctions = Object.entries(editedPoints)
-      .filter(([_, points]) => points.length > 0)
-      .map(([featureName, points]) => {
-        const sf = shapeFunctions.find((s) => s.feature_name === featureName);
-        return {
-          feature_name: featureName,
-          feature_type: sf?.feature_type || "numeric",
-          edited_points: points,
-        };
-      });
+  // Called when user clicks Submit on a specific feature
+  const handleFeatureSubmit = useCallback((featureName) => {
+    setPendingFeatureSubmit(featureName);
+    setShowSurenessModal(true);
+  }, []);
 
-    if (editedShapeFunctions.length > 0) {
-      onShapeFunctionsEdit(editedShapeFunctions);
-    }
-  }, [editedPoints, shapeFunctions, onShapeFunctionsEdit]);
+  // Called when user confirms sureness rating
+  const handleSurenessConfirm = useCallback(
+    (weight) => {
+      if (!pendingFeatureSubmit) return;
+
+      const featureName = pendingFeatureSubmit;
+      const points = editedPoints[featureName] || [];
+      const sf = shapeFunctions.find((s) => s.feature_name === featureName);
+
+      if (points.length > 0 && sf) {
+        // Add weight to each point
+        const pointsWithWeight = points.map((p) => ({
+          ...p,
+          weight: weight,
+        }));
+
+        const editedShapeFunction = {
+          feature_name: featureName,
+          feature_type: sf.feature_type || "numeric",
+          edited_points: pointsWithWeight,
+        };
+
+        onShapeFunctionsEdit([editedShapeFunction]);
+
+        // Clear the edits for this feature after submitting
+        setEditedPoints((prev) => {
+          const newEdits = { ...prev };
+          delete newEdits[featureName];
+          return newEdits;
+        });
+
+        // Check if there are any remaining changes
+        setHasChanges(
+          Object.keys(editedPoints).filter((k) => k !== featureName).length > 0,
+        );
+      }
+
+      setShowSurenessModal(false);
+      setPendingFeatureSubmit(null);
+    },
+    [pendingFeatureSubmit, editedPoints, shapeFunctions, onShapeFunctionsEdit],
+  );
+
+  const handleSurenessModalClose = useCallback(() => {
+    setShowSurenessModal(false);
+    setPendingFeatureSubmit(null);
+  }, []);
 
   const handleReset = useCallback(() => {
     setEditedPoints({});
@@ -531,6 +688,13 @@ const EditableShapeFunctionsGrid = ({
 
   return (
     <div className="card">
+      <SurenessModal
+        isOpen={showSurenessModal}
+        onClose={handleSurenessModalClose}
+        onConfirm={handleSurenessConfirm}
+        featureName={pendingFeatureSubmit || ""}
+      />
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-700">
@@ -538,26 +702,18 @@ const EditableShapeFunctionsGrid = ({
           </h3>
           <p className="text-sm text-gray-500">
             {isEditing
-              ? "Hover over points and drag them up/down to modify the shape functions."
+              ? "Edit points, then click Submit on each feature to save with your confidence rating."
               : "Enable editing mode to interactively modify shape functions."}
           </p>
         </div>
         <div className="flex items-center gap-2">
           {hasChanges && (
-            <>
-              <button
-                onClick={handleReset}
-                className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
-              >
-                Reset
-              </button>
-              <button
-                onClick={handleApplyChanges}
-                className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md"
-              >
-                ✓ Apply Changes
-              </button>
-            </>
+            <button
+              onClick={handleReset}
+              className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+            >
+              Reset All
+            </button>
           )}
           <button
             onClick={() => setIsEditing(!isEditing)}
@@ -577,19 +733,20 @@ const EditableShapeFunctionsGrid = ({
           <p className="text-sm text-blue-700">
             <strong>How to edit:</strong> Hover over a point (it will
             highlight), then click and drag up or down to change its value.
-            Double-click for precise value entry. The gray dashed line shows the
-            original shape function. Click "Apply Changes" when done.
+            Double-click for precise value entry. When done editing a feature,
+            click its <strong>Submit</strong> button and rate your confidence.
           </p>
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {shapeFunctions.map((sf, index) => (
-          <EditableShapeFunctionChart
+          <FeatureEditCard
             key={sf.feature_name || index}
             shapeFunction={sf}
             editedPoints={editedPoints[sf.feature_name] || []}
             onPointEdit={handlePointEdit}
+            onFeatureSubmit={handleFeatureSubmit}
             isEditing={isEditing}
           />
         ))}

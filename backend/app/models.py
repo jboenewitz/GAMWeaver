@@ -78,6 +78,7 @@ class EditedShapePoint(BaseModel):
     """A single edited point in a shape function."""
     x_value: Any  # Can be numeric or categorical
     y_value: float
+    weight: float = 0.5  # Sureness weight (0.1 to 1.0, derived from 1-10 slider)
 
 
 class EditedShapeFunction(BaseModel):

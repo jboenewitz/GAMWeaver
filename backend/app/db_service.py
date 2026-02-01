@@ -124,13 +124,15 @@ class DatabaseService:
                 for point in sf.get("edited_points", []):
                     x_value = str(point["x_value"])
                     y_offset = float(point["y_value"])  # This is the offset/new value
+                    weight = float(point.get("weight", 0.5))  # Default to 0.5 if not provided
                     
                     edit = ShapeFunctionEdit(
                         user_id=user_id,
                         feature_name=feature_name,
                         feature_type=feature_type,
                         x_value=x_value,
-                        y_offset=y_offset
+                        y_offset=y_offset,
+                        weight=weight
                     )
                     db.add(edit)
             
@@ -180,7 +182,8 @@ class DatabaseService:
                     }
                 features[edit.feature_name]["edited_points"].append({
                     "x_value": edit.x_value if edit.feature_type == "categorical" else float(edit.x_value),
-                    "y_value": edit.y_offset
+                    "y_value": edit.y_offset,
+                    "weight": edit.weight
                 })
             
             return list(features.values())
@@ -207,18 +210,23 @@ class DatabaseService:
     def get_combined_edits(self) -> Dict[str, Dict[Any, float]]:
         """
         Get combined edits from all users.
-        For each feature/x_value combination, average the y_offsets from all users.
+        For each feature/x_value combination:
+        1. Each edit is multiplied by its weight (sureness/10)
+        2. Then average across all users who edited that point
+        
+        Example: User edits +100 with sureness 1 (weight=0.1) → contributes +10
         Returns format compatible with ml_service.shape_function_offsets:
-        {feature_name: {x_value_or_index: offset}}
+        {feature_name: {x_value_or_index: avg_weighted_offset}}
         """
         db = self.get_db()
         try:
-            # Query to get average offset per feature/x_value
+            # Query to get sum of weighted edits and count of users per feature/x_value
+            # Each edit is multiplied by its weight, then we average by user count
             results = db.query(
                 ShapeFunctionEdit.feature_name,
                 ShapeFunctionEdit.feature_type,
                 ShapeFunctionEdit.x_value,
-                func.avg(ShapeFunctionEdit.y_offset).label("avg_offset"),
+                func.sum(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("weighted_sum"),
                 func.count(ShapeFunctionEdit.user_id).label("user_count")
             ).group_by(
                 ShapeFunctionEdit.feature_name,
@@ -231,18 +239,22 @@ class DatabaseService:
                 if row.feature_name not in combined:
                     combined[row.feature_name] = {}
                 
+                # Calculate: sum of (offset * weight) / number of users
+                # This applies the weight as a multiplier, then averages across users
+                avg_weighted_offset = float(row.weighted_sum) / float(row.user_count) if row.user_count > 0 else 0.0
+                
                 # For numeric features, the x_value stored is actually the index (as string)
                 # For categorical features, x_value is the category string
                 if row.feature_type == "categorical":
-                    combined[row.feature_name][row.x_value] = float(row.avg_offset)
+                    combined[row.feature_name][row.x_value] = avg_weighted_offset
                 else:
                     # Convert string index back to int for numeric features
                     try:
                         idx = int(row.x_value)
-                        combined[row.feature_name][idx] = float(row.avg_offset)
+                        combined[row.feature_name][idx] = avg_weighted_offset
                     except ValueError:
                         # If it's not an int, try to use it as is
-                        combined[row.feature_name][row.x_value] = float(row.avg_offset)
+                        combined[row.feature_name][row.x_value] = avg_weighted_offset
             
             return combined
         finally:
@@ -251,17 +263,20 @@ class DatabaseService:
     def get_combined_edits_detailed(self) -> Dict[str, Any]:
         """
         Get detailed combined edits from all users with statistics.
+        Each edit is multiplied by its weight, then averaged across users.
         """
         db = self.get_db()
         try:
             # Query to get statistics per feature/x_value
+            # Each edit is multiplied by its weight, then we average by user count
             results = db.query(
                 ShapeFunctionEdit.feature_name,
                 ShapeFunctionEdit.feature_type,
                 ShapeFunctionEdit.x_value,
-                func.avg(ShapeFunctionEdit.y_offset).label("avg_offset"),
-                func.min(ShapeFunctionEdit.y_offset).label("min_offset"),
-                func.max(ShapeFunctionEdit.y_offset).label("max_offset"),
+                func.sum(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("weighted_sum"),
+                func.min(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("min_weighted"),
+                func.max(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("max_weighted"),
+                func.avg(ShapeFunctionEdit.weight).label("avg_weight"),
                 func.count(ShapeFunctionEdit.user_id.distinct()).label("user_count")
             ).group_by(
                 ShapeFunctionEdit.feature_name,
@@ -282,11 +297,16 @@ class DatabaseService:
                         "feature_type": row.feature_type,
                         "edited_points": []
                     }
+                
+                # Calculate: sum of (offset * weight) / number of users
+                avg_weighted_offset = float(row.weighted_sum) / float(row.user_count) if row.user_count > 0 else 0.0
+                
                 features[row.feature_name]["edited_points"].append({
                     "x_value": row.x_value if row.feature_type == "categorical" else float(row.x_value),
-                    "y_value": row.avg_offset,
-                    "min_offset": row.min_offset,
-                    "max_offset": row.max_offset,
+                    "y_value": avg_weighted_offset,
+                    "min_weighted": row.min_weighted,
+                    "max_weighted": row.max_weighted,
+                    "avg_weight": row.avg_weight,
                     "user_count": row.user_count
                 })
             

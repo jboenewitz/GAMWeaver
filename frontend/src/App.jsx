@@ -128,7 +128,7 @@ function App() {
         if (currentUser) {
           try {
             const result = await apiService.loadUserEditsToModel(
-              currentUser.id
+              currentUser.id,
             );
             // Convert the edits to the format expected by EditableShapeFunctionsGrid
             if (result.edits && result.edits.length > 0) {
@@ -232,12 +232,15 @@ function App() {
       if (currentUser) {
         await apiService.saveUserEdits(currentUser.id, editedShapeFunctions);
 
-        // Update local state with saved edits
-        const editsMap = {};
-        for (const sf of editedShapeFunctions) {
-          editsMap[sf.feature_name] = sf.edited_points;
-        }
-        setUserSavedEdits(editsMap);
+        // Update local state with saved edits (merge with existing)
+        setUserSavedEdits((prevEdits) => {
+          const newEdits = { ...prevEdits };
+          for (const sf of editedShapeFunctions) {
+            // Replace all points for this feature with the new ones
+            newEdits[sf.feature_name] = sf.edited_points;
+          }
+          return newEdits;
+        });
       }
 
       // Fetch updated comparison data
@@ -245,7 +248,7 @@ function App() {
     } catch (err) {
       setError(
         "Failed to apply shape function edits: " +
-          (err.response?.data?.detail || err.message)
+          (err.response?.data?.detail || err.message),
       );
     } finally {
       setComparisonLoading(false);
@@ -273,7 +276,7 @@ function App() {
     } catch (err) {
       setError(
         "Failed to reset shape functions: " +
-          (err.response?.data?.detail || err.message)
+          (err.response?.data?.detail || err.message),
       );
     } finally {
       setComparisonLoading(false);
@@ -290,7 +293,7 @@ function App() {
       await fetchHourlyPattern();
     } catch (err) {
       setError(
-        "Failed to load data: " + (err.response?.data?.detail || err.message)
+        "Failed to load data: " + (err.response?.data?.detail || err.message),
       );
     } finally {
       setDataLoading(false);
@@ -311,7 +314,7 @@ function App() {
       }
     } catch (err) {
       setError(
-        "Failed to train model: " + (err.response?.data?.detail || err.message)
+        "Failed to train model: " + (err.response?.data?.detail || err.message),
       );
     } finally {
       setLoading(false);
@@ -325,7 +328,7 @@ function App() {
       return result;
     } catch (err) {
       setError(
-        "Prediction failed: " + (err.response?.data?.detail || err.message)
+        "Prediction failed: " + (err.response?.data?.detail || err.message),
       );
       return null;
     }

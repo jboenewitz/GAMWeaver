@@ -336,6 +336,7 @@ class MLService:
         """
         Convert edited shape functions to a format suitable for database storage.
         For numeric features, converts x_value to index and y_value to offset.
+        Preserves the weight for weighted averaging.
         """
         result = []
         
@@ -355,6 +356,7 @@ class MLService:
             for edited_point in edited_points:
                 x_val = edited_point["x_value"]
                 new_y = edited_point["y_value"]
+                weight = edited_point.get("weight", 0.5)  # Default to 0.5 if not provided
                 
                 if feature_type == "categorical":
                     x_str = str(x_val)
@@ -364,7 +366,8 @@ class MLService:
                         offset = new_y - original_y_val
                         converted_points.append({
                             "x_value": x_str,  # Keep as string for categorical
-                            "y_value": offset   # Store as offset
+                            "y_value": offset,  # Store as offset
+                            "weight": weight    # Preserve weight
                         })
                 else:
                     x_float = float(x_val)
@@ -373,7 +376,8 @@ class MLService:
                     offset = new_y - original_y_val
                     converted_points.append({
                         "x_value": closest_idx,  # Store as index for numeric
-                        "y_value": offset        # Store as offset
+                        "y_value": offset,       # Store as offset
+                        "weight": weight         # Preserve weight
                     })
             
             if converted_points:
