@@ -138,6 +138,11 @@ export const apiService = {
     return response.data;
   },
 
+  getEditLogs: async () => {
+    const response = await api.get("/combined/edit-logs");
+    return response.data;
+  },
+
   getUsersWithEdits: async () => {
     const response = await api.get("/combined/users");
     return response.data;

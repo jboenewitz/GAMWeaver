@@ -471,6 +471,16 @@ async def get_combined_edits():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/combined/edit-logs")
+async def get_edit_logs():
+    """Get detailed edit logs for all users, grouped by feature."""
+    try:
+        logs = db_service.get_edit_logs()
+        return logs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/combined/users")
 async def get_users_with_edits():
     """Get all users who have made edits."""

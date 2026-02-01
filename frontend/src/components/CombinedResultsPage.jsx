@@ -7,8 +7,10 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
   const [error, setError] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
   const [users, setUsers] = useState([]);
+  const [editLogs, setEditLogs] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [expandedFeatures, setExpandedFeatures] = useState({});
 
   useEffect(() => {
     fetchData();
@@ -18,15 +20,17 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
     setLoading(true);
     setError(null);
     try {
-      const [comparison, usersData] = await Promise.all([
+      const [comparison, usersData, logs] = await Promise.all([
         apiService.getCombinedPredictionsComparison(),
         apiService.getUsersWithEdits(),
+        apiService.getEditLogs(),
       ]);
       setComparisonData(comparison);
       setUsers(usersData.users || []);
+      setEditLogs(logs);
     } catch (err) {
       setError(
-        err.response?.data?.detail || err.message || "Failed to load data"
+        err.response?.data?.detail || err.message || "Failed to load data",
       );
     } finally {
       setLoading(false);
@@ -276,7 +280,7 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
           {comparisonData.combined_shape_functions_display.map((sf, idx) => {
             const isNumeric = sf.feature_type === "numeric";
             const hasChanges = sf.y_values.some(
-              (y, i) => Math.abs(y - sf.original_y_values[i]) > 0.0001
+              (y, i) => Math.abs(y - sf.original_y_values[i]) > 0.0001,
             );
 
             return (
@@ -371,55 +375,136 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
     );
   };
 
-  const renderEditsSummary = () => {
-    if (!comparisonData?.combined_shape_functions?.length) {
+  const renderEditLogs = () => {
+    if (!editLogs?.features?.length) {
       return null;
     }
 
+    const toggleFeature = (featureName) => {
+      setExpandedFeatures((prev) => ({
+        ...prev,
+        [featureName]: !prev[featureName],
+      }));
+    };
+
     return (
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Edit Points Summary
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {comparisonData.combined_shape_functions.map((sf, idx) => (
-            <div key={idx} className="border rounded-lg p-4 bg-gray-50">
-              <h4 className="font-medium text-gray-700 mb-2">
-                {sf.feature_name}
-                <span className="ml-2 text-sm text-gray-500">
-                  ({sf.edited_points.length} points)
-                </span>
-              </h4>
-              <div className="text-sm text-gray-500 space-y-1 max-h-32 overflow-y-auto">
-                {sf.edited_points.slice(0, 5).map((point, pidx) => (
-                  <div key={pidx} className="flex justify-between text-xs">
-                    <span className="font-mono">
-                      x:{" "}
-                      {typeof point.x_value === "number"
-                        ? point.x_value.toFixed(2)
-                        : point.x_value}
-                    </span>
-                    <span
-                      className={`font-mono ${
-                        point.y_value >= 0 ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {point.y_value >= 0 ? "+" : ""}
-                      {point.y_value.toFixed(3)}
-                    </span>
-                    <span className="text-gray-400">
-                      {point.user_count} user{point.user_count > 1 ? "s" : ""}
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit Logs</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Detailed log of all user edits, grouped by feature. Shows who edited,
+          their self-reported confidence rating (1-10), raw input value, and the
+          weighted result applied to the combined view.
+        </p>
+        <div className="space-y-4">
+          {editLogs.features.map((feature, idx) => {
+            const isExpanded = expandedFeatures[feature.feature_name] ?? false;
+            const uniqueUsers = [
+              ...new Set(feature.edits.map((e) => e.user_name)),
+            ];
+
+            return (
+              <div key={idx} className="border rounded-lg overflow-hidden">
+                {/* Feature Header - Clickable */}
+                <button
+                  onClick={() => toggleFeature(feature.feature_name)}
+                  className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                >
+                  <div>
+                    <h4 className="font-medium text-gray-700">
+                      {feature.feature_name}
+                    </h4>
+                    <span className="text-sm text-gray-500">
+                      {feature.edits.length} edit
+                      {feature.edits.length !== 1 ? "s" : ""} by{" "}
+                      {uniqueUsers.length} user
+                      {uniqueUsers.length !== 1 ? "s" : ""}
                     </span>
                   </div>
-                ))}
-                {sf.edited_points.length > 5 && (
-                  <div className="text-gray-400 italic text-xs">
-                    ... and {sf.edited_points.length - 5} more points
+                  <svg
+                    className={`w-5 h-5 text-gray-400 transform transition-transform ${
+                      isExpanded ? "rotate-180" : ""
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+
+                {/* Expanded Content */}
+                {isExpanded && (
+                  <div className="p-4 border-t">
+                    {/* Table Header */}
+                    <div className="grid grid-cols-5 gap-2 text-xs font-medium text-gray-500 uppercase mb-2 px-2">
+                      <span>User</span>
+                      <span>X Value</span>
+                      <span className="text-center">Confidence</span>
+                      <span className="text-right">Raw Input</span>
+                      <span className="text-right">Weighted Result</span>
+                    </div>
+
+                    {/* Edit Rows */}
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {feature.edits.map((edit, editIdx) => (
+                        <div
+                          key={editIdx}
+                          className="grid grid-cols-5 gap-2 text-sm py-2 px-2 bg-gray-50 rounded hover:bg-gray-100"
+                        >
+                          <span className="font-medium text-gray-700 truncate">
+                            {edit.user_name}
+                          </span>
+                          <span className="font-mono text-gray-600">
+                            {typeof edit.x_value === "number"
+                              ? edit.x_value.toFixed(2)
+                              : edit.x_value}
+                          </span>
+                          <span className="text-center">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                                edit.sureness >= 7
+                                  ? "bg-green-100 text-green-700"
+                                  : edit.sureness >= 4
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-red-100 text-red-700"
+                              }`}
+                            >
+                              {edit.sureness}/10
+                            </span>
+                          </span>
+                          <span
+                            className={`text-right font-mono ${
+                              edit.raw_input >= 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {edit.raw_input >= 0 ? "+" : ""}
+                            {edit.raw_input.toFixed(3)}
+                          </span>
+                          <span
+                            className={`text-right font-mono font-semibold ${
+                              edit.weighted_result >= 0
+                                ? "text-green-600"
+                                : "text-red-600"
+                            }`}
+                          >
+                            {edit.weighted_result >= 0 ? "+" : ""}
+                            {edit.weighted_result.toFixed(3)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -563,8 +648,8 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
             {/* Combined Shape Functions Visualization */}
             {renderCombinedShapeFunctions()}
 
-            {/* Edit Points Summary */}
-            {renderEditsSummary()}
+            {/* Edit Logs */}
+            {renderEditLogs()}
           </>
         )}
       </main>

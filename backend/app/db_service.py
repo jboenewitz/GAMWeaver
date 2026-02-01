@@ -110,11 +110,22 @@ class DatabaseService:
     # ==================== Edit Operations ====================
 
     def save_user_edits(self, user_id: int, edited_shape_functions: List[Dict[str, Any]]) -> bool:
-        """Save or update shape function edits for a user."""
+        """Save or update shape function edits for a user.
+        
+        Only deletes/replaces edits for the specific features being submitted,
+        preserving edits for other features.
+        """
         db = self.get_db()
         try:
-            # Delete existing edits for this user
-            db.query(ShapeFunctionEdit).filter(ShapeFunctionEdit.user_id == user_id).delete()
+            # Get the list of feature names being submitted
+            feature_names_to_update = [sf["feature_name"] for sf in edited_shape_functions]
+            
+            # Delete existing edits only for the features being updated
+            if feature_names_to_update:
+                db.query(ShapeFunctionEdit).filter(
+                    ShapeFunctionEdit.user_id == user_id,
+                    ShapeFunctionEdit.feature_name.in_(feature_names_to_update)
+                ).delete(synchronize_session=False)
             
             # Insert new edits
             for sf in edited_shape_functions:
@@ -313,6 +324,53 @@ class DatabaseService:
             return {
                 "total_users_with_edits": total_users,
                 "shape_functions": list(features.values())
+            }
+        finally:
+            db.close()
+
+    def get_edit_logs(self) -> Dict[str, Any]:
+        """
+        Get detailed edit logs for all users, grouped by feature.
+        Returns individual edits with user name, sureness (1-10), raw input, and weighted result.
+        """
+        db = self.get_db()
+        try:
+            # Query all edits with user info
+            edits = db.query(ShapeFunctionEdit, User.name).join(
+                User, ShapeFunctionEdit.user_id == User.id
+            ).order_by(
+                ShapeFunctionEdit.feature_name,
+                User.name,
+                ShapeFunctionEdit.x_value
+            ).all()
+            
+            # Organize by feature name
+            features = {}
+            for edit, user_name in edits:
+                if edit.feature_name not in features:
+                    features[edit.feature_name] = {
+                        "feature_name": edit.feature_name,
+                        "feature_type": edit.feature_type,
+                        "edits": []
+                    }
+                
+                # Calculate sureness (1-10) from weight (0.1-1.0)
+                sureness = round(edit.weight * 10)
+                # Raw input is the y_offset before weight is applied
+                raw_input = edit.y_offset
+                # Weighted result is the value after applying the weight
+                weighted_result = edit.y_offset * edit.weight
+                
+                features[edit.feature_name]["edits"].append({
+                    "user_name": user_name,
+                    "x_value": edit.x_value if edit.feature_type == "categorical" else float(edit.x_value),
+                    "sureness": sureness,
+                    "raw_input": raw_input,
+                    "weighted_result": weighted_result
+                })
+            
+            return {
+                "features": list(features.values())
             }
         finally:
             db.close()
