@@ -36,7 +36,7 @@ def load_and_preprocess_data(csv_path: str = None):
     df = pd.read_csv(csv_path)
     
     # Remap numeric features
-    df["Time of Day"] = df["hr"]
+    df["Time of Day"] = df["hr"].astype(str)  # Convert to string for categorical treatment
     df["Windspeed"] = scale_values(df["windspeed"], 0, 67)
     df["Temperature"] = scale_values(df["temp"], -8, 39)
     df["Perceived Temperature"] = scale_values(df["atemp"], -16, 50)
