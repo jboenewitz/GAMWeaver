@@ -427,34 +427,40 @@ const EditableShapeFunctionChart = ({
 // Sureness Rating Modal Component
 const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
   const [sureness, setSureness] = useState(5);
+  const [message, setMessage] = useState("");
 
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    onConfirm(sureness / 10); // Convert 1-10 to 0.1-1.0
+    if (!message.trim()) return; // Require message
+    onConfirm(sureness / 10, message.trim()); // Convert 1-10 to 0.1-1.0
     setSureness(5); // Reset for next time
+    setMessage("");
   };
 
   const handleClose = () => {
     setSureness(5);
+    setMessage("");
     onClose();
   };
+
+  const isValid = message.trim().length > 0;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-2">
-          Rate Your Confidence
+          Submit Edit for {featureName}
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          How confident are you in your edits to <strong>{featureName}</strong>?
-        </p>
-        <p className="text-xs text-gray-500 mb-4">
-          Higher confidence means your edit will have more weight when combined
-          with other users' edits.
+          Rate your confidence and provide a description for your edit.
         </p>
 
-        <div className="mb-6">
+        {/* Confidence Slider */}
+        <div className="mb-5">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Confidence Level
+          </label>
           <div className="flex justify-between text-sm text-gray-500 mb-2">
             <span>Not sure</span>
             <span className="font-bold text-lg text-blue-600">{sureness}</span>
@@ -480,6 +486,25 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
           </div>
         </div>
 
+        {/* Commit Message */}
+        <div className="mb-5">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Edit Description <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Describe why you made this edit..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+            rows={3}
+          />
+          {!isValid && message.length > 0 && (
+            <p className="text-xs text-red-500 mt-1">
+              Please enter a description for your edit.
+            </p>
+          )}
+        </div>
+
         <div className="flex gap-3">
           <button
             onClick={handleClose}
@@ -489,7 +514,12 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
           </button>
           <button
             onClick={handleConfirm}
-            className="flex-1 px-4 py-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium"
+            disabled={!isValid}
+            className={`flex-1 px-4 py-2 text-sm rounded-lg transition-colors font-medium ${
+              isValid
+                ? "bg-green-500 hover:bg-green-600 text-white"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+            }`}
           >
             Submit Edit
           </button>
@@ -597,7 +627,7 @@ const EditableShapeFunctionsGrid = ({
 
   // Called when user confirms sureness rating
   const handleSurenessConfirm = useCallback(
-    (weight) => {
+    (weight, message) => {
       if (!pendingFeatureSubmit) return;
 
       const featureName = pendingFeatureSubmit;
@@ -605,10 +635,11 @@ const EditableShapeFunctionsGrid = ({
       const sf = shapeFunctions.find((s) => s.feature_name === featureName);
 
       if (points.length > 0 && sf) {
-        // Add weight to each point
+        // Add weight and message to each point
         const pointsWithWeight = points.map((p) => ({
           ...p,
           weight: weight,
+          message: message,
         }));
 
         const editedShapeFunction = {

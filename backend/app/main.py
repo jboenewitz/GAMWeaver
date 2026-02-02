@@ -369,13 +369,13 @@ async def save_user_edits(user_id: int, request: EditedShapeFunctionsRequest):
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet")
         
-        # Convert to dict format (including weight)
+        # Convert to dict format (including weight and message)
         edited_sfs = [
             {
                 "feature_name": sf.feature_name,
                 "feature_type": sf.feature_type,
                 "edited_points": [
-                    {"x_value": p.x_value, "y_value": p.y_value, "weight": p.weight}
+                    {"x_value": p.x_value, "y_value": p.y_value, "weight": p.weight, "message": p.message}
                     for p in sf.edited_points
                 ]
             }

@@ -136,6 +136,7 @@ class DatabaseService:
                     x_value = str(point["x_value"])
                     y_offset = float(point["y_value"])  # This is the offset/new value
                     weight = float(point.get("weight", 0.5))  # Default to 0.5 if not provided
+                    message = str(point.get("message", ""))  # Commit message
                     
                     edit = ShapeFunctionEdit(
                         user_id=user_id,
@@ -143,7 +144,8 @@ class DatabaseService:
                         feature_type=feature_type,
                         x_value=x_value,
                         y_offset=y_offset,
-                        weight=weight
+                        weight=weight,
+                        message=message
                     )
                     db.add(edit)
             
@@ -366,7 +368,8 @@ class DatabaseService:
                     "x_value": edit.x_value if edit.feature_type == "categorical" else float(edit.x_value),
                     "sureness": sureness,
                     "raw_input": raw_input,
-                    "weighted_result": weighted_result
+                    "weighted_result": weighted_result,
+                    "message": edit.message or ""
                 })
             
             return {

@@ -357,6 +357,7 @@ class MLService:
                 x_val = edited_point["x_value"]
                 new_y = edited_point["y_value"]
                 weight = edited_point.get("weight", 0.5)  # Default to 0.5 if not provided
+                message = edited_point.get("message", "")  # Preserve commit message
                 
                 if feature_type == "categorical":
                     x_str = str(x_val)
@@ -367,7 +368,8 @@ class MLService:
                         converted_points.append({
                             "x_value": x_str,  # Keep as string for categorical
                             "y_value": offset,  # Store as offset
-                            "weight": weight    # Preserve weight
+                            "weight": weight,   # Preserve weight
+                            "message": message  # Preserve commit message
                         })
                 else:
                     x_float = float(x_val)
@@ -377,7 +379,8 @@ class MLService:
                     converted_points.append({
                         "x_value": closest_idx,  # Store as index for numeric
                         "y_value": offset,       # Store as offset
-                        "weight": weight         # Preserve weight
+                        "weight": weight,        # Preserve weight
+                        "message": message       # Preserve commit message
                     })
             
             if converted_points:

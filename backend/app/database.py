@@ -43,6 +43,7 @@ class ShapeFunctionEdit(Base):
     x_value = Column(String(100), nullable=False)  # Store as string to handle both numeric and categorical
     y_offset = Column(Float, nullable=False)  # The offset/change applied to the y value
     weight = Column(Float, nullable=False, default=0.5)  # Sureness weight (0.1 to 1.0, derived from 1-10 slider)
+    message = Column(Text, nullable=True, default="")  # Commit message for the edit
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
