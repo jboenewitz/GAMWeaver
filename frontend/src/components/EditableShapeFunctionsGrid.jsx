@@ -535,7 +535,9 @@ const FeatureEditCard = ({
   editedPoints,
   onPointEdit,
   onFeatureSubmit,
+  onFeatureReset,
   isEditing,
+  hasSavedEdits,
 }) => {
   const hasEdits =
     editedPoints &&
@@ -557,8 +559,21 @@ const FeatureEditCard = ({
         onPointEdit={onPointEdit}
         isEditing={isEditing}
       />
-      {hasEdits && (
-        <div className="mt-2 flex justify-end">
+      <div className="mt-2 flex justify-between items-center">
+        {/* Reset button - only show if there are saved edits */}
+        {hasSavedEdits && (
+          <button
+            onClick={() => onFeatureReset(shapeFunction.feature_name)}
+            className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
+          >
+            <span>✕</span>
+            <span>Reset</span>
+          </button>
+        )}
+        {!hasSavedEdits && <div />}
+
+        {/* Submit button - only show if there are unsaved edits */}
+        {hasEdits && (
           <button
             onClick={() => onFeatureSubmit(shapeFunction.feature_name)}
             className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
@@ -566,8 +581,8 @@ const FeatureEditCard = ({
             <span>✓</span>
             <span>Submit {shapeFunction.feature_name}</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
@@ -577,6 +592,7 @@ const EditableShapeFunctionsGrid = ({
   loading,
   onShapeFunctionsEdit,
   onReset,
+  onFeatureReset,
   initialEditedPoints = {},
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -778,7 +794,12 @@ const EditableShapeFunctionsGrid = ({
             editedPoints={editedPoints[sf.feature_name] || []}
             onPointEdit={handlePointEdit}
             onFeatureSubmit={handleFeatureSubmit}
+            onFeatureReset={onFeatureReset}
             isEditing={isEditing}
+            hasSavedEdits={
+              initialEditedPoints[sf.feature_name] &&
+              initialEditedPoints[sf.feature_name].length > 0
+            }
           />
         ))}
       </div>

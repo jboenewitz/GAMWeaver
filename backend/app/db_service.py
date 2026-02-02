@@ -218,6 +218,22 @@ class DatabaseService:
         finally:
             db.close()
 
+    def clear_user_feature_edits(self, user_id: int, feature_name: str) -> bool:
+        """Clear edits for a specific user and feature."""
+        db = self.get_db()
+        try:
+            db.query(ShapeFunctionEdit).filter(
+                ShapeFunctionEdit.user_id == user_id,
+                ShapeFunctionEdit.feature_name == feature_name
+            ).delete()
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
+        finally:
+            db.close()
+
     # ==================== Aggregation Operations ====================
 
     def get_combined_edits(self) -> Dict[str, Dict[Any, float]]:

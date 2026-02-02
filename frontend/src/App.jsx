@@ -283,6 +283,40 @@ function App() {
     }
   };
 
+  const handleResetFeature = async (featureName) => {
+    try {
+      setComparisonLoading(true);
+      setError(null);
+
+      // Clear this feature's edits in database
+      if (currentUser) {
+        await apiService.clearUserFeatureEdits(currentUser.id, featureName);
+      }
+
+      // Remove from local saved edits
+      setUserSavedEdits((prevEdits) => {
+        const newEdits = { ...prevEdits };
+        delete newEdits[featureName];
+        return newEdits;
+      });
+
+      // Reload user's remaining edits to model
+      if (currentUser) {
+        await apiService.loadUserEditsToModel(currentUser.id);
+      }
+
+      // Fetch updated comparison data
+      await fetchComparisonData();
+    } catch (err) {
+      setError(
+        "Failed to reset feature: " +
+          (err.response?.data?.detail || err.message),
+      );
+    } finally {
+      setComparisonLoading(false);
+    }
+  };
+
   const handleLoadData = async () => {
     try {
       setDataLoading(true);
@@ -460,6 +494,7 @@ function App() {
             loading={chartLoading}
             onShapeFunctionsEdit={handleShapeFunctionsEdit}
             onReset={handleResetShapeFunctions}
+            onFeatureReset={handleResetFeature}
             initialEditedPoints={userSavedEdits}
           />
         </div>

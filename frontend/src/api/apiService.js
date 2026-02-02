@@ -126,6 +126,13 @@ export const apiService = {
     return response.data;
   },
 
+  clearUserFeatureEdits: async (userId, featureName) => {
+    const response = await api.delete(
+      `/users/${userId}/edits/${encodeURIComponent(featureName)}`,
+    );
+    return response.data;
+  },
+
   loadUserEditsToModel: async (userId) => {
     const response = await api.post(`/users/${userId}/load-edits`);
     return response.data;

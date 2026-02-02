@@ -414,6 +414,27 @@ async def clear_user_edits(user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/users/{user_id}/edits/{feature_name}")
+async def clear_user_feature_edits(user_id: int, feature_name: str):
+    """Clear edits for a specific user and feature."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        db_service.clear_user_feature_edits(user_id, feature_name)
+        
+        # Clear the specific feature from offsets if it exists
+        if feature_name in ml_service.shape_function_offsets:
+            del ml_service.shape_function_offsets[feature_name]
+        
+        return {"success": True, "message": f"Edits for {feature_name} cleared"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/users/{user_id}/load-edits")
 async def load_user_edits_to_model(user_id: int):
     """Load a user's saved edits into the ML service for visualization."""
