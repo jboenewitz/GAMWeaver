@@ -19,7 +19,7 @@ const TrainingPanel = ({ onLoadData, onTrainModel, loading, modelStatus }) => {
   return (
     <div className="card">
       <h3 className="text-lg font-semibold text-gray-700 mb-4">
-        ⚙️ Model Training
+        Model Training
       </h3>
 
       <div className="space-y-4">
@@ -50,7 +50,7 @@ const TrainingPanel = ({ onLoadData, onTrainModel, loading, modelStatus }) => {
             )}
           </div>
           <p className="text-sm text-gray-500 mb-3">
-            Load the bike rental dataset and prepare it for training.
+            Load a dataset for training.
           </p>
           <button
             onClick={handleLoadData}

@@ -88,7 +88,7 @@ const ShapeFunctionsGrid = ({ shapeFunctions, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📊 Shape Functions
+          Shape Functions
         </h3>
         <p className="text-gray-500 text-center py-8">
           Train the model to see feature shape functions.
@@ -104,9 +104,7 @@ const ShapeFunctionsGrid = ({ shapeFunctions, loading }) => {
   return (
     <div className="card">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-700">
-          📊 Shape Functions
-        </h3>
+        <h3 className="text-lg font-semibold text-gray-700">Shape Functions</h3>
         <p className="text-sm text-gray-500">
           These plots show how each feature affects the bike rental prediction.
           Values above zero increase the prediction, values below decrease it.

@@ -293,7 +293,8 @@ const EditableShapeFunctionChart = ({
   const layout = {
     title: {
       text:
-        feature_name + (isDragging ? " (dragging...)" : hasEdits ? " ✏️" : ""),
+        feature_name +
+        (isDragging ? " (dragging...)" : hasEdits ? " (edited)" : ""),
       font: {
         size: 14,
         color: isDragging ? "#ef4444" : hasEdits ? "#10b981" : "#374151",
@@ -375,7 +376,7 @@ const EditableShapeFunctionChart = ({
           {isDragging ? (
             <>
               <span className="font-bold animate-pulse">
-                ⬆️⬇️ Dragging point {dragPointIndex + 1}
+                Dragging point {dragPointIndex + 1}
               </span>
               <span className="text-red-500">|</span>
               <span>
@@ -386,7 +387,7 @@ const EditableShapeFunctionChart = ({
           ) : hoveredPoint !== null ? (
             <>
               <span className="font-medium">
-                🎯 Point {hoveredPoint + 1} selected
+                Point {hoveredPoint + 1} selected
               </span>
               <span className="text-blue-400">|</span>
               <span>
@@ -396,7 +397,7 @@ const EditableShapeFunctionChart = ({
           ) : (
             <>
               <span className="font-medium">
-                🖱️ Hover over a point to select it
+                Hover over a point to select it
               </span>
               <span className="text-blue-400">|</span>
               <span>Then drag up/down to edit</span>
@@ -702,7 +703,7 @@ const EditableShapeFunctionsGrid = ({
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📊 Interactive Shape Functions
+          Interactive Shape Functions
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -720,7 +721,7 @@ const EditableShapeFunctionsGrid = ({
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📊 Interactive Shape Functions
+          Interactive Shape Functions
         </h3>
         <p className="text-gray-500 text-center py-8">
           Train the model to see and edit feature shape functions.
@@ -745,7 +746,7 @@ const EditableShapeFunctionsGrid = ({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-700">
-            📊 Interactive Shape Functions
+            Interactive Shape Functions
           </h3>
           <p className="text-sm text-gray-500">
             {isEditing
@@ -770,7 +771,7 @@ const EditableShapeFunctionsGrid = ({
                 : "bg-blue-100 text-blue-700 hover:bg-blue-200"
             }`}
           >
-            {isEditing ? "✓ Editing Mode ON" : "🖊️ Enable Editing"}
+            {isEditing ? "Editing Mode ON" : "Enable Editing"}
           </button>
         </div>
       </div>

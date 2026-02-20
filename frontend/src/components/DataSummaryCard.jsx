@@ -18,7 +18,7 @@ const DataSummaryCard = ({ summary, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📋 Data Summary
+          Data Summary
         </h3>
         <p className="text-gray-500 text-center py-4">
           Load the data to see summary statistics
@@ -29,9 +29,7 @@ const DataSummaryCard = ({ summary, loading }) => {
 
   return (
     <div className="card">
-      <h3 className="text-lg font-semibold text-gray-700 mb-4">
-        📋 Data Summary
-      </h3>
+      <h3 className="text-lg font-semibold text-gray-700 mb-4">Data Summary</h3>
 
       <div className="space-y-4">
         <div className="flex justify-between items-center py-2 border-b border-gray-100">

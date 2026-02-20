@@ -24,7 +24,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📈 Prediction Comparison
+          Prediction Comparison
         </h3>
         <div className="h-80 bg-gray-100 rounded-lg animate-pulse"></div>
       </div>
@@ -35,7 +35,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📈 Prediction Comparison
+          Prediction Comparison
         </h3>
         <p className="text-gray-500 text-center py-8">
           Edit shape functions and apply changes to see prediction comparison.
@@ -53,7 +53,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
 
   // Check if there are any differences
   const hasDifferences = original_predictions.some(
-    (orig, i) => Math.abs(orig - interactive_predictions[i]) > 0.001
+    (orig, i) => Math.abs(orig - interactive_predictions[i]) > 0.001,
   );
 
   // Calculate improvement
@@ -144,7 +144,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
     <div className="card">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-gray-700">
-          📈 Prediction Comparison
+          Prediction Comparison
         </h3>
         <p className="text-sm text-gray-500">
           {hasDifferences
@@ -215,7 +215,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
                 >
                   {rmseImproved ? "improved" : "worsened"} by{" "}
                   {Math.abs(
-                    metrics.original_rmse - metrics.interactive_rmse
+                    metrics.original_rmse - metrics.interactive_rmse,
                   ).toFixed(4)}
                 </span>
                 {" | "}
@@ -225,7 +225,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
                 >
                   {maeImproved ? "improved" : "worsened"} by{" "}
                   {Math.abs(
-                    metrics.original_mae - metrics.interactive_mae
+                    metrics.original_mae - metrics.interactive_mae,
                   ).toFixed(4)}
                 </span>
               </span>

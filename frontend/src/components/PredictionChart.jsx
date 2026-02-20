@@ -17,7 +17,7 @@ const PredictionChart = ({ predictionsData, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          📈 Predictions vs Actual
+          Predictions vs Actual
         </h3>
         <p className="text-gray-500 text-center py-8">
           Train the model to see predictions compared to actual values.

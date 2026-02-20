@@ -31,12 +31,12 @@ const PredictionForm = ({ onPredict, loading, modelTrained }) => {
   return (
     <div className="card">
       <h3 className="text-lg font-semibold text-gray-700 mb-4">
-        🔮 Make Prediction
+        Make Prediction
       </h3>
 
       {!modelTrained && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
-          ⚠️ Please train the model first before making predictions
+          Please train the model first before making predictions
         </div>
       )}
 

@@ -655,6 +655,8 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
             {/* Combined Shape Functions Visualization */}
             {renderCombinedShapeFunctions()}
 
+            <div className="mt-12"></div>
+
             {/* Edit Logs */}
             {renderEditLogs()}
           </>

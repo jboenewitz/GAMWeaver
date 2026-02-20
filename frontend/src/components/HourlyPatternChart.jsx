@@ -17,7 +17,7 @@ const HourlyPatternChart = ({ patternData, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          🕐 Hourly Rental Pattern
+          Hourly Rental Pattern
         </h3>
         <p className="text-gray-500 text-center py-8">
           Load the data to see the hourly rental pattern.
