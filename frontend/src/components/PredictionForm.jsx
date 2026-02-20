@@ -30,9 +30,14 @@ const PredictionForm = ({ onPredict, loading, modelTrained }) => {
 
   return (
     <div className="card">
-      <h3 className="text-lg font-semibold text-gray-700 mb-4">
+      <h3 className="text-lg font-semibold text-gray-700 mb-2">
         Make Prediction
       </h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Set the input feature values and run a prediction. The result reflects
+        the currently trained model, including any shape function edits you have
+        applied.
+      </p>
 
       {!modelTrained && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">

@@ -96,8 +96,8 @@ const TrainingPanel = ({ onLoadData, onTrainModel, loading, modelStatus }) => {
             <input
               type="number"
               value={nEstimators}
-              onChange={(e) => setNEstimators(parseInt(e.target.value) || 100)}
-              className="input-field"
+              readOnly
+              className="input-field bg-gray-100 cursor-not-allowed"
               min="10"
               max="500"
               step="10"

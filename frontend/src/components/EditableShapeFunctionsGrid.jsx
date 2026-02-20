@@ -20,9 +20,15 @@ const EditableShapeFunctionChart = ({
   const [localYValues, setLocalYValues] = useState(null);
   const [hoveredPoint, setHoveredPoint] = useState(null);
 
+  // Precise value entry modal state
+  const [preciseEntry, setPreciseEntry] = useState(null);
+  const [preciseValue, setPreciseValue] = useState("");
+
   // Refs for drag handling
   const yAxisRangeRef = useRef({ min: -10, max: 10 });
   const plotBoundsRef = useRef({ top: 0, bottom: 0, height: 1 });
+  const clickTimerRef = useRef(null);
+  const pendingClickPointRef = useRef(null);
 
   // Get the current y values (with edits applied)
   const getCurrentYValues = useCallback(() => {
@@ -194,48 +200,66 @@ const EditableShapeFunctionChart = ({
     }
   }, [isDragging]);
 
-  // Handle mousedown on the plot container
-  const handleMouseDown = useCallback(
-    (e) => {
+  // Handle click on a point via Plotly's onClick — uses a timer to
+  // distinguish single-click (drag) from double-click (precise entry)
+  const handlePlotClick = useCallback(
+    (eventData) => {
       if (!isEditing) return;
-      if (hoveredPoint === null) return;
+      if (!eventData.points || eventData.points.length === 0) return;
 
-      e.preventDefault();
-      startDrag(hoveredPoint);
-    },
-    [isEditing, hoveredPoint, startDrag],
-  );
+      const point = eventData.points[0];
+      const editableTraceIndex = hasEdits ? 1 : 0;
+      if (point.curveNumber !== editableTraceIndex) return;
 
-  // Handle double-click for precise value entry
-  const handleDoubleClick = useCallback(
-    (e) => {
-      if (!isEditing || hoveredPoint === null) return;
+      const pointIndex = point.pointIndex;
 
-      e.preventDefault();
+      if (clickTimerRef.current !== null) {
+        // Second click arrived quickly → double-click
+        clearTimeout(clickTimerRef.current);
+        clickTimerRef.current = null;
+        pendingClickPointRef.current = null;
 
-      const pointIndex = hoveredPoint;
-      const xValue = x_values[pointIndex];
-      const currentY = currentYValues[pointIndex];
+        // Precise value entry via custom modal
+        const xValue = x_values[pointIndex];
+        const currentY = getCurrentYValues()[pointIndex];
+        const displayX =
+          typeof xValue === "number" ? parseFloat(xValue.toFixed(3)) : xValue;
 
-      const newY = prompt(
-        `Enter new effect value for ${feature_name} = ${xValue}:`,
-        currentY.toFixed(4),
-      );
-
-      if (newY !== null && !isNaN(parseFloat(newY))) {
-        onPointEdit(feature_name, xValue, parseFloat(newY), feature_type);
+        setPreciseValue(currentY.toFixed(3));
+        setPreciseEntry({ xValue, displayX, pointIndex });
+      } else {
+        // First click — wait briefly to see if a second click follows
+        pendingClickPointRef.current = pointIndex;
+        clickTimerRef.current = setTimeout(() => {
+          clickTimerRef.current = null;
+          const idx = pendingClickPointRef.current;
+          pendingClickPointRef.current = null;
+          if (idx !== null) {
+            startDrag(idx);
+          }
+        }, 250);
       }
     },
     [
       isEditing,
-      hoveredPoint,
+      hasEdits,
       x_values,
-      currentYValues,
       feature_name,
       feature_type,
       onPointEdit,
+      getCurrentYValues,
+      startDrag,
     ],
   );
+
+  // Keep the container handlers as fallback but they no longer drive the main interaction
+  const handleMouseDown = useCallback((e) => {
+    // Only used if drag was already initiated via handlePlotClick timer
+  }, []);
+
+  const handleDoubleClick = useCallback((e) => {
+    // Handled by handlePlotClick double-click detection
+  }, []);
 
   // Build traces
   const originalTrace = {
@@ -335,6 +359,7 @@ const EditableShapeFunctionChart = ({
     responsive: true,
     displayModeBar: false,
     scrollZoom: false,
+    doubleClick: false,
   };
 
   // Determine cursor style
@@ -365,6 +390,71 @@ const EditableShapeFunctionChart = ({
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
+      {/* Precise Value Entry Modal */}
+      {preciseEntry && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+          onClick={() => setPreciseEntry(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h4 className="text-base font-semibold text-gray-800 mb-1">
+              Set Effect Value
+            </h4>
+            <p className="text-sm text-gray-500 mb-4">
+              {feature_name} = {preciseEntry.displayX}
+            </p>
+            <input
+              type="number"
+              step="any"
+              value={preciseValue}
+              onChange={(e) => setPreciseValue(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm mb-4"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !isNaN(parseFloat(preciseValue))) {
+                  onPointEdit(
+                    feature_name,
+                    preciseEntry.xValue,
+                    parseFloat(preciseValue),
+                    feature_type,
+                  );
+                  setPreciseEntry(null);
+                } else if (e.key === "Escape") {
+                  setPreciseEntry(null);
+                }
+              }}
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => setPreciseEntry(null)}
+                className="flex-1 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!isNaN(parseFloat(preciseValue))) {
+                    onPointEdit(
+                      feature_name,
+                      preciseEntry.xValue,
+                      parseFloat(preciseValue),
+                      feature_type,
+                    );
+                    setPreciseEntry(null);
+                  }
+                }}
+                disabled={isNaN(parseFloat(preciseValue))}
+                className="flex-1 px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {isEditing && (
         <div
           className={`px-3 py-1.5 text-xs border-b flex items-center gap-2 transition-colors ${
@@ -410,6 +500,7 @@ const EditableShapeFunctionChart = ({
         data={data}
         layout={layout}
         config={config}
+        onClick={handlePlotClick}
         onHover={handleHover}
         onUnhover={handleUnhover}
         onInitialized={updatePlotBounds}

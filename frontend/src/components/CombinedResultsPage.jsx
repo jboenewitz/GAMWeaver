@@ -441,13 +441,16 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                 {isExpanded && (
                   <div className="p-4 border-t">
                     {/* Table Header */}
-                    <div className="grid grid-cols-6 gap-2 text-xs font-medium text-gray-500 uppercase mb-2 px-2">
+                    <div
+                      className="grid gap-2 text-xs font-medium text-gray-500 uppercase mb-2 px-2"
+                      style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr" }}
+                    >
                       <span>User</span>
                       <span>X Value</span>
                       <span className="text-center">Confidence</span>
                       <span className="text-right">Raw Input</span>
                       <span className="text-right">Weighted</span>
-                      <span>Message</span>
+                      <span>Edit Message</span>
                     </div>
 
                     {/* Edit Rows */}
@@ -455,7 +458,10 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                       {feature.edits.map((edit, editIdx) => (
                         <div
                           key={editIdx}
-                          className="grid grid-cols-6 gap-2 text-sm py-2 px-2 bg-gray-50 rounded hover:bg-gray-100"
+                          className="grid gap-2 text-sm py-2 px-2 bg-gray-50 rounded hover:bg-gray-100"
+                          style={{
+                            gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr",
+                          }}
                         >
                           <span className="font-medium text-gray-700 truncate">
                             {edit.user_name}
@@ -499,7 +505,7 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                             {edit.weighted_result.toFixed(3)}
                           </span>
                           <span
-                            className="text-gray-600 text-xs truncate"
+                            className="text-gray-600 text-xs break-words"
                             title={edit.message}
                           >
                             {edit.message || "-"}
