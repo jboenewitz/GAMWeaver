@@ -166,6 +166,29 @@ export const apiService = {
     const response = await api.post("/database/reset");
     return response.data;
   },
+
+  // ==================== Edit deletion ====================
+
+  deleteEdit: async (editId, deletedByUserId, reason) => {
+    const response = await api.post("/edits/delete", {
+      edit_id: editId,
+      deleted_by_user_id: deletedByUserId,
+      reason: reason,
+    });
+    return response.data;
+  },
+
+  // ==================== Notifications ====================
+
+  getUserNotifications: async (userId) => {
+    const response = await api.get(`/users/${userId}/notifications`);
+    return response.data;
+  },
+
+  markNotificationsSeen: async (userId) => {
+    const response = await api.post(`/users/${userId}/notifications/mark-seen`);
+    return response.data;
+  },
 };
 
 export default apiService;

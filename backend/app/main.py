@@ -23,6 +23,9 @@ from .models import (
     UserEditsRequest,
     CombinedEditsResponse,
     ResetDatabaseResponse,
+    DeleteEditRequest,
+    DeleteEditResponse,
+    NotificationsResponse,
 )
 from .ml_service import ml_service
 from .db_service import db_service
@@ -574,6 +577,63 @@ async def get_combined_predictions_comparison():
         comparison["combined_shape_functions_display"] = combined_shape_functions_display
         
         return comparison
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Edit Deletion Endpoints ====================
+
+@app.post("/api/edits/delete", response_model=DeleteEditResponse)
+async def delete_edit(request: DeleteEditRequest):
+    """Delete a specific edit and optionally notify the edit owner."""
+    try:
+        if not request.reason or not request.reason.strip():
+            raise HTTPException(status_code=400, detail="Reason is required")
+        
+        success = db_service.delete_edit(
+            edit_id=request.edit_id,
+            deleted_by_user_id=request.deleted_by_user_id,
+            reason=request.reason.strip()
+        )
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Edit not found")
+        
+        return DeleteEditResponse(success=True, message="Edit deleted successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users/{user_id}/notifications")
+async def get_user_notifications(user_id: int):
+    """Get unseen deletion notifications for a user."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        notifications = db_service.get_unseen_notifications(user_id)
+        return {"notifications": notifications}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/users/{user_id}/notifications/mark-seen")
+async def mark_notifications_seen(user_id: int):
+    """Mark all notifications for a user as seen."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        db_service.mark_notifications_seen(user_id)
+        return {"success": True, "message": "Notifications marked as seen"}
     except HTTPException:
         raise
     except Exception as e:

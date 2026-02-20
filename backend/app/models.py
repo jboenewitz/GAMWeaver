@@ -146,3 +146,31 @@ class ResetDatabaseResponse(BaseModel):
     """Response after resetting the database."""
     success: bool
     message: str
+
+
+class DeleteEditRequest(BaseModel):
+    """Request to delete a specific edit."""
+    edit_id: int
+    deleted_by_user_id: int
+    reason: str
+
+
+class DeleteEditResponse(BaseModel):
+    """Response after deleting an edit."""
+    success: bool
+    message: str
+
+
+class EditDeletionNotification(BaseModel):
+    """A notification about a deleted edit."""
+    id: int
+    feature_name: str
+    x_value: str
+    reason: str
+    deleted_by: str
+    created_at: str
+
+
+class NotificationsResponse(BaseModel):
+    """Response with list of notifications."""
+    notifications: List[EditDeletionNotification]

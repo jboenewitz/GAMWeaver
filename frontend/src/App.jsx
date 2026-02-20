@@ -27,6 +27,10 @@ function App() {
   const [comparisonData, setComparisonData] = useState(null);
   const [userSavedEdits, setUserSavedEdits] = useState({}); // User's saved edits for display
 
+  // Notification state
+  const [deletionNotifications, setDeletionNotifications] = useState([]);
+  const [showNotificationPopup, setShowNotificationPopup] = useState(false);
+
   // Loading states
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
@@ -70,8 +74,33 @@ function App() {
   useEffect(() => {
     if (currentPage === "main" && currentUser) {
       fetchModelStatus();
+      checkForNotifications();
     }
   }, [currentPage, currentUser]);
+
+  const checkForNotifications = async () => {
+    if (!currentUser) return;
+    try {
+      const data = await apiService.getUserNotifications(currentUser.id);
+      if (data.notifications && data.notifications.length > 0) {
+        setDeletionNotifications(data.notifications);
+        setShowNotificationPopup(true);
+      }
+    } catch (e) {
+      console.log("Failed to check notifications:", e);
+    }
+  };
+
+  const handleDismissNotifications = async () => {
+    if (!currentUser) return;
+    try {
+      await apiService.markNotificationsSeen(currentUser.id);
+    } catch (e) {
+      console.log("Failed to mark notifications as seen:", e);
+    }
+    setShowNotificationPopup(false);
+    setDeletionNotifications([]);
+  };
 
   const handleLogin = async (name) => {
     const user = await apiService.loginOrCreateUser(name);
@@ -379,6 +408,7 @@ function App() {
       <CombinedResultsPage
         onBack={() => setCurrentPage("main")}
         onResetDatabase={handleResetDatabase}
+        currentUser={currentUser}
       />
     );
   }
@@ -523,6 +553,73 @@ function App() {
           </p>
         </footer>
       </main>
+
+      {/* Deletion Notification Popup */}
+      {showNotificationPopup && deletionNotifications.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4">
+            <div className="flex items-center space-x-2 mb-4">
+              <svg
+                className="w-6 h-6 text-amber-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+              <h3 className="text-lg font-bold text-gray-800">
+                Edit{deletionNotifications.length > 1 ? "s" : ""} Removed
+              </h3>
+            </div>
+            <p className="text-gray-600 mb-4 text-sm">
+              {deletionNotifications.length === 1
+                ? "One of your edits was removed by another user:"
+                : `${deletionNotifications.length} of your edits were removed by other users:`}
+            </p>
+            <div className="space-y-3 max-h-60 overflow-y-auto mb-4">
+              {deletionNotifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className="bg-amber-50 border border-amber-200 rounded-lg p-3"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm font-medium text-gray-700">
+                      Feature:{" "}
+                      <span className="font-mono">
+                        {notification.feature_name}
+                      </span>
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      by {notification.deleted_by}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 mb-1">
+                    X Value:{" "}
+                    <span className="font-mono">{notification.x_value}</span>
+                  </div>
+                  <div className="text-sm text-gray-700 mt-1">
+                    <span className="font-medium">Reason:</span>{" "}
+                    {notification.reason}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={handleDismissNotifications}
+                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

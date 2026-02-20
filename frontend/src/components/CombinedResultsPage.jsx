@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
 
-function CombinedResultsPage({ onBack, onResetDatabase }) {
+function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
@@ -11,6 +11,13 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [expandedFeatures, setExpandedFeatures] = useState({});
+
+  // Delete edit modal state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [editToDelete, setEditToDelete] = useState(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     fetchData();
@@ -48,6 +55,47 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
     } finally {
       setResetting(false);
     }
+  };
+
+  const handleOpenDeleteModal = (edit) => {
+    setEditToDelete(edit);
+    setDeleteReason("");
+    setDeleteError("");
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteEdit = async () => {
+    if (!deleteReason.trim()) {
+      setDeleteError("Please provide a reason for deleting this edit.");
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await apiService.deleteEdit(
+        editToDelete.edit_id,
+        currentUser?.id,
+        deleteReason.trim(),
+      );
+      setShowDeleteModal(false);
+      setEditToDelete(null);
+      setDeleteReason("");
+      await fetchData();
+    } catch (err) {
+      setDeleteError(
+        err.response?.data?.detail || err.message || "Failed to delete edit",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setEditToDelete(null);
+    setDeleteReason("");
+    setDeleteError("");
   };
 
   const renderMetricsComparison = () => {
@@ -443,7 +491,9 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                     {/* Table Header */}
                     <div
                       className="grid gap-2 text-xs font-medium text-gray-500 uppercase mb-2 px-2"
-                      style={{ gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr" }}
+                      style={{
+                        gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr 28px",
+                      }}
                     >
                       <span>User</span>
                       <span>X Value</span>
@@ -451,6 +501,7 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                       <span className="text-right">Raw Input</span>
                       <span className="text-right">Weighted</span>
                       <span>Edit Message</span>
+                      <span></span>
                     </div>
 
                     {/* Edit Rows */}
@@ -458,9 +509,9 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                       {feature.edits.map((edit, editIdx) => (
                         <div
                           key={editIdx}
-                          className="grid gap-2 text-sm py-2 px-2 bg-gray-50 rounded hover:bg-gray-100"
+                          className="group grid gap-2 text-sm py-2 px-2 bg-gray-50 rounded hover:bg-gray-100"
                           style={{
-                            gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr",
+                            gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr 28px",
                           }}
                         >
                           <span className="font-medium text-gray-700 truncate">
@@ -510,6 +561,31 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                           >
                             {edit.message || "-"}
                           </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDeleteModal({
+                                ...edit,
+                                feature_name: feature.feature_name,
+                              });
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                            title="Delete this edit"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -718,6 +794,106 @@ function CombinedResultsPage({ onBack, onResetDatabase }) {
                   </>
                 ) : (
                   "Yes, Reset"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Edit Modal */}
+      {showDeleteModal && editToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">
+              Delete Edit
+            </h3>
+            <p className="text-gray-600 mb-1 text-sm">
+              You are about to delete an edit by{" "}
+              <span className="font-semibold">{editToDelete.user_name}</span>.
+            </p>
+            <p className="text-gray-500 mb-4 text-xs">
+              Feature:{" "}
+              <span className="font-mono">
+                {editToDelete.feature_name || "—"}
+              </span>{" "}
+              • X Value:{" "}
+              <span className="font-mono">
+                {typeof editToDelete.x_value === "number"
+                  ? editToDelete.x_value.toFixed(2)
+                  : editToDelete.x_value}
+              </span>
+            </p>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Why is this edit being removed?{" "}
+              <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={deleteReason}
+              onChange={(e) => {
+                setDeleteReason(e.target.value);
+                if (deleteError) setDeleteError("");
+              }}
+              placeholder="Provide a reason for removing this edit..."
+              rows={3}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+            />
+            {deleteError && (
+              <p className="text-red-600 text-xs mt-1">{deleteError}</p>
+            )}
+            <div className="flex justify-end space-x-3 mt-4">
+              <button
+                onClick={handleCancelDelete}
+                disabled={deleting}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteEdit}
+                disabled={deleting || !deleteReason.trim()}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center text-sm"
+              >
+                {deleting ? (
+                  <>
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      className="w-4 h-4 mr-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                      />
+                    </svg>
+                    Delete Edit
+                  </>
                 )}
               </button>
             </div>

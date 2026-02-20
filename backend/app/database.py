@@ -1,6 +1,6 @@
 """Database configuration and models using SQLAlchemy."""
 
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, JSON, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, JSON, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -49,6 +49,24 @@ class ShapeFunctionEdit(Base):
     
     # Relationship to user
     user = relationship("User", back_populates="edits")
+
+
+class DeletedEditNotification(Base):
+    """Model to store notifications for users whose edits were deleted."""
+    __tablename__ = "deleted_edit_notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # User who made the edit (receives notification)
+    deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # User who deleted the edit
+    feature_name = Column(String(100), nullable=False)
+    x_value = Column(String(100), nullable=False)
+    reason = Column(Text, nullable=False)
+    seen = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    target_user = relationship("User", foreign_keys=[target_user_id])
+    deleted_by_user = relationship("User", foreign_keys=[deleted_by_user_id])
 
 
 def init_db():

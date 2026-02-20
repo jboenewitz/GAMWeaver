@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any, Optional
-from .database import SessionLocal, User, ShapeFunctionEdit, reset_database as db_reset
+from .database import SessionLocal, User, ShapeFunctionEdit, DeletedEditNotification, reset_database as db_reset
 
 
 class DatabaseService:
@@ -380,6 +380,8 @@ class DatabaseService:
                 weighted_result = edit.y_offset * edit.weight
                 
                 features[edit.feature_name]["edits"].append({
+                    "edit_id": edit.id,
+                    "user_id": edit.user_id,
                     "user_name": user_name,
                     "x_value": edit.x_value if edit.feature_type == "categorical" else float(edit.x_value),
                     "sureness": sureness,
@@ -391,6 +393,79 @@ class DatabaseService:
             return {
                 "features": list(features.values())
             }
+        finally:
+            db.close()
+
+    # ==================== Edit Deletion Operations ====================
+
+    def delete_edit(self, edit_id: int, deleted_by_user_id: int, reason: str) -> bool:
+        """Delete a specific edit by ID. Creates a notification if the deleter is different from the edit owner."""
+        db = self.get_db()
+        try:
+            edit = db.query(ShapeFunctionEdit).filter(ShapeFunctionEdit.id == edit_id).first()
+            if edit is None:
+                return False
+            
+            # If deleted by a different user, create a notification
+            if edit.user_id != deleted_by_user_id:
+                notification = DeletedEditNotification(
+                    target_user_id=edit.user_id,
+                    deleted_by_user_id=deleted_by_user_id,
+                    feature_name=edit.feature_name,
+                    x_value=edit.x_value,
+                    reason=reason
+                )
+                db.add(notification)
+            
+            db.delete(edit)
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
+        finally:
+            db.close()
+
+    # ==================== Notification Operations ====================
+
+    def get_unseen_notifications(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all unseen deletion notifications for a user."""
+        db = self.get_db()
+        try:
+            notifications = db.query(DeletedEditNotification).filter(
+                DeletedEditNotification.target_user_id == user_id,
+                DeletedEditNotification.seen == False
+            ).order_by(DeletedEditNotification.created_at.desc()).all()
+            
+            result = []
+            for n in notifications:
+                deleted_by_user = db.query(User).filter(User.id == n.deleted_by_user_id).first()
+                result.append({
+                    "id": n.id,
+                    "feature_name": n.feature_name,
+                    "x_value": n.x_value,
+                    "reason": n.reason,
+                    "deleted_by": deleted_by_user.name if deleted_by_user else "Unknown",
+                    "created_at": n.created_at.isoformat()
+                })
+            
+            return result
+        finally:
+            db.close()
+
+    def mark_notifications_seen(self, user_id: int) -> bool:
+        """Mark all notifications for a user as seen."""
+        db = self.get_db()
+        try:
+            db.query(DeletedEditNotification).filter(
+                DeletedEditNotification.target_user_id == user_id,
+                DeletedEditNotification.seen == False
+            ).update({"seen": True})
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
         finally:
             db.close()
 
