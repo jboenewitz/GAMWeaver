@@ -640,6 +640,43 @@ async def mark_notifications_seen(user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== Combined Predict Endpoint ====================
+
+@app.post("/api/combined/predict", response_model=PredictionOutput)
+async def combined_predict(input_data: PredictionInput):
+    """Make a prediction using the combined shape function edits from all users."""
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet.")
+        
+        # Ensure shape functions are loaded
+        if not ml_service.original_shape_functions:
+            ml_service.get_shape_functions()
+        
+        # Get combined edits from all users
+        combined_offsets = db_service.get_combined_edits()
+        
+        features = {
+            "temperature": input_data.temperature,
+            "humidity": input_data.humidity,
+            "windspeed": input_data.windspeed,
+            "time_of_day": input_data.time_of_day,
+            "type_of_day": input_data.type_of_day,
+            "weathersituation": input_data.weathersituation,
+        }
+        
+        prediction = ml_service.predict_with_offsets(features, combined_offsets)
+        
+        return PredictionOutput(
+            predicted_count=max(0, prediction),
+            input_features=features
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== Database Management ====================
 
 @app.post("/api/database/reset", response_model=ResetDatabaseResponse)

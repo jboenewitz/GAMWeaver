@@ -2,6 +2,191 @@ import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
 
+const CombinedPredictionForm = ({ modelTrained }) => {
+  const [formData, setFormData] = useState({
+    temperature: 20,
+    humidity: 50,
+    windspeed: 10,
+    time_of_day: 12,
+    type_of_day: "Working Day",
+    weathersituation: "Clear",
+  });
+  const [prediction, setPrediction] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleChange = (e) => {
+    const { name, value, type } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "number" ? parseFloat(value) : value,
+    }));
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await apiService.predictCombined(formData);
+      if (result) {
+        setPrediction(result.predicted_count);
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.detail || err.message || "Prediction failed",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+      <h3 className="text-lg font-semibold text-gray-800 mb-2">
+        Predict with Combined Edits
+      </h3>
+      <p className="text-sm text-gray-500 mb-4">
+        Make a prediction using the model with all combined user edits applied.
+        The result reflects the aggregated shape function modifications from all
+        users.
+      </p>
+
+      {!modelTrained && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+          Please train the model first before making predictions.
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Temperature (°C)
+            </label>
+            <input
+              type="number"
+              name="temperature"
+              value={formData.temperature}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              min="-10"
+              max="40"
+              step="0.5"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Humidity (%)
+            </label>
+            <input
+              type="number"
+              name="humidity"
+              value={formData.humidity}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              min="0"
+              max="100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Windspeed (km/h)
+            </label>
+            <input
+              type="number"
+              name="windspeed"
+              value={formData.windspeed}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              min="0"
+              max="70"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Time of Day (Hour)
+            </label>
+            <input
+              type="number"
+              name="time_of_day"
+              value={formData.time_of_day}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+              min="0"
+              max="23"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Type of Day
+            </label>
+            <select
+              name="type_of_day"
+              value={formData.type_of_day}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+            >
+              <option value="Working Day">Working Day</option>
+              <option value="Weekend">Weekend</option>
+              <option value="Holiday">Holiday</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Weather
+            </label>
+            <select
+              name="weathersituation"
+              value={formData.weathersituation}
+              onChange={handleChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+            >
+              <option value="Clear">Clear</option>
+              <option value="Cloudy">Cloudy</option>
+              <option value="Light Rain">Light Rain</option>
+              <option value="Heavy Rain">Heavy Rain</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={!modelTrained || loading}
+          className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        >
+          {loading ? "Predicting..." : "Predict Bike Rentals (Combined Model)"}
+        </button>
+      </form>
+
+      {prediction !== null && (
+        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
+          <div className="text-center">
+            <div className="text-sm text-gray-600">
+              Predicted Bike Rentals (Combined Edits)
+            </div>
+            <div className="text-4xl font-bold text-primary-600 mt-1">
+              {Math.round(prediction)}
+            </div>
+            <div className="text-sm text-gray-500 mt-1">bikes per hour</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -249,7 +434,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     return (
       <div className="bg-white rounded-xl shadow-md p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Predicted vs Actual (Scatter Plot)
+          Predicted vs Original (Scatter Plot)
         </h3>
         <Plot
           data={[
@@ -393,7 +578,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                     layout={{
                       autosize: true,
                       height: 200,
-                      margin: { l: 40, r: 10, t: 10, b: 40 },
+                      margin: { l: 55, r: 70, t: 10, b: 40 },
                       xaxis: {
                         title: { text: sf.feature_name, font: { size: 10 } },
                         tickangle: isNumeric ? 0 : -45,
@@ -404,8 +589,11 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                         tickfont: { size: 9 },
                       },
                       legend: {
-                        orientation: "h",
-                        y: -0.3,
+                        orientation: "v",
+                        x: 1.02,
+                        xanchor: "left",
+                        y: 1,
+                        yanchor: "top",
                         font: { size: 9 },
                       },
                       showlegend: true,
@@ -727,6 +915,9 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
             {/* Metrics Comparison */}
             {renderMetricsComparison()}
+
+            {/* Prediction with Combined Edits */}
+            <CombinedPredictionForm modelTrained={true} />
 
             {/* Scatter Plot - Predicted vs Actual */}
             {renderScatterPlot()}

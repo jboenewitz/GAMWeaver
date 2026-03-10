@@ -27,8 +27,10 @@ const EditableShapeFunctionChart = ({
   // Refs for drag handling
   const yAxisRangeRef = useRef({ min: -10, max: 10 });
   const plotBoundsRef = useRef({ top: 0, bottom: 0, height: 1 });
-  const clickTimerRef = useRef(null);
-  const pendingClickPointRef = useRef(null);
+  const hoveredPointRef = useRef(null);
+  const dragStartYRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const lastMouseDownRef = useRef({ time: 0, pointIndex: null });
 
   // Get the current y values (with edits applied)
   const getCurrentYValues = useCallback(() => {
@@ -130,15 +132,22 @@ const EditableShapeFunctionChart = ({
     const handleMouseUp = (e) => {
       e.preventDefault();
 
-      if (localYValues && dragPointIndex !== null) {
+      // Only commit the edit if the mouse actually moved (distinguishes drag from click/dblclick)
+      const movedSignificantly =
+        dragStartYRef.current !== null &&
+        Math.abs(e.clientY - dragStartYRef.current) > 3;
+
+      if (movedSignificantly && localYValues && dragPointIndex !== null) {
         const xValue = x_values[dragPointIndex];
         const newY = localYValues[dragPointIndex];
         onPointEdit(feature_name, xValue, newY, feature_type);
       }
 
       setIsDragging(false);
+      isDraggingRef.current = false;
       setDragPointIndex(null);
       setLocalYValues(null);
+      dragStartYRef.current = null;
     };
 
     // Add listeners to window to capture mouse even outside the chart
@@ -160,15 +169,17 @@ const EditableShapeFunctionChart = ({
     clientYToDataY,
   ]);
 
-  // Start dragging when clicking on a point
+  // Start dragging when mouse is pressed on a hovered point
   const startDrag = useCallback(
-    (pointIndex) => {
-      if (!isEditing) return;
+    (pointIndex, clientY) => {
+      if (!isEditing || isDraggingRef.current) return;
 
       updatePlotBounds();
       setDragPointIndex(pointIndex);
       setLocalYValues([...getCurrentYValues()]);
       setIsDragging(true);
+      isDraggingRef.current = true;
+      dragStartYRef.current = clientY;
     },
     [isEditing, getCurrentYValues, updatePlotBounds],
   );
@@ -187,8 +198,10 @@ const EditableShapeFunctionChart = ({
 
       if (point.curveNumber === editableTraceIndex) {
         setHoveredPoint(point.pointIndex);
+        hoveredPointRef.current = point.pointIndex;
       } else {
         setHoveredPoint(null);
+        hoveredPointRef.current = null;
       }
     },
     [isEditing, hasEdits],
@@ -197,29 +210,43 @@ const EditableShapeFunctionChart = ({
   const handleUnhover = useCallback(() => {
     if (!isDragging) {
       setHoveredPoint(null);
+      hoveredPointRef.current = null;
     }
   }, [isDragging]);
 
-  // Handle click on a point via Plotly's onClick — uses a timer to
-  // distinguish single-click (drag) from double-click (precise entry)
-  const handlePlotClick = useCallback(
-    (eventData) => {
-      if (!isEditing) return;
-      if (!eventData.points || eventData.points.length === 0) return;
+  // Native mousedown listener using capture phase to ensure
+  // we intercept events before Plotly can stop propagation.
+  // Double-click is detected manually from two rapid mousedowns
+  // because the native dblclick fires too late (hoveredPointRef
+  // gets cleared by the drag-end → re-render → unhover cycle).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !isEditing) return;
 
-      const point = eventData.points[0];
-      const editableTraceIndex = hasEdits ? 1 : 0;
-      if (point.curveNumber !== editableTraceIndex) return;
+    const onMouseDown = (e) => {
+      // Use hovered point from Plotly, or fall back to the point from the
+      // previous mousedown (it may have been cleared between clicks).
+      const pointIndex =
+        hoveredPointRef.current ?? lastMouseDownRef.current.pointIndex;
+      if (pointIndex === null) return;
 
-      const pointIndex = point.pointIndex;
+      e.preventDefault();
+      const now = Date.now();
 
-      if (clickTimerRef.current !== null) {
-        // Second click arrived quickly → double-click
-        clearTimeout(clickTimerRef.current);
-        clickTimerRef.current = null;
-        pendingClickPointRef.current = null;
+      if (
+        lastMouseDownRef.current.pointIndex === pointIndex &&
+        now - lastMouseDownRef.current.time < 400
+      ) {
+        // --- Double-click detected ---
+        lastMouseDownRef.current = { time: 0, pointIndex: null };
 
-        // Precise value entry via custom modal
+        // Cancel any ongoing drag without committing
+        setIsDragging(false);
+        isDraggingRef.current = false;
+        setDragPointIndex(null);
+        setLocalYValues(null);
+        dragStartYRef.current = null;
+
         const xValue = x_values[pointIndex];
         const currentY = getCurrentYValues()[pointIndex];
         const displayX =
@@ -228,38 +255,22 @@ const EditableShapeFunctionChart = ({
         setPreciseValue(currentY.toFixed(3));
         setPreciseEntry({ xValue, displayX, pointIndex });
       } else {
-        // First click — wait briefly to see if a second click follows
-        pendingClickPointRef.current = pointIndex;
-        clickTimerRef.current = setTimeout(() => {
-          clickTimerRef.current = null;
-          const idx = pendingClickPointRef.current;
-          pendingClickPointRef.current = null;
-          if (idx !== null) {
-            startDrag(idx);
-          }
-        }, 250);
+        // --- First click — start drag ---
+        lastMouseDownRef.current = { time: now, pointIndex };
+        startDrag(pointIndex, e.clientY);
       }
-    },
-    [
-      isEditing,
-      hasEdits,
-      x_values,
-      feature_name,
-      feature_type,
-      onPointEdit,
-      getCurrentYValues,
-      startDrag,
-    ],
-  );
+    };
 
-  // Keep the container handlers as fallback but they no longer drive the main interaction
-  const handleMouseDown = useCallback((e) => {
-    // Only used if drag was already initiated via handlePlotClick timer
-  }, []);
+    // Suppress native dblclick so Plotly doesn't reset zoom / interfere
+    const onDblClick = (e) => e.preventDefault();
 
-  const handleDoubleClick = useCallback((e) => {
-    // Handled by handlePlotClick double-click detection
-  }, []);
+    container.addEventListener("mousedown", onMouseDown, true);
+    container.addEventListener("dblclick", onDblClick, true);
+    return () => {
+      container.removeEventListener("mousedown", onMouseDown, true);
+      container.removeEventListener("dblclick", onDblClick, true);
+    };
+  }, [isEditing, x_values, startDrag, getCurrentYValues]);
 
   // Build traces
   const originalTrace = {
@@ -387,8 +398,6 @@ const EditableShapeFunctionChart = ({
               : "border-gray-200"
       }`}
       style={{ userSelect: "none" }}
-      onMouseDown={handleMouseDown}
-      onDoubleClick={handleDoubleClick}
     >
       {/* Precise Value Entry Modal */}
       {preciseEntry && (
@@ -500,7 +509,6 @@ const EditableShapeFunctionChart = ({
         data={data}
         layout={layout}
         config={config}
-        onClick={handlePlotClick}
         onHover={handleHover}
         onUnhover={handleUnhover}
         onInitialized={updatePlotBounds}
@@ -625,23 +633,15 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
 const FeatureEditCard = ({
   shapeFunction,
   editedPoints,
+  unsavedEditedPoints,
   onPointEdit,
   onFeatureSubmit,
   onFeatureReset,
   isEditing,
   hasSavedEdits,
 }) => {
-  const hasEdits =
-    editedPoints &&
-    editedPoints.length > 0 &&
-    editedPoints.some((p) => {
-      const idx = shapeFunction.x_values.findIndex(
-        (x) => String(x) === String(p.x_value) || x === p.x_value,
-      );
-      return (
-        idx !== -1 && Math.abs(shapeFunction.y_values[idx] - p.y_value) > 0.001
-      );
-    });
+  // Show Submit only when there are genuinely new unsaved edits
+  const hasUnsavedEdits = unsavedEditedPoints && unsavedEditedPoints.length > 0;
 
   return (
     <div className="relative">
@@ -665,7 +665,7 @@ const FeatureEditCard = ({
         {!hasSavedEdits && <div />}
 
         {/* Submit button - only show if there are unsaved edits */}
-        {hasEdits && (
+        {hasUnsavedEdits && (
           <button
             onClick={() => onFeatureSubmit(shapeFunction.feature_name)}
             className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
@@ -693,16 +693,25 @@ const EditableShapeFunctionsGrid = ({
   const [showSurenessModal, setShowSurenessModal] = useState(false);
   const [pendingFeatureSubmit, setPendingFeatureSubmit] = useState(null);
 
-  // Initialize with saved edits when shape functions or initialEditedPoints change
+  // Only reset unsaved edits when a completely new model is trained
   useEffect(() => {
-    if (Object.keys(initialEditedPoints).length > 0) {
-      setEditedPoints(initialEditedPoints);
-      setHasChanges(false); // These are saved edits, not new changes
-    } else {
-      setEditedPoints({});
-      setHasChanges(false);
-    }
-  }, [shapeFunctions, initialEditedPoints]);
+    setEditedPoints({});
+    setHasChanges(false);
+  }, [shapeFunctions]);
+
+  // Merge saved (initialEditedPoints) with unsaved (editedPoints) for chart display
+  const getMergedEditedPoints = useCallback(
+    (featureName) => {
+      const saved = initialEditedPoints[featureName] || [];
+      const unsaved = editedPoints[featureName] || [];
+      if (saved.length === 0 && unsaved.length === 0) return [];
+      const merged = new Map();
+      saved.forEach((p) => merged.set(String(p.x_value), p));
+      unsaved.forEach((p) => merged.set(String(p.x_value), p));
+      return Array.from(merged.values());
+    },
+    [initialEditedPoints, editedPoints],
+  );
 
   const handlePointEdit = useCallback(
     (featureName, xValue, yValue, featureType) => {
@@ -883,7 +892,8 @@ const EditableShapeFunctionsGrid = ({
           <FeatureEditCard
             key={sf.feature_name || index}
             shapeFunction={sf}
-            editedPoints={editedPoints[sf.feature_name] || []}
+            editedPoints={getMergedEditedPoints(sf.feature_name)}
+            unsavedEditedPoints={editedPoints[sf.feature_name] || []}
             onPointEdit={handlePointEdit}
             onFeatureSubmit={handleFeatureSubmit}
             onFeatureReset={onFeatureReset}

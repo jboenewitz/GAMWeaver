@@ -89,12 +89,8 @@ class MLService:
             "model_type": "IGANN"
         }
     
-    def predict(self, features: Dict[str, Any]) -> float:
-        """Make a single prediction."""
-        if not self.is_trained:
-            raise ValueError("Model not trained yet")
-        
-        # Create DataFrame with feature names
+    def _build_input_df(self, features: Dict[str, Any]) -> pd.DataFrame:
+        """Build a single-row DataFrame from prediction input features."""
         input_df = pd.DataFrame([{
             "Temperature": features["temperature"],
             "Humidity": features["humidity"],
@@ -103,16 +99,54 @@ class MLService:
             "Type of Day": features["type_of_day"],
             "Weathersituation": features["weathersituation"],
         }])
-        
-        # Ensure correct types
         input_df = input_df.astype({
             "Time of Day": "object",
             "Type of Day": "object",
             "Weathersituation": "object",
         })
+        return input_df
+
+    def predict(self, features: Dict[str, Any]) -> float:
+        """Make a single prediction, applying current shape function offsets."""
+        if not self.is_trained:
+            raise ValueError("Model not trained yet")
         
-        prediction = self.model.predict(input_df)
-        return float(prediction[0])
+        input_df = self._build_input_df(features)
+        
+        base_prediction = float(self.model.predict(input_df)[0])
+        
+        # Apply shape function offsets if any exist
+        total_offset = 0.0
+        for feature_name in self.shape_function_offsets:
+            if feature_name in input_df.columns:
+                value = input_df[feature_name].iloc[0]
+                total_offset += self._get_offset_for_value(feature_name, value)
+        
+        return base_prediction + total_offset
+
+    def predict_with_offsets(self, features: Dict[str, Any], offsets: Dict[str, Dict[Any, float]]) -> float:
+        """Make a single prediction using the provided shape function offsets."""
+        if not self.is_trained:
+            raise ValueError("Model not trained yet")
+        
+        input_df = self._build_input_df(features)
+        
+        base_prediction = float(self.model.predict(input_df)[0])
+        
+        # Temporarily swap offsets to use the provided ones
+        original_offsets = self.shape_function_offsets
+        self.shape_function_offsets = offsets
+        
+        total_offset = 0.0
+        for feature_name in offsets:
+            if feature_name in input_df.columns:
+                value = input_df[feature_name].iloc[0]
+                total_offset += self._get_offset_for_value(feature_name, value)
+        
+        # Restore original offsets
+        self.shape_function_offsets = original_offsets
+        
+        return base_prediction + total_offset
     
     def batch_predict(self, features_list: List[Dict[str, Any]]) -> List[float]:
         """Make batch predictions."""

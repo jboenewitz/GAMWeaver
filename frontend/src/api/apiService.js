@@ -160,6 +160,11 @@ export const apiService = {
     return response.data;
   },
 
+  predictCombined: async (inputData) => {
+    const response = await api.post("/combined/predict", inputData);
+    return response.data;
+  },
+
   // ==================== Database management ====================
 
   resetDatabase: async () => {
