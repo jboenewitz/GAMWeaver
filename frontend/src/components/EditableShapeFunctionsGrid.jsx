@@ -13,6 +13,7 @@ const EditableShapeFunctionChart = ({
   onPointEdit,
   isEditing,
   enlarged = false,
+  sharedYRange = null,
 }) => {
   if (!shapeFunction) return null;
 
@@ -162,7 +163,7 @@ const EditableShapeFunctionChart = ({
   const yMin = Math.min(...allYValues);
   const yMax = Math.max(...allYValues);
   const yPadding = Math.max((yMax - yMin) * 0.3, 5);
-  const yRange = [yMin - yPadding, yMax + yPadding];
+  const yRange = sharedYRange || [yMin - yPadding, yMax + yPadding];
 
   // Calculate x-axis range (numeric only, explicit for coordinate conversion)
   const numXVals = isNumeric ? x_values.map(Number) : [];
@@ -1046,6 +1047,7 @@ const FeatureEditCard = ({
   onFeatureReset,
   isEditing,
   hasSavedEdits,
+  sharedYRange = null,
 }) => {
   const [isEnlarged, setIsEnlarged] = useState(false);
 
@@ -1083,6 +1085,7 @@ const FeatureEditCard = ({
         editedPoints={editedPoints}
         onPointEdit={onPointEdit}
         isEditing={isEditing}
+        sharedYRange={sharedYRange}
       />
       <div className="mt-2 flex justify-between items-center">
         {/* Reset button - only show if there are saved edits */}
@@ -1153,6 +1156,7 @@ const FeatureEditCard = ({
                 onPointEdit={onPointEdit}
                 isEditing={isEditing}
                 enlarged
+                sharedYRange={sharedYRange}
               />
             </div>
             {/* Modal footer actions */}
@@ -1209,6 +1213,27 @@ const EditableShapeFunctionsGrid = ({
   const [hasChanges, setHasChanges] = useState(false);
   const [showSurenessModal, setShowSurenessModal] = useState(false);
   const [pendingFeatureSubmit, setPendingFeatureSubmit] = useState(null);
+  const [syncAxes, setSyncAxes] = useState(false);
+
+  // Compute global y-range across all features when syncAxes is enabled
+  const globalYRange = useMemo(() => {
+    if (!syncAxes || !shapeFunctions || shapeFunctions.length === 0) return null;
+    const allY = [];
+    shapeFunctions.forEach((sf) => {
+      allY.push(...sf.y_values);
+      (initialEditedPoints[sf.feature_name] || []).forEach((p) =>
+        allY.push(p.y_value),
+      );
+      (editedPoints[sf.feature_name] || []).forEach((p) =>
+        allY.push(p.y_value),
+      );
+    });
+    if (allY.length === 0) return null;
+    const yMin = Math.min(...allY);
+    const yMax = Math.max(...allY);
+    const yPadding = Math.max((yMax - yMin) * 0.3, 5);
+    return [yMin - yPadding, yMax + yPadding];
+  }, [syncAxes, shapeFunctions, initialEditedPoints, editedPoints]);
 
   // Only reset unsaved edits when a completely new model is trained
   useEffect(() => {
@@ -1381,6 +1406,22 @@ const EditableShapeFunctionsGrid = ({
             </button>
           )}
           <button
+            onClick={() => setSyncAxes((v) => !v)}
+            title={syncAxes ? "Axes are synced — click to use per-chart scale" : "Click to sync all chart axes to the same scale"}
+            className={`px-3 py-1.5 text-sm rounded-lg transition-colors font-medium flex items-center gap-1.5 ${
+              syncAxes
+                ? "bg-indigo-500 text-white shadow-md"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+            {syncAxes ? "Axes Synced" : "Sync Axes"}
+          </button>
+          <button
             onClick={() => setIsEditing(!isEditing)}
             className={`px-4 py-1.5 text-sm rounded-lg transition-colors font-medium ${
               isEditing
@@ -1419,6 +1460,7 @@ const EditableShapeFunctionsGrid = ({
               initialEditedPoints[sf.feature_name] &&
               initialEditedPoints[sf.feature_name].length > 0
             }
+            sharedYRange={globalYRange}
           />
         ))}
       </div>
