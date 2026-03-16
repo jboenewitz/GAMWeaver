@@ -26,6 +26,8 @@ from .models import (
     DeleteEditRequest,
     DeleteEditResponse,
     NotificationsResponse,
+    UserPreferencesRequest,
+    UserPreferencesResponse,
 )
 from .ml_service import ml_service
 from .db_service import db_service
@@ -516,18 +518,21 @@ async def get_users_with_edits():
 
 
 @app.get("/api/combined/predictions-comparison")
-async def get_combined_predictions_comparison():
-    """Get predictions comparison using combined edits from all users."""
+async def get_combined_predictions_comparison(weighted: bool = True):
+    """Get predictions comparison using combined edits from all users.
+    weighted=true (default): confidence-weighted average of user offsets.
+    weighted=false: simple unweighted mean of user offsets.
+    """
     try:
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet")
-        
+
         # Ensure shape functions are loaded (needed for visualization)
         if not ml_service.original_shape_functions:
             ml_service.get_shape_functions()
-        
-        # Get combined edits
-        combined_edits = db_service.get_combined_edits()
+
+        # Get combined edits (weighted or unweighted)
+        combined_edits = db_service.get_combined_edits(weighted=weighted)
         
         # Temporarily apply combined edits
         original_offsets = ml_service.shape_function_offsets.copy()
@@ -577,6 +582,73 @@ async def get_combined_predictions_comparison():
         comparison["combined_shape_functions_display"] = combined_shape_functions_display
         
         return comparison
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/combined/per-user-shape-functions")
+async def get_per_user_shape_functions(weighted: bool = True):
+    """Get shape functions for each user who has made edits, applied individually.
+
+    When weighted=True each user's offset is scaled by their confidence weight before
+    being added to the original, mirroring how the combined weighted average is built.
+    When weighted=False the raw offsets are applied (unweighted).
+    """
+    try:
+        if not ml_service.is_trained:
+            raise HTTPException(status_code=400, detail="Model not trained yet")
+
+        if not ml_service.original_shape_functions:
+            ml_service.get_shape_functions()
+
+        users_with_edits = db_service.get_users_with_edits()
+
+        result = []
+        for user in users_with_edits:
+            user_id = user["id"]
+            user_name = user["name"]
+            # {feature_name: {x_value_str: {offset, weight}}}
+            user_edits_raw = db_service.get_user_edits_raw(user_id)
+
+            user_shape_functions = []
+            for sf in ml_service.original_shape_functions.values():
+                feature_name = sf["feature_name"]
+                x_values = sf["x_values"]
+                original_y = sf["y_values"]
+                feature_type = sf["feature_type"]
+
+                modified_y = []
+                for i, (x, y) in enumerate(zip(x_values, original_y)):
+                    offset = 0.0
+                    if feature_name in user_edits_raw:
+                        feat_edits = user_edits_raw[feature_name]
+                        if feature_type == "categorical":
+                            point = feat_edits.get(str(x))
+                        else:
+                            # For numeric features, x_value in DB is the index stored as string
+                            point = feat_edits.get(str(i))
+                        if point:
+                            raw_offset = point["offset"]
+                            weight_val = point["weight"]
+                            offset = raw_offset * weight_val if weighted else raw_offset
+                    modified_y.append(float(y) + offset)
+
+                user_shape_functions.append({
+                    "feature_name": feature_name,
+                    "feature_type": feature_type,
+                    "x_values": x_values,
+                    "y_values": modified_y,
+                })
+
+            result.append({
+                "user_id": user_id,
+                "user_name": user_name,
+                "shape_functions": user_shape_functions,
+            })
+
+        return {"users": result}
     except HTTPException:
         raise
     except Exception as e:
@@ -634,6 +706,36 @@ async def mark_notifications_seen(user_id: int):
         
         db_service.mark_notifications_seen(user_id)
         return {"success": True, "message": "Notifications marked as seen"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/users/{user_id}/preferences", response_model=UserPreferencesResponse)
+async def get_user_preferences(user_id: int):
+    """Get stored UI preferences for a user."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        prefs = db_service.get_user_preferences(user_id)
+        return UserPreferencesResponse(preferences=prefs)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/users/{user_id}/preferences", response_model=UserPreferencesResponse)
+async def update_user_preferences(user_id: int, request: UserPreferencesRequest):
+    """Update (merge) UI preferences for a user."""
+    try:
+        user = db_service.get_user_by_id(user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        updated = db_service.update_user_preferences(user_id, request.preferences)
+        return UserPreferencesResponse(preferences=updated)
     except HTTPException:
         raise
     except Exception as e:

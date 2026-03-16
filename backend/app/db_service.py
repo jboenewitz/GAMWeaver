@@ -68,6 +68,33 @@ class DatabaseService:
         finally:
             db.close()
 
+    def get_user_preferences(self, user_id: int) -> Dict[str, Any]:
+        """Get stored preferences for a user (returns empty dict if none set)."""
+        db = self.get_db()
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is None:
+                return {}
+            return user.preferences or {}
+        finally:
+            db.close()
+
+    def update_user_preferences(self, user_id: int, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """Merge and persist user preferences. Returns the updated preferences dict."""
+        db = self.get_db()
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if user is None:
+                raise ValueError(f"User {user_id} not found")
+            current = dict(user.preferences or {})
+            current.update(preferences)
+            user.preferences = current
+            db.commit()
+            db.refresh(user)
+            return user.preferences or {}
+        finally:
+            db.close()
+
     def get_all_users(self) -> List[Dict[str, Any]]:
         """Get all users."""
         db = self.get_db()
@@ -176,6 +203,25 @@ class DatabaseService:
         finally:
             db.close()
 
+    def get_user_edits_raw(self, user_id: int) -> Dict[str, Dict[str, Dict[str, float]]]:
+        """Get all edits for a user as {feature_name: {x_value_str: {offset, weight}}}."""
+        db = self.get_db()
+        try:
+            edits = db.query(ShapeFunctionEdit).filter(
+                ShapeFunctionEdit.user_id == user_id
+            ).all()
+            result: Dict[str, Dict[str, Dict[str, float]]] = {}
+            for edit in edits:
+                if edit.feature_name not in result:
+                    result[edit.feature_name] = {}
+                result[edit.feature_name][edit.x_value] = {
+                    "offset": edit.y_offset,
+                    "weight": edit.weight,
+                }
+            return result
+        finally:
+            db.close()
+
     def get_user_edits_as_list(self, user_id: int) -> List[Dict[str, Any]]:
         """Get all edits for a specific user as a list of shape functions."""
         db = self.get_db()
@@ -236,55 +282,55 @@ class DatabaseService:
 
     # ==================== Aggregation Operations ====================
 
-    def get_combined_edits(self) -> Dict[str, Dict[Any, float]]:
+    def get_combined_edits(self, weighted: bool = True) -> Dict[str, Dict[Any, float]]:
         """
         Get combined edits from all users.
-        For each feature/x_value combination:
-        1. Each edit is multiplied by its weight (sureness/10)
-        2. Then average across all users who edited that point
-        
-        Example: User edits +100 with sureness 1 (weight=0.1) → contributes +10
+        weighted=True  → each edit is multiplied by its confidence weight, then averaged.
+        weighted=False → simple unweighted mean of raw offsets across all users.
         Returns format compatible with ml_service.shape_function_offsets:
-        {feature_name: {x_value_or_index: avg_weighted_offset}}
+        {feature_name: {x_value_or_index: avg_offset}}
         """
         db = self.get_db()
         try:
-            # Query to get sum of weighted edits and count of users per feature/x_value
-            # Each edit is multiplied by its weight, then we average by user count
-            results = db.query(
-                ShapeFunctionEdit.feature_name,
-                ShapeFunctionEdit.feature_type,
-                ShapeFunctionEdit.x_value,
-                func.sum(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("weighted_sum"),
-                func.count(ShapeFunctionEdit.user_id).label("user_count")
-            ).group_by(
-                ShapeFunctionEdit.feature_name,
-                ShapeFunctionEdit.x_value
-            ).all()
-            
-            # Organize by feature name
+            if weighted:
+                results = db.query(
+                    ShapeFunctionEdit.feature_name,
+                    ShapeFunctionEdit.feature_type,
+                    ShapeFunctionEdit.x_value,
+                    func.sum(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("offset_sum"),
+                    func.count(ShapeFunctionEdit.user_id).label("user_count")
+                ).group_by(
+                    ShapeFunctionEdit.feature_name,
+                    ShapeFunctionEdit.x_value
+                ).all()
+            else:
+                results = db.query(
+                    ShapeFunctionEdit.feature_name,
+                    ShapeFunctionEdit.feature_type,
+                    ShapeFunctionEdit.x_value,
+                    func.sum(ShapeFunctionEdit.y_offset).label("offset_sum"),
+                    func.count(ShapeFunctionEdit.user_id).label("user_count")
+                ).group_by(
+                    ShapeFunctionEdit.feature_name,
+                    ShapeFunctionEdit.x_value
+                ).all()
+
             combined = {}
             for row in results:
                 if row.feature_name not in combined:
                     combined[row.feature_name] = {}
-                
-                # Calculate: sum of (offset * weight) / number of users
-                # This applies the weight as a multiplier, then averages across users
-                avg_weighted_offset = float(row.weighted_sum) / float(row.user_count) if row.user_count > 0 else 0.0
-                
-                # For numeric features, the x_value stored is actually the index (as string)
-                # For categorical features, x_value is the category string
+
+                avg_offset = float(row.offset_sum) / float(row.user_count) if row.user_count > 0 else 0.0
+
                 if row.feature_type == "categorical":
-                    combined[row.feature_name][row.x_value] = avg_weighted_offset
+                    combined[row.feature_name][row.x_value] = avg_offset
                 else:
-                    # Convert string index back to int for numeric features
                     try:
                         idx = int(row.x_value)
-                        combined[row.feature_name][idx] = avg_weighted_offset
+                        combined[row.feature_name][idx] = avg_offset
                     except ValueError:
-                        # If it's not an int, try to use it as is
-                        combined[row.feature_name][row.x_value] = avg_weighted_offset
-            
+                        combined[row.feature_name][row.x_value] = avg_offset
+
             return combined
         finally:
             db.close()

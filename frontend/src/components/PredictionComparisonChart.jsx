@@ -1,5 +1,12 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Plot from "react-plotly.js";
+import { apiService } from "../api/apiService";
+
+const DEFAULT_COLORS = {
+  originalColor: "#3b82f6",
+  editedColor: "#10b981",
+  lineColor: "#ef4444",
+};
 
 const MetricDisplay = ({ label, value, suffix = "", highlight = false }) => (
   <div
@@ -19,7 +26,79 @@ const MetricDisplay = ({ label, value, suffix = "", highlight = false }) => (
   </div>
 );
 
-const PredictionComparisonChart = ({ comparisonData, loading }) => {
+const ColorSwatch = ({ color }) => (
+  <span
+    className="inline-block w-4 h-4 rounded-sm border border-gray-300 align-middle flex-shrink-0"
+    style={{ backgroundColor: color }}
+  />
+);
+
+const PredictionComparisonChart = ({
+  comparisonData,
+  loading,
+  currentUser,
+}) => {
+  const [colors, setColors] = useState(DEFAULT_COLORS);
+  const [showColorPanel, setShowColorPanel] = useState(false);
+  const [draftColors, setDraftColors] = useState(DEFAULT_COLORS);
+  const [saving, setSaving] = useState(false);
+  const panelRef = useRef(null);
+
+  // Load saved preferences when user is known
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    let cancelled = false;
+    apiService
+      .getUserPreferences(currentUser.id)
+      .then((prefs) => {
+        if (cancelled) return;
+        const merged = {
+          originalColor:
+            prefs.chart_original_color ?? DEFAULT_COLORS.originalColor,
+          editedColor: prefs.chart_edited_color ?? DEFAULT_COLORS.editedColor,
+          lineColor: prefs.chart_line_color ?? DEFAULT_COLORS.lineColor,
+        };
+        setColors(merged);
+        setDraftColors(merged);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.id]);
+
+  // Close panel when clicking outside
+  useEffect(() => {
+    if (!showColorPanel) return;
+    const handleOutside = (e) => {
+      if (panelRef.current && !panelRef.current.contains(e.target)) {
+        setShowColorPanel(false);
+        setDraftColors(colors); // discard unsaved draft
+      }
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [showColorPanel, colors]);
+
+  const handleSave = async () => {
+    setColors(draftColors);
+    setShowColorPanel(false);
+    if (!currentUser?.id) return;
+    setSaving(true);
+    try {
+      await apiService.updateUserPreferences(currentUser.id, {
+        chart_original_color: draftColors.originalColor,
+        chart_edited_color: draftColors.editedColor,
+        chart_line_color: draftColors.lineColor,
+      });
+    } catch (_) {
+      // silently fail — colors are applied locally regardless
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReset = () => setDraftColors(DEFAULT_COLORS);
   if (loading) {
     return (
       <div className="card">
@@ -51,19 +130,42 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
     metrics,
   } = comparisonData;
 
-  // Check if there are any differences
   const hasDifferences = original_predictions.some(
     (orig, i) => Math.abs(orig - interactive_predictions[i]) > 0.001,
   );
 
-  // Calculate improvement
   const rmseImproved = metrics.interactive_rmse < metrics.original_rmse;
   const maeImproved = metrics.interactive_mae < metrics.original_mae;
 
-  // Create sample indices for x-axis
-  const indices = actual_values.map((_, i) => i);
+  // Overall direction: green = both better, red = both worse, amber = mixed
+  const editedCardStyle = !hasDifferences
+    ? {
+        border: "border-gray-200",
+        bg: "",
+        heading: "text-gray-600",
+        dot: "#9ca3af",
+      }
+    : rmseImproved && maeImproved
+      ? {
+          border: "border-green-300",
+          bg: "bg-green-50/30",
+          heading: "text-green-600",
+          dot: colors.editedColor,
+        }
+      : !rmseImproved && !maeImproved
+        ? {
+            border: "border-red-300",
+            bg: "bg-red-50/30",
+            heading: "text-red-600",
+            dot: "#ef4444",
+          }
+        : {
+            border: "border-amber-300",
+            bg: "bg-amber-50/30",
+            heading: "text-amber-600",
+            dot: "#f59e0b",
+          };
 
-  // Scatter plot data
   const data = [
     {
       x: actual_values,
@@ -71,11 +173,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
       type: "scatter",
       mode: "markers",
       name: "IGANN (Original)",
-      marker: {
-        color: "#3b82f6",
-        size: 6,
-        opacity: 0.6,
-      },
+      marker: { color: colors.originalColor, size: 6, opacity: 0.6 },
     },
     ...(hasDifferences
       ? [
@@ -85,11 +183,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
             type: "scatter",
             mode: "markers",
             name: "IGANN Interactive (Edited)",
-            marker: {
-              color: "#10b981",
-              size: 6,
-              opacity: 0.6,
-            },
+            marker: { color: colors.editedColor, size: 6, opacity: 0.6 },
           },
         ]
       : []),
@@ -99,11 +193,7 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
       type: "scatter",
       mode: "lines",
       name: "Perfect Prediction",
-      line: {
-        color: "#ef4444",
-        width: 2,
-        dash: "dash",
-      },
+      line: { color: colors.lineColor, width: 2, dash: "dash" },
     },
   ];
 
@@ -114,23 +204,13 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
         : "Predictions vs Actual",
       font: { size: 14, color: "#374151" },
     },
-    xaxis: {
-      title: "Actual Bike Rentals",
-      gridcolor: "#e5e7eb",
-    },
-    yaxis: {
-      title: "Predicted Bike Rentals",
-      gridcolor: "#e5e7eb",
-    },
+    xaxis: { title: "Actual Bike Rentals", gridcolor: "#e5e7eb" },
+    yaxis: { title: "Predicted Bike Rentals", gridcolor: "#e5e7eb" },
     margin: { l: 60, r: 30, t: 50, b: 50 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
     height: 350,
-    legend: {
-      x: 0.02,
-      y: 0.98,
-      bgcolor: "rgba(255,255,255,0.9)",
-    },
+    legend: { x: 0.02, y: 0.98, bgcolor: "rgba(255,255,255,0.9)" },
     hovermode: "closest",
   };
 
@@ -142,15 +222,96 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
 
   return (
     <div className="card">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-700">
-          Prediction Comparison
-        </h3>
-        <p className="text-sm text-gray-500">
-          {hasDifferences
-            ? "Compare predictions between original IGANN model and your edited version."
-            : "Edit shape functions to see how predictions change."}
-        </p>
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-700">
+            Prediction Comparison
+          </h3>
+          <p className="text-sm text-gray-500">
+            {hasDifferences
+              ? "Compare predictions between original IGANN model and your edited version."
+              : "Edit shape functions to see how predictions change."}
+          </p>
+        </div>
+
+        {/* Colour picker trigger */}
+        <div className="relative flex-shrink-0" ref={panelRef}>
+          <button
+            onClick={() => {
+              setDraftColors(colors);
+              setShowColorPanel((v) => !v);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            title="Customise chart colours"
+          >
+            <span className="flex gap-0.5 items-center">
+              <ColorSwatch color={colors.originalColor} />
+              <ColorSwatch color={colors.editedColor} />
+              <ColorSwatch color={colors.lineColor} />
+            </span>
+            Colours
+          </button>
+
+          {/* Colour picker dropdown */}
+          {showColorPanel && (
+            <div className="absolute right-0 top-10 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64">
+              <p className="text-sm font-semibold text-gray-700 mb-3">
+                Chart Colours
+              </p>
+
+              {[
+                { key: "originalColor", label: "Original model dots" },
+                { key: "editedColor", label: "Edited model dots" },
+                { key: "lineColor", label: "Perfect prediction line" },
+              ].map(({ key, label }) => (
+                <label
+                  key={key}
+                  className="flex items-center justify-between mb-2 cursor-pointer"
+                >
+                  <span className="text-sm text-gray-600 flex-1">{label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-400 font-mono">
+                      {draftColors[key]}
+                    </span>
+                    <input
+                      type="color"
+                      value={draftColors[key]}
+                      onChange={(e) =>
+                        setDraftColors((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }))
+                      }
+                      className="w-8 h-8 rounded cursor-pointer border border-gray-300 p-0.5"
+                    />
+                  </div>
+                </label>
+              ))}
+
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={handleReset}
+                  className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                  Reset
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex-1 px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
+                >
+                  {saving ? "Saving…" : currentUser ? "Save" : "Apply"}
+                </button>
+              </div>
+              {!currentUser && (
+                <p className="text-xs text-gray-400 mt-2 text-center">
+                  Log in to persist colours across sessions.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Metrics Comparison */}
@@ -159,7 +320,10 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
           {/* Original IGANN Metrics */}
           <div className="border border-gray-200 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-blue-600 mb-3 flex items-center">
-              <span className="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+              <span
+                className="w-3 h-3 rounded-full mr-2"
+                style={{ backgroundColor: colors.originalColor }}
+              ></span>
               IGANN (Original)
             </h4>
             <div className="grid grid-cols-2 gap-3">
@@ -170,21 +334,14 @@ const PredictionComparisonChart = ({ comparisonData, loading }) => {
 
           {/* Interactive IGANN Metrics */}
           <div
-            className={`border rounded-lg p-4 ${
-              hasDifferences
-                ? "border-green-300 bg-green-50/30"
-                : "border-gray-200"
-            }`}
+            className={`border rounded-lg p-4 ${editedCardStyle.border} ${editedCardStyle.bg}`}
           >
             <h4
-              className={`text-sm font-semibold mb-3 flex items-center ${
-                hasDifferences ? "text-green-600" : "text-gray-600"
-              }`}
+              className={`text-sm font-semibold mb-3 flex items-center ${editedCardStyle.heading}`}
             >
               <span
-                className={`w-3 h-3 rounded-full mr-2 ${
-                  hasDifferences ? "bg-green-500" : "bg-gray-400"
-                }`}
+                className="w-3 h-3 rounded-full mr-2"
+                style={{ backgroundColor: editedCardStyle.dot }}
               ></span>
               IGANN Interactive (Edited)
             </h4>

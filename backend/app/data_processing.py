@@ -36,7 +36,7 @@ def load_and_preprocess_data(csv_path: str = None):
     df = pd.read_csv(csv_path)
     
     # Remap numeric features
-    df["Time of Day"] = df["hr"].astype(str)  # Convert to string for categorical treatment
+    df["Time of Day"] = df["hr"].astype(int)  # Keep as integer for numeric treatment
     df["Windspeed"] = scale_values(df["windspeed"], 0, 67)
     df["Temperature"] = scale_values(df["temp"], -8, 39)
     df["Perceived Temperature"] = scale_values(df["atemp"], -16, 50)
@@ -82,7 +82,7 @@ def load_and_preprocess_data(csv_path: str = None):
 
 def get_preprocessor(X):
     """Create and return the preprocessing pipeline."""
-    cat_features = ["Weathersituation", "Time of Day", "Type of Day"]
+    cat_features = ["Weathersituation", "Type of Day"]
     num_features = [feature for feature in X.columns if feature not in cat_features]
     
     # Create transformers
@@ -116,7 +116,6 @@ def preprocess_data(X, preprocessor=None):
     
     # Convert categorical columns to object type
     X_transformed = X_transformed.astype({
-        "Time of Day": "object",
         "Type of Day": "object",
         "Weathersituation": "object",
     })

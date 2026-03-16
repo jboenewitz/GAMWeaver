@@ -197,6 +197,27 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [resetting, setResetting] = useState(false);
   const [expandedFeatures, setExpandedFeatures] = useState({});
 
+  // Per-user shape function overlay state
+  const [showUserOverlay, setShowUserOverlay] = useState(false);
+  const [perUserShapeFunctions, setPerUserShapeFunctions] = useState(null);
+  const [loadingOverlay, setLoadingOverlay] = useState(false);
+  const [useWeighting, setUseWeighting] = useState(true);
+  const [unweightedComparisonData, setUnweightedComparisonData] =
+    useState(null);
+
+  const USER_COLORS = [
+    "#6366f1",
+    "#f59e0b",
+    "#ef4444",
+    "#8b5cf6",
+    "#f97316",
+    "#06b6d4",
+    "#ec4899",
+    "#84cc16",
+    "#14b8a6",
+    "#a855f7",
+  ];
+
   // Delete edit modal state
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [editToDelete, setEditToDelete] = useState(null);
@@ -212,20 +233,86 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     setLoading(true);
     setError(null);
     try {
-      const [comparison, usersData, logs] = await Promise.all([
-        apiService.getCombinedPredictionsComparison(),
+      // Always fetch weighted data; also re-fetch unweighted if it was already loaded
+      const fetches = [
+        apiService.getCombinedPredictionsComparison(true),
         apiService.getUsersWithEdits(),
         apiService.getEditLogs(),
-      ]);
-      setComparisonData(comparison);
-      setUsers(usersData.users || []);
-      setEditLogs(logs);
+      ];
+      if (unweightedComparisonData !== null) {
+        fetches.push(apiService.getCombinedPredictionsComparison(false));
+      }
+      const results = await Promise.all(fetches);
+      setComparisonData(results[0]);
+      setUsers(results[1].users || []);
+      setEditLogs(results[2]);
+      if (unweightedComparisonData !== null) {
+        setUnweightedComparisonData(results[3]);
+      }
+      // Refresh per-user overlay data if visible
+      if (showUserOverlay) {
+        try {
+          const perUser =
+            await apiService.getPerUserShapeFunctions(useWeighting);
+          setPerUserShapeFunctions(perUser.users || []);
+        } catch (_) {
+          // silently fail — overlay will show stale data
+        }
+      } else {
+        setPerUserShapeFunctions(null);
+      }
     } catch (err) {
       setError(
         err.response?.data?.detail || err.message || "Failed to load data",
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOverlayToggle = async () => {
+    const next = !showUserOverlay;
+    setShowUserOverlay(next);
+    if (next) {
+      setLoadingOverlay(true);
+      try {
+        const data = await apiService.getPerUserShapeFunctions(useWeighting);
+        setPerUserShapeFunctions(data.users || []);
+      } catch (_) {
+        // silently fail
+      } finally {
+        setLoadingOverlay(false);
+      }
+    }
+  };
+
+  const handleWeightingToggle = async () => {
+    const next = !useWeighting;
+    setUseWeighting(next);
+    setLoadingOverlay(true);
+    try {
+      // Always re-fetch per-user overlay with new weighting, and lazily fetch
+      // unweighted combined data on first toggle-off
+      const fetches = [];
+      if (showUserOverlay) {
+        fetches.push(
+          apiService
+            .getPerUserShapeFunctions(next)
+            .then((data) => setPerUserShapeFunctions(data.users || [])),
+        );
+      }
+      if (!next && !unweightedComparisonData) {
+        fetches.push(
+          apiService
+            .getCombinedPredictionsComparison(false)
+            .then((data) => setUnweightedComparisonData(data)),
+        );
+      }
+      await Promise.all(fetches);
+    } catch (_) {
+      // silently fail
+    } finally {
+      setLoadingOverlay(false);
     }
   };
 
@@ -286,7 +373,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const renderMetricsComparison = () => {
     if (!comparisonData?.metrics) return null;
 
-    const { metrics } = comparisonData;
+    const activeData =
+      (useWeighting ? comparisonData : unweightedComparisonData) ??
+      comparisonData;
+    const { metrics } = activeData;
     const rmseImprovement = (
       ((metrics.original_rmse - metrics.interactive_rmse) /
         metrics.original_rmse) *
@@ -364,8 +454,11 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const renderPredictionChart = () => {
     if (!comparisonData) return null;
 
-    const { original_predictions, interactive_predictions, actual_values } =
+    const activeData =
+      (useWeighting ? comparisonData : unweightedComparisonData) ??
       comparisonData;
+    const { original_predictions, interactive_predictions, actual_values } =
+      activeData;
     const indices = Array.from({ length: actual_values.length }, (_, i) => i);
 
     return (
@@ -419,8 +512,11 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const renderScatterPlot = () => {
     if (!comparisonData) return null;
 
-    const { original_predictions, interactive_predictions, actual_values } =
+    const activeData =
+      (useWeighting ? comparisonData : unweightedComparisonData) ??
       comparisonData;
+    const { original_predictions, interactive_predictions, actual_values } =
+      activeData;
 
     // Calculate min/max for the diagonal line
     const allValues = [
@@ -495,14 +591,120 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       );
     }
 
+    const activeData =
+      (useWeighting ? comparisonData : unweightedComparisonData) ??
+      comparisonData;
+
     // Check if there are any edits
-    const hasEdits = comparisonData.combined_shape_functions?.length > 0;
+    const hasEdits = activeData.combined_shape_functions?.length > 0;
+
+    // Build per-user traces lookup: { feature_name: { user_name: y_values } }
+    // Used only for the overlay mode (always shows raw individual user edits)
+    const userTracesMap = {};
+    if (perUserShapeFunctions) {
+      perUserShapeFunctions.forEach((userSF) => {
+        userSF.shape_functions.forEach((sf) => {
+          if (!userTracesMap[sf.feature_name]) {
+            userTracesMap[sf.feature_name] = {};
+          }
+          userTracesMap[sf.feature_name][userSF.user_name] = sf.y_values;
+        });
+      });
+    }
+
+    // The server already computed the correct combined y_values for the active
+    // weighting mode — sf.y_values from activeData is always ready to use.
+    const getCombinedY = (sf) => sf.y_values;
+
+    const userNames = perUserShapeFunctions
+      ? perUserShapeFunctions.map((u) => u.user_name)
+      : [];
 
     return (
       <div className="bg-white rounded-xl shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Shape Functions: Original vs Combined Edits
-        </h3>
+        {/* Section header with toggle buttons */}
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Shape Functions: Original vs Combined Edits
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleWeightingToggle}
+              disabled={loadingOverlay}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                useWeighting
+                  ? "bg-amber-500 text-white hover:bg-amber-600"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+              title="Toggle whether the combined line uses confidence-weighted averaging or a simple mean"
+            >
+              {loadingOverlay && !useWeighting
+                ? "Loading..."
+                : useWeighting
+                  ? "Weighting: On"
+                  : "Weighting: Off"}
+            </button>
+            <button
+              onClick={handleOverlayToggle}
+              disabled={loadingOverlay}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                showUserOverlay
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              }`}
+            >
+              {loadingOverlay && useWeighting
+                ? "Loading..."
+                : showUserOverlay
+                  ? "Hide User Overlay"
+                  : "Show User Overlay"}
+            </button>
+          </div>
+        </div>
+
+        {/* Horizontal color legend — visible when overlay is active */}
+        {showUserOverlay && !loadingOverlay && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+            <span className="font-semibold text-gray-500 shrink-0">
+              Legend:
+            </span>
+            {userNames.map((name, i) => (
+              <div key={name} className="flex items-center gap-1.5 shrink-0">
+                <span
+                  className="inline-block rounded-full"
+                  style={{
+                    width: 28,
+                    height: 3,
+                    backgroundColor: USER_COLORS[i % USER_COLORS.length],
+                  }}
+                />
+                <span className="text-gray-700">{name}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <svg width="28" height="6" style={{ overflow: "visible" }}>
+                <line
+                  x1="0"
+                  y1="3"
+                  x2="28"
+                  y2="3"
+                  stroke="#9ca3af"
+                  strokeWidth="2"
+                  strokeDasharray="4 2"
+                />
+              </svg>
+              <span className="text-gray-500">Original</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span
+                className="inline-block rounded-full"
+                style={{ width: 28, height: 3, backgroundColor: "#10b981" }}
+              />
+              <span className="text-gray-500">Combined</span>
+            </div>
+          </div>
+        )}
+
         {!hasEdits && (
           <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg">
             No user edits have been made yet. The charts below show the original
@@ -510,11 +712,125 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {comparisonData.combined_shape_functions_display.map((sf, idx) => {
+          {activeData.combined_shape_functions_display.map((sf, idx) => {
             const isNumeric = sf.feature_type === "numeric";
             const hasChanges = sf.y_values.some(
               (y, i) => Math.abs(y - sf.original_y_values[i]) > 0.0001,
             );
+
+            let plotData;
+            if (showUserOverlay && !loadingOverlay) {
+              // Overlay mode: lines for numeric, grouped bars for categorical
+              plotData = [];
+              // Per-user traces (drawn first, thinner lines / lighter bars)
+              userNames.forEach((name, userIdx) => {
+                const userY = userTracesMap[sf.feature_name]?.[name];
+                if (!userY) return;
+                const color = USER_COLORS[userIdx % USER_COLORS.length];
+                if (isNumeric) {
+                  plotData.push({
+                    x: sf.x_values,
+                    y: userY,
+                    type: "scatter",
+                    mode: "lines",
+                    name: name,
+                    line: { color, width: 1.5 },
+                    showlegend: false,
+                  });
+                } else {
+                  plotData.push({
+                    x: sf.x_values,
+                    y: userY,
+                    type: "bar",
+                    name: name,
+                    marker: { color },
+                    opacity: 0.7,
+                    showlegend: false,
+                  });
+                }
+              });
+              // Original — reference baseline
+              if (isNumeric) {
+                plotData.push({
+                  x: sf.x_values,
+                  y: sf.original_y_values,
+                  type: "scatter",
+                  mode: "lines",
+                  name: "Original",
+                  line: { color: "#9ca3af", width: 2, dash: "dot" },
+                  showlegend: false,
+                });
+              } else {
+                plotData.push({
+                  x: sf.x_values,
+                  y: sf.original_y_values,
+                  type: "bar",
+                  name: "Original",
+                  marker: { color: "#9ca3af" },
+                  opacity: 0.7,
+                  showlegend: false,
+                });
+              }
+              // Combined (green bold) — weighted or unweighted average of all users
+              if (isNumeric) {
+                plotData.push({
+                  x: sf.x_values,
+                  y: getCombinedY(sf),
+                  type: "scatter",
+                  mode: "lines",
+                  name: "Combined",
+                  line: { color: "#10b981", width: 3 },
+                  showlegend: false,
+                });
+              } else {
+                plotData.push({
+                  x: sf.x_values,
+                  y: getCombinedY(sf),
+                  type: "bar",
+                  name: "Combined",
+                  marker: { color: "#10b981" },
+                  showlegend: false,
+                });
+              }
+            } else {
+              // Normal mode: original vs combined
+              plotData = isNumeric
+                ? [
+                    {
+                      x: sf.x_values,
+                      y: sf.original_y_values,
+                      type: "scatter",
+                      mode: "lines",
+                      name: "Original",
+                      line: { color: "#9ca3af", width: 2, dash: "dot" },
+                    },
+                    {
+                      x: sf.x_values,
+                      y: getCombinedY(sf),
+                      type: "scatter",
+                      mode: "lines",
+                      name: "Combined",
+                      line: { color: "#10b981", width: 2 },
+                    },
+                  ]
+                : [
+                    {
+                      x: sf.x_values,
+                      y: sf.original_y_values,
+                      type: "bar",
+                      name: "Original",
+                      marker: { color: "#9ca3af" },
+                      opacity: 0.7,
+                    },
+                    {
+                      x: sf.x_values,
+                      y: getCombinedY(sf),
+                      type: "bar",
+                      name: "Combined",
+                      marker: { color: "#10b981" },
+                    },
+                  ];
+            }
 
             return (
               <div
@@ -537,44 +853,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                 </div>
                 <div style={{ minHeight: 200 }}>
                   <Plot
-                    data={
-                      isNumeric
-                        ? [
-                            {
-                              x: sf.x_values,
-                              y: sf.original_y_values,
-                              type: "scatter",
-                              mode: "lines",
-                              name: "Original",
-                              line: { color: "#9ca3af", width: 2, dash: "dot" },
-                            },
-                            {
-                              x: sf.x_values,
-                              y: sf.y_values,
-                              type: "scatter",
-                              mode: "lines",
-                              name: "Combined",
-                              line: { color: "#10b981", width: 2 },
-                            },
-                          ]
-                        : [
-                            {
-                              x: sf.x_values,
-                              y: sf.original_y_values,
-                              type: "bar",
-                              name: "Original",
-                              marker: { color: "#9ca3af" },
-                              opacity: 0.7,
-                            },
-                            {
-                              x: sf.x_values,
-                              y: sf.y_values,
-                              type: "bar",
-                              name: "Combined",
-                              marker: { color: "#10b981" },
-                            },
-                          ]
-                    }
+                    data={plotData}
                     layout={{
                       autosize: true,
                       height: 200,
@@ -596,7 +875,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                         yanchor: "top",
                         font: { size: 9 },
                       },
-                      showlegend: true,
+                      showlegend: !showUserOverlay,
                       barmode: "group",
                     }}
                     config={{ responsive: true, displayModeBar: false }}

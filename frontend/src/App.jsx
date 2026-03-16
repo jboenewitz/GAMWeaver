@@ -116,6 +116,10 @@ function App() {
         console.log("No previous edits to load");
       }
     }
+
+    // Ensure all user-specific data (including comparison chart) is refreshed
+    // against the just-logged-in user context.
+    await fetchModelStatus(user);
   };
 
   const handleLogout = () => {
@@ -130,6 +134,7 @@ function App() {
     setPredictionsData(null);
     setHourlyPattern(null);
     setComparisonData(null);
+    setUserSavedEdits({});
   };
 
   const handleResetDatabase = async () => {
@@ -137,7 +142,8 @@ function App() {
     handleLogout();
   };
 
-  const fetchModelStatus = async () => {
+  const fetchModelStatus = async (userOverride = null) => {
+    const activeUser = userOverride || currentUser;
     try {
       const status = await apiService.getModelStatus();
       setModelStatus(status);
@@ -151,14 +157,12 @@ function App() {
       // If model is trained, fetch metrics and visualizations
       if (status.is_trained) {
         fetchMetrics();
-        fetchShapeFunctions();
+        fetchShapeFunctions({ refreshComparison: false });
 
         // Load user's saved edits FIRST, then fetch comparison data
-        if (currentUser) {
+        if (activeUser) {
           try {
-            const result = await apiService.loadUserEditsToModel(
-              currentUser.id,
-            );
+            const result = await apiService.loadUserEditsToModel(activeUser.id);
             // Convert the edits to the format expected by EditableShapeFunctionsGrid
             if (result.edits && result.edits.length > 0) {
               const editsMap = {};
@@ -214,13 +218,15 @@ function App() {
     }
   };
 
-  const fetchShapeFunctions = async () => {
+  const fetchShapeFunctions = async ({ refreshComparison = true } = {}) => {
     try {
       setChartLoading(true);
       const response = await apiService.getShapeFunctions();
       setShapeFunctions(response.shape_functions || []);
       // Also fetch initial comparison data after shape functions are loaded
-      await fetchComparisonData();
+      if (refreshComparison) {
+        await fetchComparisonData();
+      }
     } catch (err) {
       console.error("Failed to fetch shape functions:", err);
     } finally {
@@ -534,6 +540,7 @@ function App() {
           <PredictionComparisonChart
             comparisonData={comparisonData}
             loading={comparisonLoading}
+            currentUser={currentUser}
           />
         </div>
 

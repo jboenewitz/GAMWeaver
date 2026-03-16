@@ -28,8 +28,8 @@ class MLService:
         self.df = None
         self.is_trained = False
         self.feature_names = []
-        self.cat_features = ["Weathersituation", "Time of Day", "Type of Day"]
-        self.num_features = ["Temperature", "Humidity", "Windspeed"]
+        self.cat_features = ["Weathersituation", "Type of Day"]
+        self.num_features = ["Temperature", "Humidity", "Windspeed", "Time of Day"]
         # Store original shape functions for interactive editing
         self.original_shape_functions: Dict[str, Dict[str, Any]] = {}
         self.shape_function_offsets: Dict[str, Dict[Any, float]] = {}
@@ -95,12 +95,11 @@ class MLService:
             "Temperature": features["temperature"],
             "Humidity": features["humidity"],
             "Windspeed": features["windspeed"],
-            "Time of Day": str(features["time_of_day"]),
+            "Time of Day": int(features["time_of_day"]),
             "Type of Day": features["type_of_day"],
             "Weathersituation": features["weathersituation"],
         }])
         input_df = input_df.astype({
-            "Time of Day": "object",
             "Type of Day": "object",
             "Weathersituation": "object",
         })

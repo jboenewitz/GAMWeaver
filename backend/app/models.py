@@ -174,3 +174,13 @@ class EditDeletionNotification(BaseModel):
 class NotificationsResponse(BaseModel):
     """Response with list of notifications."""
     notifications: List[EditDeletionNotification]
+
+
+class UserPreferencesRequest(BaseModel):
+    """Request to update user preferences."""
+    preferences: Dict[str, Any]
+
+
+class UserPreferencesResponse(BaseModel):
+    """Response with user preferences."""
+    preferences: Dict[str, Any]

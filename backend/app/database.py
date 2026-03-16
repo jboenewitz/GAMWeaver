@@ -3,6 +3,7 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, JSON, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy import inspect, text
 from datetime import datetime
 from pathlib import Path
 
@@ -27,6 +28,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    preferences = Column(JSON, nullable=True, default=None)  # User preferences (chart colors, etc.)
     
     # Relationship to shape function edits
     edits = relationship("ShapeFunctionEdit", back_populates="user", cascade="all, delete-orphan")
@@ -72,6 +74,16 @@ class DeletedEditNotification(Base):
 def init_db():
     """Initialize the database, creating all tables."""
     Base.metadata.create_all(bind=engine)
+    # Migrate: add preferences column to existing users table if absent
+    try:
+        inspector = inspect(engine)
+        columns = [col["name"] for col in inspector.get_columns("users")]
+        if "preferences" not in columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN preferences TEXT DEFAULT NULL"))
+                conn.commit()
+    except Exception:
+        pass  # Table may not exist yet on fresh installs — create_all handles it
 
 
 def get_db():

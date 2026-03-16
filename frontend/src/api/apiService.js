@@ -155,8 +155,17 @@ export const apiService = {
     return response.data;
   },
 
-  getCombinedPredictionsComparison: async () => {
-    const response = await api.get("/combined/predictions-comparison");
+  getCombinedPredictionsComparison: async (weighted = true) => {
+    const response = await api.get("/combined/predictions-comparison", {
+      params: { weighted },
+    });
+    return response.data;
+  },
+
+  getPerUserShapeFunctions: async (weighted = true) => {
+    const response = await api.get("/combined/per-user-shape-functions", {
+      params: { weighted },
+    });
     return response.data;
   },
 
@@ -193,6 +202,20 @@ export const apiService = {
   markNotificationsSeen: async (userId) => {
     const response = await api.post(`/users/${userId}/notifications/mark-seen`);
     return response.data;
+  },
+
+  // ==================== User preferences ====================
+
+  getUserPreferences: async (userId) => {
+    const response = await api.get(`/users/${userId}/preferences`);
+    return response.data.preferences;
+  },
+
+  updateUserPreferences: async (userId, preferences) => {
+    const response = await api.put(`/users/${userId}/preferences`, {
+      preferences,
+    });
+    return response.data.preferences;
   },
 };
 
