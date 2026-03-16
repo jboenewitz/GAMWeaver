@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import apiService from "./api/apiService";
 import Header from "./components/Header";
 import TrainingPanel from "./components/TrainingPanel";
@@ -26,6 +26,8 @@ function App() {
   const [hourlyPattern, setHourlyPattern] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
   const [userSavedEdits, setUserSavedEdits] = useState({}); // User's saved edits for display
+  const previewTimerRef = useRef(null);
+  const isApplyingSavedEditsRef = useRef(false);
 
   // Notification state
   const [deletionNotifications, setDeletionNotifications] = useState([]);
@@ -255,8 +257,70 @@ function App() {
     }
   };
 
+  const buildMergedPreviewEdits = useCallback(
+    (unsavedEdits = {}) => {
+      if (!shapeFunctions || shapeFunctions.length === 0) return [];
+
+      return shapeFunctions
+        .map((sf) => {
+          const saved = userSavedEdits[sf.feature_name] || [];
+          const unsaved = unsavedEdits[sf.feature_name] || [];
+
+          const mergedMap = new Map();
+          saved.forEach((p) => mergedMap.set(String(p.x_value), p));
+          unsaved.forEach((p) => mergedMap.set(String(p.x_value), p));
+
+          const mergedPoints = Array.from(mergedMap.values()).map((p) => ({
+            x_value: p.x_value,
+            y_value: p.y_value,
+          }));
+
+          if (mergedPoints.length === 0) return null;
+
+          return {
+            feature_name: sf.feature_name,
+            feature_type: sf.feature_type || "numeric",
+            edited_points: mergedPoints,
+          };
+        })
+        .filter(Boolean);
+    },
+    [shapeFunctions, userSavedEdits],
+  );
+
+  const handleUnsavedEditsChange = useCallback(
+    (unsavedEdits) => {
+      if (!modelStatus?.is_trained || isApplyingSavedEditsRef.current) return;
+
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+      }
+
+      previewTimerRef.current = setTimeout(async () => {
+        try {
+          const mergedPreviewEdits = buildMergedPreviewEdits(unsavedEdits);
+          await apiService.updateShapeFunctions(mergedPreviewEdits);
+          const data = await apiService.getPredictionsComparison();
+          setComparisonData(data);
+        } catch (err) {
+          console.error("Failed to refresh live comparison preview:", err);
+        }
+      }, 180);
+    },
+    [modelStatus?.is_trained, buildMergedPreviewEdits],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleShapeFunctionsEdit = async (editedShapeFunctions) => {
     try {
+      isApplyingSavedEditsRef.current = true;
       setComparisonLoading(true);
       setError(null);
 
@@ -286,6 +350,7 @@ function App() {
           (err.response?.data?.detail || err.message),
       );
     } finally {
+      isApplyingSavedEditsRef.current = false;
       setComparisonLoading(false);
     }
   };
@@ -532,6 +597,7 @@ function App() {
             onReset={handleResetShapeFunctions}
             onFeatureReset={handleResetFeature}
             initialEditedPoints={userSavedEdits}
+            onUnsavedEditsChange={handleUnsavedEditsChange}
           />
         </div>
 

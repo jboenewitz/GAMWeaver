@@ -8,23 +8,37 @@ const DEFAULT_COLORS = {
   lineColor: "#ef4444",
 };
 
-const MetricDisplay = ({ label, value, suffix = "", highlight = false }) => (
-  <div
-    className={`text-center p-3 rounded-lg ${
-      highlight ? "bg-green-50 border border-green-200" : "bg-gray-50"
-    }`}
-  >
-    <div className="text-xs text-gray-500 uppercase tracking-wide">{label}</div>
-    <div
-      className={`text-lg font-bold ${
-        highlight ? "text-green-600" : "text-gray-700"
-      }`}
-    >
-      {typeof value === "number" ? value.toFixed(2) : value}
-      {suffix}
+const MetricDisplay = ({ label, value, suffix = "", tone = "neutral" }) => {
+  const toneClasses =
+    tone === "improved"
+      ? "bg-green-50 border border-green-200"
+      : tone === "worsened"
+        ? "bg-red-50 border border-red-200"
+        : tone === "unchanged"
+          ? "bg-amber-50 border border-amber-200"
+          : "bg-gray-50";
+
+  const valueClasses =
+    tone === "improved"
+      ? "text-green-600"
+      : tone === "worsened"
+        ? "text-red-600"
+        : tone === "unchanged"
+          ? "text-amber-700"
+          : "text-gray-700";
+
+  return (
+    <div className={`text-center p-3 rounded-lg ${toneClasses}`}>
+      <div className="text-xs text-gray-500 uppercase tracking-wide">
+        {label}
+      </div>
+      <div className={`text-lg font-bold ${valueClasses}`}>
+        {typeof value === "number" ? value.toFixed(2) : value}
+        {suffix}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ColorSwatch = ({ color }) => (
   <span
@@ -42,6 +56,7 @@ const PredictionComparisonChart = ({
   const [showColorPanel, setShowColorPanel] = useState(false);
   const [draftColors, setDraftColors] = useState(DEFAULT_COLORS);
   const [saving, setSaving] = useState(false);
+  const [hoveredSeries, setHoveredSeries] = useState(null);
   const panelRef = useRef(null);
 
   // Load saved preferences when user is known
@@ -137,65 +152,73 @@ const PredictionComparisonChart = ({
   const rmseImproved = metrics.interactive_rmse < metrics.original_rmse;
   const maeImproved = metrics.interactive_mae < metrics.original_mae;
 
-  // Overall direction: green = both better, red = both worse, amber = mixed
-  const editedCardStyle = !hasDifferences
-    ? {
-        border: "border-gray-200",
-        bg: "",
-        heading: "text-gray-600",
-        dot: "#9ca3af",
-      }
-    : rmseImproved && maeImproved
-      ? {
-          border: "border-green-300",
-          bg: "bg-green-50/30",
-          heading: "text-green-600",
-          dot: colors.editedColor,
-        }
-      : !rmseImproved && !maeImproved
-        ? {
-            border: "border-red-300",
-            bg: "bg-red-50/30",
-            heading: "text-red-600",
-            dot: "#ef4444",
-          }
-        : {
-            border: "border-amber-300",
-            bg: "bg-amber-50/30",
-            heading: "text-amber-600",
-            dot: "#f59e0b",
-          };
+  const originalMarker = {
+    color: colors.originalColor,
+    size: 6,
+    opacity: 0.6,
+  };
 
-  const data = [
-    {
-      x: actual_values,
-      y: original_predictions,
-      type: "scatter",
-      mode: "markers",
-      name: "IGANN (Original)",
-      marker: { color: colors.originalColor, size: 6, opacity: 0.6 },
-    },
-    ...(hasDifferences
-      ? [
-          {
-            x: actual_values,
-            y: interactive_predictions,
-            type: "scatter",
-            mode: "markers",
-            name: "IGANN Interactive (Edited)",
-            marker: { color: colors.editedColor, size: 6, opacity: 0.6 },
-          },
-        ]
-      : []),
-    {
-      x: [Math.min(...actual_values), Math.max(...actual_values)],
-      y: [Math.min(...actual_values), Math.max(...actual_values)],
-      type: "scatter",
-      mode: "lines",
-      name: "Perfect Prediction",
-      line: { color: colors.lineColor, width: 2, dash: "dash" },
-    },
-  ];
+  const editedMarker = {
+    color: colors.editedColor,
+    size: 6,
+    opacity: 0.6,
+  };
+
+  const originalTrace = {
+    x: actual_values,
+    y: original_predictions,
+    type: "scatter",
+    mode: "markers",
+    name: "IGANN (Original)",
+    marker: originalMarker,
+  };
+
+  const editedTrace = {
+    x: actual_values,
+    y: interactive_predictions,
+    type: "scatter",
+    mode: "markers",
+    name: "IGANN Interactive (Edited)",
+    marker: editedMarker,
+  };
+
+  const perfectLineTrace = {
+    x: [Math.min(...actual_values), Math.max(...actual_values)],
+    y: [Math.min(...actual_values), Math.max(...actual_values)],
+    type: "scatter",
+    mode: "lines",
+    name: "Perfect Prediction",
+    line: { color: colors.lineColor, width: 2, dash: "dash" },
+  };
+
+  const rmseTone = !hasDifferences
+    ? "neutral"
+    : Math.abs(metrics.original_rmse - metrics.interactive_rmse) < 0.000001
+      ? "unchanged"
+      : rmseImproved
+        ? "improved"
+        : "worsened";
+
+  const maeTone = !hasDifferences
+    ? "neutral"
+    : Math.abs(metrics.original_mae - metrics.interactive_mae) < 0.000001
+      ? "unchanged"
+      : maeImproved
+        ? "improved"
+        : "worsened";
+
+  let seriesTraces = [originalTrace];
+  if (hasDifferences) {
+    if (hoveredSeries === "original") {
+      seriesTraces = [editedTrace, originalTrace];
+    } else if (hoveredSeries === "edited") {
+      seriesTraces = [originalTrace, editedTrace];
+    } else {
+      seriesTraces = [originalTrace, editedTrace];
+    }
+  }
+
+  const data = [perfectLineTrace, ...seriesTraces];
 
   const layout = {
     title: {
@@ -218,6 +241,20 @@ const PredictionComparisonChart = ({
     responsive: true,
     displayModeBar: true,
     modeBarButtonsToRemove: ["lasso2d", "select2d"],
+  };
+
+  const handleHover = (eventData) => {
+    if (!eventData?.points?.length) return;
+    const traceName = eventData.points[0]?.data?.name;
+    if (traceName === "IGANN (Original)") {
+      setHoveredSeries("original");
+    } else if (traceName === "IGANN Interactive (Edited)") {
+      setHoveredSeries("edited");
+    }
+  };
+
+  const handleUnhover = () => {
+    setHoveredSeries(null);
   };
 
   return (
@@ -333,15 +370,11 @@ const PredictionComparisonChart = ({
           </div>
 
           {/* Interactive IGANN Metrics */}
-          <div
-            className={`border rounded-lg p-4 ${editedCardStyle.border} ${editedCardStyle.bg}`}
-          >
-            <h4
-              className={`text-sm font-semibold mb-3 flex items-center ${editedCardStyle.heading}`}
-            >
+          <div className="border border-gray-200 rounded-lg p-4">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
               <span
                 className="w-3 h-3 rounded-full mr-2"
-                style={{ backgroundColor: editedCardStyle.dot }}
+                style={{ backgroundColor: colors.editedColor }}
               ></span>
               IGANN Interactive (Edited)
             </h4>
@@ -349,12 +382,12 @@ const PredictionComparisonChart = ({
               <MetricDisplay
                 label="RMSE"
                 value={metrics.interactive_rmse}
-                highlight={rmseImproved && hasDifferences}
+                tone={rmseTone}
               />
               <MetricDisplay
                 label="MAE"
                 value={metrics.interactive_mae}
-                highlight={maeImproved && hasDifferences}
+                tone={maeTone}
               />
             </div>
           </div>
@@ -398,7 +431,14 @@ const PredictionComparisonChart = ({
       </div>
 
       {/* Scatter Plot */}
-      <Plot data={data} layout={layout} config={config} className="w-full" />
+      <Plot
+        data={data}
+        layout={layout}
+        config={config}
+        className="w-full"
+        onHover={handleHover}
+        onUnhover={handleUnhover}
+      />
     </div>
   );
 };

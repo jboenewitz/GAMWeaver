@@ -54,6 +54,22 @@ const EditableShapeFunctionChart = ({
   const isDraggingRef = useRef(false);
   const dragYValueRef = useRef(null);
   const lastMouseDownRef = useRef({ time: 0, pointIndex: null, xValue: null });
+  const preciseEntryOpenRef = useRef(false);
+
+  useEffect(() => {
+    preciseEntryOpenRef.current = preciseEntry !== null;
+  }, [preciseEntry]);
+
+  const stopDragInteraction = useCallback(() => {
+    setIsDragging(false);
+    isDraggingRef.current = false;
+    setDragPointIndex(null);
+    setLocalYValues(null);
+    setDragXValue(null);
+    setDragYValue(null);
+    dragYValueRef.current = null;
+    dragStartYRef.current = null;
+  }, []);
 
   // Get the current y values (with edits applied) - used for categorical
   const getCurrentYValues = useCallback(() => {
@@ -267,6 +283,7 @@ const EditableShapeFunctionChart = ({
     if (!isDragging || dragPointIndex === null) return;
 
     const handleMouseMove = (e) => {
+      if (!isDraggingRef.current || preciseEntryOpenRef.current) return;
       e.preventDefault();
       const newY = clientYToDataY(e.clientY);
       if (newY === null) return;
@@ -280,6 +297,10 @@ const EditableShapeFunctionChart = ({
     };
 
     const handleMouseUp = (e) => {
+      if (!isDraggingRef.current || preciseEntryOpenRef.current) {
+        stopDragInteraction();
+        return;
+      }
       e.preventDefault();
       const movedSignificantly =
         dragStartYRef.current !== null &&
@@ -291,11 +312,7 @@ const EditableShapeFunctionChart = ({
         onPointEdit(feature_name, xValue, newY, feature_type);
       }
 
-      setIsDragging(false);
-      isDraggingRef.current = false;
-      setDragPointIndex(null);
-      setLocalYValues(null);
-      dragStartYRef.current = null;
+      stopDragInteraction();
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -314,6 +331,7 @@ const EditableShapeFunctionChart = ({
     feature_type,
     onPointEdit,
     clientYToDataY,
+    stopDragInteraction,
   ]);
 
   // ---- Numeric continuous drag effect (mousemove / mouseup on window) ----
@@ -322,6 +340,7 @@ const EditableShapeFunctionChart = ({
     if (!isDragging || dragXValue === null) return;
 
     const handleMouseMove = (e) => {
+      if (!isDraggingRef.current || preciseEntryOpenRef.current) return;
       e.preventDefault();
       const newY = clientYToDataY(e.clientY);
       if (newY !== null) {
@@ -331,6 +350,10 @@ const EditableShapeFunctionChart = ({
     };
 
     const handleMouseUp = (e) => {
+      if (!isDraggingRef.current || preciseEntryOpenRef.current) {
+        stopDragInteraction();
+        return;
+      }
       e.preventDefault();
       const movedSignificantly =
         dragStartYRef.current !== null &&
@@ -349,12 +372,7 @@ const EditableShapeFunctionChart = ({
         );
       }
 
-      setIsDragging(false);
-      isDraggingRef.current = false;
-      setDragXValue(null);
-      setDragYValue(null);
-      dragYValueRef.current = null;
-      dragStartYRef.current = null;
+      stopDragInteraction();
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -371,12 +389,14 @@ const EditableShapeFunctionChart = ({
     feature_type,
     onPointEdit,
     clientYToDataY,
+    stopDragInteraction,
   ]);
 
   // ---- Categorical: start drag helper ----
   const startCategoricalDrag = useCallback(
     (pointIndex, clientY) => {
-      if (!isEditing || isDraggingRef.current) return;
+      if (!isEditing || isDraggingRef.current || preciseEntryOpenRef.current)
+        return;
       updatePlotBounds();
       setDragPointIndex(pointIndex);
       setLocalYValues([...getCurrentYValues()]);
@@ -423,6 +443,7 @@ const EditableShapeFunctionChart = ({
     if (!container || !isEditing) return;
 
     const onMouseDown = (e) => {
+      if (preciseEntryOpenRef.current) return;
       const pointIndex =
         hoveredPointRef.current ?? lastMouseDownRef.current.pointIndex;
       if (pointIndex === null) return;
@@ -435,11 +456,7 @@ const EditableShapeFunctionChart = ({
         now - lastMouseDownRef.current.time < 400
       ) {
         lastMouseDownRef.current = { time: 0, pointIndex: null, xValue: null };
-        setIsDragging(false);
-        isDraggingRef.current = false;
-        setDragPointIndex(null);
-        setLocalYValues(null);
-        dragStartYRef.current = null;
+        stopDragInteraction();
 
         const xValue = x_values[pointIndex];
         const currentY = getCurrentYValues()[pointIndex];
@@ -460,7 +477,14 @@ const EditableShapeFunctionChart = ({
       container.removeEventListener("mousedown", onMouseDown, true);
       container.removeEventListener("dblclick", onDblClick, true);
     };
-  }, [isNumeric, isEditing, x_values, startCategoricalDrag, getCurrentYValues]);
+  }, [
+    isNumeric,
+    isEditing,
+    x_values,
+    startCategoricalDrag,
+    getCurrentYValues,
+    stopDragInteraction,
+  ]);
 
   // ---- Numeric continuous: native mousedown (click-anywhere) ----
   useEffect(() => {
@@ -469,6 +493,7 @@ const EditableShapeFunctionChart = ({
     if (!container || !isEditing) return;
 
     const onMouseDown = (e) => {
+      if (preciseEntryOpenRef.current) return;
       // Only respond to clicks inside the plot area
       updatePlotBounds();
       const { left, right, top, bottom } = plotBoundsRef.current;
@@ -499,12 +524,7 @@ const EditableShapeFunctionChart = ({
       ) {
         lastMouseDownRef.current = { time: 0, pointIndex: null, xValue: null };
         // Cancel any drag
-        setIsDragging(false);
-        isDraggingRef.current = false;
-        setDragXValue(null);
-        setDragYValue(null);
-        dragYValueRef.current = null;
-        dragStartYRef.current = null;
+        stopDragInteraction();
 
         const currentY = getYAtX(snappedX);
         setPreciseValue(currentY.toFixed(3));
@@ -549,6 +569,7 @@ const EditableShapeFunctionChart = ({
     updatePlotBounds,
     xDataMax,
     xDataMin,
+    stopDragInteraction,
   ]);
 
   // Build traces
@@ -1207,6 +1228,7 @@ const EditableShapeFunctionsGrid = ({
   onReset,
   onFeatureReset,
   initialEditedPoints = {},
+  onUnsavedEditsChange,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPoints, setEditedPoints] = useState({});
@@ -1241,6 +1263,13 @@ const EditableShapeFunctionsGrid = ({
     setEditedPoints({});
     setHasChanges(false);
   }, [shapeFunctions]);
+
+  // Notify parent about unsaved edits so comparison chart can preview instantly.
+  useEffect(() => {
+    if (onUnsavedEditsChange) {
+      onUnsavedEditsChange(editedPoints);
+    }
+  }, [editedPoints, onUnsavedEditsChange]);
 
   // Merge saved (initialEditedPoints) with unsaved (editedPoints) for chart display
   const getMergedEditedPoints = useCallback(
