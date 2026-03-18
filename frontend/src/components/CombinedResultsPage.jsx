@@ -451,64 +451,6 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     );
   };
 
-  const renderPredictionChart = () => {
-    if (!comparisonData) return null;
-
-    const activeData =
-      (useWeighting ? comparisonData : unweightedComparisonData) ??
-      comparisonData;
-    const { original_predictions, interactive_predictions, actual_values } =
-      activeData;
-    const indices = Array.from({ length: actual_values.length }, (_, i) => i);
-
-    return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
-          Predictions Over Time (Combined User Edits)
-        </h3>
-        <Plot
-          data={[
-            {
-              x: indices,
-              y: actual_values,
-              type: "scatter",
-              mode: "lines",
-              name: "Actual",
-              line: { color: "#6366f1", width: 2 },
-            },
-            {
-              x: indices,
-              y: original_predictions,
-              type: "scatter",
-              mode: "lines",
-              name: "Original Model",
-              line: { color: "#f59e0b", width: 2, dash: "dot" },
-            },
-            {
-              x: indices,
-              y: interactive_predictions,
-              type: "scatter",
-              mode: "lines",
-              name: "Combined Edits",
-              line: { color: "#10b981", width: 2 },
-            },
-          ]}
-          layout={{
-            autosize: true,
-            height: 400,
-            margin: { l: 50, r: 30, t: 20, b: 50 },
-            xaxis: { title: "Sample Index" },
-            yaxis: { title: "Bike Rentals" },
-            legend: { orientation: "h", y: -0.15 },
-            hovermode: "x unified",
-          }}
-          config={{ responsive: true }}
-          style={{ width: "100%" }}
-        />
-      </div>
-    );
-  };
-
   const renderScatterPlot = () => {
     if (!comparisonData) return null;
 
@@ -1195,14 +1137,11 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             {/* Metrics Comparison */}
             {renderMetricsComparison()}
 
-            {/* Prediction with Combined Edits */}
-            <CombinedPredictionForm modelTrained={true} />
-
             {/* Scatter Plot - Predicted vs Actual */}
             {renderScatterPlot()}
 
-            {/* Prediction Chart - Time Series */}
-            {renderPredictionChart()}
+            {/* Prediction with Combined Edits */}
+            <CombinedPredictionForm modelTrained={true} />
 
             {/* Combined Shape Functions Visualization */}
             {renderCombinedShapeFunctions()}

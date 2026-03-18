@@ -907,10 +907,6 @@ const EditableShapeFunctionChart = ({
               <span className="font-medium">
                 Click anywhere on the chart to edit
               </span>
-              <span className="text-blue-400">|</span>
-              <span>
-                Drag up/down to set value, double-click for precise entry
-              </span>
             </>
           ) : hoveredPoint !== null ? (
             <>
@@ -918,17 +914,13 @@ const EditableShapeFunctionChart = ({
                 Point {hoveredPoint + 1} selected
               </span>
               <span className="text-blue-400">|</span>
-              <span>
-                Click and drag to edit, double-click for precise value
-              </span>
+              <span>Double-click for precise value</span>
             </>
           ) : (
             <>
               <span className="font-medium">
                 Hover over a point to select it
               </span>
-              <span className="text-blue-400">|</span>
-              <span>Then drag up/down to edit</span>
             </>
           )}
         </div>
@@ -1109,8 +1101,8 @@ const FeatureEditCard = ({
         sharedYRange={sharedYRange}
       />
       <div className="mt-2 flex justify-between items-center">
-        {/* Reset button - only show if there are saved edits */}
-        {hasSavedEdits && (
+        {/* Reset button - show if there are saved or unsaved edits */}
+        {(hasSavedEdits || hasUnsavedEdits) && (
           <button
             onClick={() => onFeatureReset(shapeFunction.feature_name)}
             className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
@@ -1119,7 +1111,7 @@ const FeatureEditCard = ({
             <span>Reset</span>
           </button>
         )}
-        {!hasSavedEdits && <div />}
+        {!(hasSavedEdits || hasUnsavedEdits) && <div />}
 
         {/* Submit button - only show if there are unsaved edits */}
         {hasUnsavedEdits && (
@@ -1182,7 +1174,7 @@ const FeatureEditCard = ({
             </div>
             {/* Modal footer actions */}
             <div className="px-5 py-3 border-t border-gray-200 flex justify-between items-center">
-              {hasSavedEdits ? (
+              {hasSavedEdits || hasUnsavedEdits ? (
                 <button
                   onClick={() => onFeatureReset(shapeFunction.feature_name)}
                   className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
@@ -1371,6 +1363,27 @@ const EditableShapeFunctionsGrid = ({
     }
   }, [onReset]);
 
+  const handleFeatureReset = useCallback(
+    (featureName) => {
+      // Clear local unsaved edits for this feature as part of reset.
+      setEditedPoints((prev) => {
+        if (!prev[featureName]) {
+          return prev;
+        }
+
+        const next = { ...prev };
+        delete next[featureName];
+        setHasChanges(Object.keys(next).length > 0);
+        return next;
+      });
+
+      if (onFeatureReset) {
+        onFeatureReset(featureName);
+      }
+    },
+    [onFeatureReset],
+  );
+
   if (loading) {
     return (
       <div className="card">
@@ -1498,7 +1511,7 @@ const EditableShapeFunctionsGrid = ({
             unsavedEditedPoints={editedPoints[sf.feature_name] || []}
             onPointEdit={handlePointEdit}
             onFeatureSubmit={handleFeatureSubmit}
-            onFeatureReset={onFeatureReset}
+            onFeatureReset={handleFeatureReset}
             isEditing={isEditing}
             hasSavedEdits={
               initialEditedPoints[sf.feature_name] &&
