@@ -3,7 +3,19 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Dict, Any, Optional
-from .database import SessionLocal, User, ShapeFunctionEdit, DeletedEditNotification, reset_database as db_reset
+from datetime import datetime, timedelta
+import secrets
+
+from .database import (
+    SessionLocal,
+    User,
+    ShapeFunctionEdit,
+    DeletedEditNotification,
+    InviteToken,
+    reset_database as db_reset,
+)
+from .config import settings
+from .security import hash_password, verify_password
 
 
 class DatabaseService:
@@ -33,7 +45,8 @@ class DatabaseService:
                 "id": user.id,
                 "name": user.name,
                 "created_at": user.created_at.isoformat(),
-                "is_new": is_new
+                "is_new": is_new,
+                "is_superadmin": bool(user.is_superadmin),
             }
         finally:
             db.close()
@@ -47,7 +60,8 @@ class DatabaseService:
                 return {
                     "id": user.id,
                     "name": user.name,
-                    "created_at": user.created_at.isoformat()
+                    "created_at": user.created_at.isoformat(),
+                    "is_superadmin": bool(user.is_superadmin),
                 }
             return None
         finally:
@@ -62,9 +76,81 @@ class DatabaseService:
                 return {
                     "id": user.id,
                     "name": user.name,
-                    "created_at": user.created_at.isoformat()
+                    "created_at": user.created_at.isoformat(),
+                    "is_superadmin": bool(user.is_superadmin),
                 }
             return None
+        finally:
+            db.close()
+
+    def create_user_with_password(self, username: str, password: str, is_superadmin: bool = False) -> Dict[str, Any]:
+        """Create a new user with a password hash."""
+        db = self.get_db()
+        try:
+            existing = db.query(User).filter(User.name == username).first()
+            if existing:
+                raise ValueError("User already exists")
+            user = User(
+                name=username,
+                password_hash=hash_password(password),
+                is_superadmin=is_superadmin,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            return {
+                "id": user.id,
+                "name": user.name,
+                "created_at": user.created_at.isoformat(),
+                "is_superadmin": bool(user.is_superadmin),
+            }
+        finally:
+            db.close()
+
+    def verify_user_credentials(self, username: str, password: str) -> Optional[Dict[str, Any]]:
+        """Verify username/password and return user info if valid."""
+        db = self.get_db()
+        try:
+            user = db.query(User).filter(User.name == username).first()
+            if user is None or not user.password_hash:
+                return None
+            if not verify_password(password, user.password_hash):
+                return None
+            return {
+                "id": user.id,
+                "name": user.name,
+                "created_at": user.created_at.isoformat(),
+                "is_superadmin": bool(user.is_superadmin),
+            }
+        finally:
+            db.close()
+
+    def ensure_superadmin(self) -> Optional[Dict[str, Any]]:
+        """Ensure the superadmin user exists in the database."""
+        if not settings.superadmin_password:
+            return None
+        db = self.get_db()
+        try:
+            user = db.query(User).filter(User.name == settings.superadmin_username).first()
+            if user is None:
+                user = User(
+                    name=settings.superadmin_username,
+                    password_hash=hash_password(settings.superadmin_password),
+                    is_superadmin=True,
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            elif not user.is_superadmin:
+                user.is_superadmin = True
+                db.commit()
+                db.refresh(user)
+            return {
+                "id": user.id,
+                "name": user.name,
+                "created_at": user.created_at.isoformat(),
+                "is_superadmin": bool(user.is_superadmin),
+            }
         finally:
             db.close()
 
@@ -104,7 +190,8 @@ class DatabaseService:
                 {
                     "id": user.id,
                     "name": user.name,
-                    "created_at": user.created_at.isoformat()
+                    "created_at": user.created_at.isoformat(),
+                    "is_superadmin": bool(user.is_superadmin),
                 }
                 for user in users
             ]
@@ -127,10 +214,51 @@ class DatabaseService:
                 {
                     "id": user.id,
                     "name": user.name,
-                    "created_at": user.created_at.isoformat()
+                    "created_at": user.created_at.isoformat(),
+                    "is_superadmin": bool(user.is_superadmin),
                 }
                 for user in users
             ]
+        finally:
+            db.close()
+
+    # ==================== Invite Operations ====================
+
+    def create_invite_token(self, created_by_user_id: Optional[int]) -> Dict[str, Any]:
+        """Create a new invite token for registration."""
+        db = self.get_db()
+        try:
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.utcnow() + timedelta(hours=settings.invite_token_ttl_hours)
+            invite = InviteToken(
+                token=token,
+                created_by_user_id=created_by_user_id,
+                expires_at=expires_at,
+            )
+            db.add(invite)
+            db.commit()
+            db.refresh(invite)
+            return {
+                "token": invite.token,
+                "expires_at": invite.expires_at.isoformat() if invite.expires_at else None,
+            }
+        finally:
+            db.close()
+
+    def consume_invite_token(self, token: str) -> bool:
+        """Mark an invite token as used if valid."""
+        db = self.get_db()
+        try:
+            invite = db.query(InviteToken).filter(InviteToken.token == token).first()
+            if invite is None:
+                return False
+            if invite.used_at is not None:
+                return False
+            if invite.expires_at and invite.expires_at < datetime.utcnow():
+                return False
+            invite.used_at = datetime.utcnow()
+            db.commit()
+            return True
         finally:
             db.close()
 

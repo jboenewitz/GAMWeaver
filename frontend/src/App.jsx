@@ -11,11 +11,12 @@ import HourlyPatternChart from "./components/HourlyPatternChart";
 import DataSummaryCard from "./components/DataSummaryCard";
 import UserLogin from "./components/UserLogin";
 import CombinedResultsPage from "./components/CombinedResultsPage";
+import SuperadminPage from "./components/SuperadminPage";
 
 function App() {
   // User state
   const [currentUser, setCurrentUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined'
+  const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined', 'superadmin'
 
   // State
   const [modelStatus, setModelStatus] = useState(null);
@@ -53,7 +54,7 @@ function App() {
           try {
             const validatedUser = await apiService.getUser(user.id);
             if (validatedUser) {
-              setCurrentUser(user);
+              setCurrentUser({ ...user, ...validatedUser });
               setCurrentPage("main");
             } else {
               // User no longer exists, clear localStorage
@@ -77,6 +78,12 @@ function App() {
     if (currentPage === "main" && currentUser) {
       fetchModelStatus();
       checkForNotifications();
+    }
+  }, [currentPage, currentUser]);
+
+  useEffect(() => {
+    if (currentPage === "superadmin" && !currentUser?.is_superadmin) {
+      setCurrentPage("main");
     }
   }, [currentPage, currentUser]);
 
@@ -104,10 +111,15 @@ function App() {
     setDeletionNotifications([]);
   };
 
-  const handleLogin = async (name) => {
-    const user = await apiService.loginOrCreateUser(name);
+  const handleLogin = async (username, password) => {
+    const user = await apiService.loginUser(username, password);
     setCurrentUser(user);
     localStorage.setItem("currentUser", JSON.stringify(user));
+    if (user.access_token) {
+      localStorage.setItem("superadminToken", user.access_token);
+    } else {
+      localStorage.removeItem("superadminToken");
+    }
     setCurrentPage("main");
 
     // Load user's previous edits if they exist
@@ -127,6 +139,7 @@ function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem("currentUser");
+    localStorage.removeItem("superadminToken");
     setCurrentPage("login");
     // Reset all state
     setModelStatus(null);
@@ -142,6 +155,15 @@ function App() {
   const handleResetDatabase = async () => {
     await apiService.resetDatabase();
     handleLogout();
+  };
+
+  const handleRegister = async (username, password, inviteToken) => {
+    const user = await apiService.registerUser(username, password, inviteToken);
+    setCurrentUser(user);
+    localStorage.setItem("currentUser", JSON.stringify(user));
+    localStorage.removeItem("superadminToken");
+    setCurrentPage("main");
+    await fetchModelStatus(user);
   };
 
   const fetchModelStatus = async (userOverride = null) => {
@@ -470,7 +492,7 @@ function App() {
 
   // Render login page
   if (currentPage === "login") {
-    return <UserLogin onLogin={handleLogin} />;
+    return <UserLogin onLogin={handleLogin} onRegister={handleRegister} />;
   }
 
   // Render combined results page
@@ -480,6 +502,15 @@ function App() {
         onBack={() => setCurrentPage("main")}
         onResetDatabase={handleResetDatabase}
         currentUser={currentUser}
+      />
+    );
+  }
+
+  if (currentPage === "superadmin" && currentUser?.is_superadmin) {
+    return (
+      <SuperadminPage
+        onBack={() => setCurrentPage("main")}
+        onOpenCombined={() => setCurrentPage("combined")}
       />
     );
   }
@@ -527,6 +558,14 @@ function App() {
                 </svg>
                 <span>View Combined Results</span>
               </button>
+              {currentUser?.is_superadmin && (
+                <button
+                  onClick={() => setCurrentPage("superadmin")}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                >
+                  Superadmin
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"

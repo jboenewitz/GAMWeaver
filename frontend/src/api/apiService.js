@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "/api";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -8,6 +8,13 @@ const api = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+const getSuperadminToken = () => localStorage.getItem("superadminToken") || "";
+
+const adminHeaders = () => {
+  const token = getSuperadminToken();
+  return token ? { "x-superadmin-token": token } : {};
+};
 
 export const apiService = {
   // Health check
@@ -94,8 +101,17 @@ export const apiService = {
 
   // ==================== User endpoints ====================
 
-  loginOrCreateUser: async (name) => {
-    const response = await api.post("/users/login", { name });
+  loginUser: async (username, password) => {
+    const response = await api.post("/auth/login", { username, password });
+    return response.data;
+  },
+
+  registerUser: async (username, password, inviteToken) => {
+    const response = await api.post("/auth/register", {
+      username,
+      password,
+      invite_token: inviteToken,
+    });
     return response.data;
   },
 
@@ -177,18 +193,24 @@ export const apiService = {
   // ==================== Database management ====================
 
   resetDatabase: async () => {
-    const response = await api.post("/database/reset");
+    const response = await api.post("/database/reset", null, {
+      headers: adminHeaders(),
+    });
     return response.data;
   },
 
   // ==================== Edit deletion ====================
 
   deleteEdit: async (editId, deletedByUserId, reason) => {
-    const response = await api.post("/edits/delete", {
-      edit_id: editId,
-      deleted_by_user_id: deletedByUserId,
-      reason: reason,
-    });
+    const response = await api.post(
+      "/edits/delete",
+      {
+        edit_id: editId,
+        deleted_by_user_id: deletedByUserId,
+        reason: reason,
+      },
+      { headers: adminHeaders() },
+    );
     return response.data;
   },
 
@@ -216,6 +238,31 @@ export const apiService = {
       preferences,
     });
     return response.data.preferences;
+  },
+
+  // ==================== Superadmin endpoints ====================
+
+  getAdminUsers: async () => {
+    const response = await api.get("/admin/users", {
+      headers: adminHeaders(),
+    });
+    return response.data;
+  },
+
+  createAdminUser: async (username, password) => {
+    const response = await api.post(
+      "/admin/users",
+      { username, password },
+      { headers: adminHeaders() },
+    );
+    return response.data;
+  },
+
+  createInvite: async () => {
+    const response = await api.post("/admin/invites", null, {
+      headers: adminHeaders(),
+    });
+    return response.data;
   },
 };
 

@@ -188,6 +188,9 @@ const CombinedPredictionForm = ({ modelTrained }) => {
 };
 
 function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
+  const allowDestructiveActions =
+    import.meta.env.VITE_ALLOW_DESTRUCTIVE_ACTIONS === "true" ||
+    currentUser?.is_superadmin;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
@@ -317,6 +320,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   };
 
   const handleResetDatabase = async () => {
+    if (!allowDestructiveActions) {
+      setError("Destructive actions are disabled in this demo.");
+      return;
+    }
     setResetting(true);
     try {
       await onResetDatabase();
@@ -337,6 +344,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   };
 
   const handleDeleteEdit = async () => {
+    if (!allowDestructiveActions) {
+      setDeleteError("Destructive actions are disabled in this demo.");
+      return;
+    }
     if (!deleteReason.trim()) {
       setDeleteError("Please provide a reason for deleting this edit.");
       return;
@@ -973,13 +984,20 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenDeleteModal({
-                                ...edit,
-                                feature_name: feature.feature_name,
-                              });
+                              if (allowDestructiveActions) {
+                                handleOpenDeleteModal({
+                                  ...edit,
+                                  feature_name: feature.feature_name,
+                                });
+                              }
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-red-600 rounded hover:bg-red-50"
+                            className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
+                              allowDestructiveActions
+                                ? "text-gray-400 hover:text-red-600 hover:bg-red-50"
+                                : "text-gray-300 cursor-not-allowed"
+                            }`}
                             title="Delete this edit"
+                            disabled={!allowDestructiveActions}
                           >
                             <svg
                               className="w-4 h-4"
@@ -1070,12 +1088,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               >
                 Refresh
               </button>
-              <button
-                onClick={() => setShowResetConfirm(true)}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Reset Database
-              </button>
+              {allowDestructiveActions && (
+                <button
+                  onClick={() => setShowResetConfirm(true)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Reset Database
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1155,7 +1175,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       </main>
 
       {/* Reset Confirmation Modal */}
-      {showResetConfirm && (
+      {showResetConfirm && allowDestructiveActions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
@@ -1211,7 +1231,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       )}
 
       {/* Delete Edit Modal */}
-      {showDeleteModal && editToDelete && (
+      {showDeleteModal && editToDelete && allowDestructiveActions && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold text-gray-800 mb-2">

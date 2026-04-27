@@ -1,14 +1,27 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
-function UserLogin({ onLogin }) {
-  const [name, setName] = useState("");
+function UserLogin({ onLogin, onRegister }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const inviteToken = useMemo(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("invite") || "";
+    } catch {
+      return "";
+    }
+  }, []);
+  const [mode, setMode] = useState(inviteToken ? "register" : "login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setError("Please enter your name");
+    if (!username.trim() || !password) {
+      setError("Please enter username and password");
+      return;
+    }
+    if (mode === "register" && !inviteToken) {
+      setError("Registration requires a valid invite link");
       return;
     }
 
@@ -16,7 +29,11 @@ function UserLogin({ onLogin }) {
     setError(null);
 
     try {
-      await onLogin(name.trim());
+      if (mode === "login") {
+        await onLogin(username.trim(), password);
+      } else {
+        await onRegister(username.trim(), password, inviteToken);
+      }
     } catch (err) {
       setError(err.message || "Failed to login");
     } finally {
@@ -46,27 +63,56 @@ function UserLogin({ onLogin }) {
           <h1 className="text-2xl font-bold text-gray-800">
             Interactive GAM Editor
           </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            {mode === "login"
+              ? "Sign in with your credentials"
+              : "Register with an invite link"}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label
-              htmlFor="name"
+              htmlFor="username"
               className="block text-sm font-medium text-gray-700 mb-2"
             >
-              Enter your name to continue
+              Username
             </label>
             <input
               type="text"
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              id="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Your username"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
               disabled={loading}
               autoFocus
             />
           </div>
+
+          <div>
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700 mb-2"
+            >
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Your password"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              disabled={loading}
+            />
+          </div>
+
+          {mode === "register" && !inviteToken && (
+            <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg text-sm">
+              Registration is only possible via an invite link.
+            </div>
+          )}
 
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
@@ -76,7 +122,7 @@ function UserLogin({ onLogin }) {
 
           <button
             type="submit"
-            disabled={loading || !name.trim()}
+            disabled={loading || !username.trim() || !password}
             className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {loading ? (
@@ -102,17 +148,40 @@ function UserLogin({ onLogin }) {
                 </svg>
                 Logging in...
               </>
+            ) : mode === "login" ? (
+              "Sign In"
             ) : (
-              "Continue"
+              "Register"
             )}
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm text-gray-500">
-          <p>
-            Your edits will be saved to your profile and can be combined with
-            other users' edits.
-          </p>
+          {mode === "login" ? (
+            <p>
+              Have an invite?{" "}
+              <button
+                type="button"
+                onClick={() => setMode("register")}
+                className="text-primary-600 hover:underline"
+              >
+                Register here
+              </button>
+              .
+            </p>
+          ) : (
+            <p>
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => setMode("login")}
+                className="text-primary-600 hover:underline"
+              >
+                Sign in
+              </button>
+              .
+            </p>
+          )}
         </div>
       </div>
     </div>

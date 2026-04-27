@@ -1,6 +1,6 @@
 """FastAPI main application for Bike Rental Prediction API."""
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any
 
@@ -20,6 +20,9 @@ from .models import (
     UserLoginRequest,
     UserResponse,
     UserListResponse,
+    UserRegisterRequest,
+    AdminCreateUserRequest,
+    InviteCreateResponse,
     UserEditsRequest,
     CombinedEditsResponse,
     ResetDatabaseResponse,
@@ -31,6 +34,8 @@ from .models import (
 )
 from .ml_service import ml_service
 from .db_service import db_service
+from .config import settings
+from .security import create_admin_token, verify_admin_token
 
 app = FastAPI(
     title="Bike Rental Prediction API",
@@ -38,14 +43,48 @@ app = FastAPI(
     version="1.0.0",
 )
 
+def _get_superadmin_payload(request: Request) -> Dict[str, Any]:
+    token = request.headers.get("x-superadmin-token", "")
+    if not token:
+        return {}
+    payload = verify_admin_token(token, settings.auth_token_secret)
+    if not payload:
+        return {}
+    if payload.get("sub") != settings.superadmin_username:
+        return {}
+    return payload
+
+
+def _require_superadmin(request: Request) -> None:
+    if not _get_superadmin_payload(request):
+        raise HTTPException(status_code=403, detail="Superadmin access required")
+
+
+def _require_destructive_access(request: Request) -> None:
+    # TODO: Replace demo admin secret with real authentication/authorization.
+    if _get_superadmin_payload(request):
+        return
+    if not settings.allow_destructive_actions:
+        raise HTTPException(status_code=403, detail="Destructive actions are disabled")
+    if settings.demo_admin_secret:
+        provided = request.headers.get("x-demo-admin-secret", "")
+        if provided != settings.demo_admin_secret:
+            raise HTTPException(status_code=403, detail="Demo admin secret required")
+
+
 # CORS middleware for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://127.0.0.1:3000", "http://127.0.0.1:5173"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def ensure_superadmin_user():
+    db_service.ensure_superadmin()
 
 
 @app.get("/")
@@ -69,6 +108,12 @@ async def root():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "model_trained": ml_service.is_trained}
+
+
+@app.get("/health")
+async def health_check_root():
+    """Health check endpoint for platform probes."""
+    return {"status": "healthy"}
 
 
 @app.post("/api/data/load")
@@ -309,14 +354,59 @@ async def reset_shape_functions():
 # ==================== User Endpoints ====================
 
 @app.post("/api/users/login", response_model=UserResponse)
-async def login_or_create_user(request: UserLoginRequest):
-    """Login or create a new user."""
+@app.post("/api/auth/login", response_model=UserResponse)
+async def login_user(request: UserLoginRequest):
+    """Login a user with username/password."""
     try:
-        if not request.name or not request.name.strip():
-            raise HTTPException(status_code=400, detail="Name is required")
-        
-        user = db_service.get_or_create_user(request.name.strip())
+        username = request.username.strip()
+        if not username or not request.password:
+            raise HTTPException(status_code=400, detail="Username and password are required")
+
+        if username == settings.superadmin_username:
+            if not settings.superadmin_password:
+                raise HTTPException(status_code=500, detail="Superadmin password not configured")
+            if request.password != settings.superadmin_password:
+                raise HTTPException(status_code=401, detail="Invalid credentials")
+            user = db_service.ensure_superadmin()
+            if user is None:
+                raise HTTPException(status_code=500, detail="Superadmin not initialized")
+            token = create_admin_token(
+                settings.superadmin_username,
+                settings.auth_token_secret,
+                settings.admin_token_ttl_hours * 3600,
+            )
+            return UserResponse(**user, access_token=token)
+
+        user = db_service.verify_user_credentials(username, request.password)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
         return UserResponse(**user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/register", response_model=UserResponse)
+async def register_user(request: UserRegisterRequest):
+    """Register a new user via invite token."""
+    try:
+        username = request.username.strip()
+        if not username or not request.password:
+            raise HTTPException(status_code=400, detail="Username and password are required")
+        if not request.invite_token or not request.invite_token.strip():
+            raise HTTPException(status_code=400, detail="Invite token is required")
+
+        if db_service.get_user_by_name(username):
+            raise HTTPException(status_code=409, detail="User already exists")
+
+        if not db_service.consume_invite_token(request.invite_token.strip()):
+            raise HTTPException(status_code=403, detail="Invalid or expired invite token")
+
+        user = db_service.create_user_with_password(username, request.password)
+        return UserResponse(**user, is_new=True)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except HTTPException:
         raise
     except Exception as e:
@@ -329,6 +419,52 @@ async def get_all_users():
     try:
         users = db_service.get_all_users()
         return UserListResponse(users=users)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/users", response_model=UserListResponse)
+async def get_all_users_admin(request: Request):
+    """Get all users (superadmin only)."""
+    try:
+        _require_superadmin(request)
+        users = db_service.get_all_users()
+        return UserListResponse(users=users)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/users", response_model=UserResponse)
+async def create_user_admin(request_body: AdminCreateUserRequest, request: Request):
+    """Create a user (superadmin only)."""
+    try:
+        _require_superadmin(request)
+        username = request_body.username.strip()
+        if not username or not request_body.password:
+            raise HTTPException(status_code=400, detail="Username and password are required")
+        user = db_service.create_user_with_password(username, request_body.password)
+        return UserResponse(**user)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/admin/invites", response_model=InviteCreateResponse)
+async def create_invite(request: Request):
+    """Create a registration invite (superadmin only)."""
+    try:
+        _require_superadmin(request)
+        admin_user = db_service.get_user_by_name(settings.superadmin_username)
+        admin_id = admin_user["id"] if admin_user else None
+        invite = db_service.create_invite_token(admin_id)
+        return InviteCreateResponse(**invite)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -658,9 +794,10 @@ async def get_per_user_shape_functions(weighted: bool = True):
 # ==================== Edit Deletion Endpoints ====================
 
 @app.post("/api/edits/delete", response_model=DeleteEditResponse)
-async def delete_edit(request: DeleteEditRequest):
+async def delete_edit(request: DeleteEditRequest, http_request: Request):
     """Delete a specific edit and optionally notify the edit owner."""
     try:
+        _require_destructive_access(http_request)
         if not request.reason or not request.reason.strip():
             raise HTTPException(status_code=400, detail="Reason is required")
         
@@ -782,9 +919,10 @@ async def combined_predict(input_data: PredictionInput):
 # ==================== Database Management ====================
 
 @app.post("/api/database/reset", response_model=ResetDatabaseResponse)
-async def reset_database():
+async def reset_database(http_request: Request):
     """Reset the entire database (users and edits)."""
     try:
+        _require_destructive_access(http_request)
         db_service.reset_all_data()
         ml_service.shape_function_offsets = {}
         return ResetDatabaseResponse(

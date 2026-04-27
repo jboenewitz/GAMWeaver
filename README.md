@@ -140,6 +140,11 @@ npm run build
 # Serve the dist/ folder with any static file server
 ```
 
+### Public Demo Deployment
+
+For the GitHub Pages + Azure App Service deployment flow (including PostgreSQL),
+see [DEPLOY.md](DEPLOY.md).
+
 ## License
 
 MIT License

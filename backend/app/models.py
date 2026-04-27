@@ -113,8 +113,9 @@ class PredictionComparisonResponse(BaseModel):
 # ==================== User-related Models ====================
 
 class UserLoginRequest(BaseModel):
-    """Request to login or create a user."""
-    name: str
+    """Request to login a user."""
+    username: str
+    password: str
 
 
 class UserResponse(BaseModel):
@@ -123,6 +124,27 @@ class UserResponse(BaseModel):
     name: str
     created_at: str
     is_new: bool = False
+    is_superadmin: bool = False
+    access_token: Optional[str] = None
+
+
+class UserRegisterRequest(BaseModel):
+    """Request to register a new user via invite."""
+    username: str
+    password: str
+    invite_token: str
+
+
+class AdminCreateUserRequest(BaseModel):
+    """Admin request to create a user."""
+    username: str
+    password: str
+
+
+class InviteCreateResponse(BaseModel):
+    """Response after creating an invite token."""
+    token: str
+    expires_at: Optional[str] = None
 
 
 class UserListResponse(BaseModel):
