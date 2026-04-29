@@ -1,5 +1,6 @@
 """Machine Learning service for IGANN model training and prediction."""
 
+import os
 import numpy as np
 import pandas as pd
 from sklearn.metrics import root_mean_squared_error, mean_absolute_error
@@ -10,9 +11,63 @@ from pathlib import Path
 
 from .data_processing import prepare_training_data, preprocess_data, get_preprocessor
 
-# Determine the project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
-DATA_FILE = PROJECT_ROOT / "bike.csv"
+DATA_FILE_NAME = "bike.csv"
+
+
+def _candidate_data_files() -> List[Path]:
+    """Return likely dataset locations across local and Azure runtime layouts."""
+    app_dir = Path(__file__).resolve().parent
+    backend_dir = app_dir.parent
+    repo_root = backend_dir.parent
+    cwd = Path.cwd().resolve()
+
+    candidates: List[Path] = []
+    configured = os.getenv("DATA_FILE_PATH", "").strip()
+    if configured:
+        candidates.append(Path(configured).expanduser())
+
+    candidates.extend(
+        [
+            repo_root / DATA_FILE_NAME,
+            backend_dir / DATA_FILE_NAME,
+            cwd / DATA_FILE_NAME,
+            cwd / "backend" / DATA_FILE_NAME,
+        ]
+    )
+
+    seen = set()
+    deduped: List[Path] = []
+    for path in candidates:
+        normalized = path.resolve() if not path.is_absolute() else path
+        key = str(normalized)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped
+
+
+def _resolve_data_file(csv_path: Optional[str]) -> Path:
+    """Resolve the dataset path and raise a clear error if not found."""
+    if csv_path:
+        explicit = Path(csv_path).expanduser()
+        resolved = explicit.resolve() if not explicit.is_absolute() else explicit
+        if resolved.is_file():
+            return resolved
+        raise FileNotFoundError(f"Dataset not found at explicit path: {resolved}")
+
+    checked_paths: List[Path] = []
+    for candidate in _candidate_data_files():
+        checked_paths.append(candidate)
+        if candidate.is_file():
+            return candidate
+
+    checked = "\n".join(f"- {path}" for path in checked_paths)
+    raise FileNotFoundError(
+        "Dataset not found. Checked the following locations:\n"
+        f"{checked}\n"
+        "Set DATA_FILE_PATH to a valid bike.csv location if needed."
+    )
 
 
 class MLService:
@@ -34,17 +89,12 @@ class MLService:
         self.original_shape_functions: Dict[str, Dict[str, Any]] = {}
         self.shape_function_offsets: Dict[str, Dict[Any, float]] = {}
     
-    def load_data(self, csv_path: str = None) -> Dict[str, Any]:
+    def load_data(self, csv_path: Optional[str] = None) -> Dict[str, Any]:
         """Load and prepare the dataset."""
-        if csv_path is None:
-            csv_path = DATA_FILE
-        
-        # Ensure the file exists
-        if not Path(csv_path).exists():
-            raise FileNotFoundError(f"Dataset not found at: {csv_path}. Please ensure bike.csv is in the project root.")
-        
+        resolved_csv_path = _resolve_data_file(csv_path)
+
         self.X_train, self.X_test, self.y_train, self.y_test, self.preprocessor, self.df = \
-            prepare_training_data(csv_path)
+            prepare_training_data(resolved_csv_path)
         
         self.feature_names = list(self.X_train.columns)
         

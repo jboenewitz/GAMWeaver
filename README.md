@@ -142,7 +142,7 @@ npm run build
 
 ### Public Demo Deployment
 
-For the GitHub Pages + Azure App Service deployment flow (including PostgreSQL),
+For the Azure Static Web Apps + Docker-on-App-Service + PostgreSQL deployment flow,
 see [DEPLOY.md](DEPLOY.md).
 
 ## License
