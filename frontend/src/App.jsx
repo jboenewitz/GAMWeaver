@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import apiService from "./api/apiService";
 import Header from "./components/Header";
 import TrainingPanel from "./components/TrainingPanel";
@@ -13,73 +13,215 @@ import UserLogin from "./components/UserLogin";
 import CombinedResultsPage from "./components/CombinedResultsPage";
 import SuperadminPage from "./components/SuperadminPage";
 
-function App() {
-  // User state
-  const [currentUser, setCurrentUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined', 'superadmin'
+const EMPTY_STATUS = {
+  dataset_id: null,
+  model_version_id: null,
+  dataset_name: null,
+  version_number: null,
+  data_loaded: false,
+  is_trained: false,
+  train_size: 0,
+  test_size: 0,
+  features: [],
+};
 
-  // State
-  const [modelStatus, setModelStatus] = useState(null);
+const convertEditsListToMap = (edits = []) => {
+  const editsMap = {};
+  for (const sf of edits) {
+    editsMap[sf.feature_name] = (sf.edited_points || []).map((point) => ({
+      x_value: point.x_value,
+      y_value: point.y_value,
+    }));
+  }
+  return editsMap;
+};
+
+function App() {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentPage, setCurrentPage] = useState("login");
+
+  const [datasetContext, setDatasetContext] = useState(null);
+  const [modelStatus, setModelStatus] = useState(EMPTY_STATUS);
   const [dataSummary, setDataSummary] = useState(null);
+  const [predictionFields, setPredictionFields] = useState([]);
+  const [capabilities, setCapabilities] = useState({});
+
   const [metrics, setMetrics] = useState(null);
   const [shapeFunctions, setShapeFunctions] = useState([]);
   const [predictionsData, setPredictionsData] = useState(null);
   const [hourlyPattern, setHourlyPattern] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
-  const [userSavedEdits, setUserSavedEdits] = useState({}); // User's saved edits for display
-  const previewTimerRef = useRef(null);
-  const isApplyingSavedEditsRef = useRef(false);
+  const [userSavedEdits, setUserSavedEdits] = useState({});
 
-  // Notification state
   const [deletionNotifications, setDeletionNotifications] = useState([]);
   const [showNotificationPopup, setShowNotificationPopup] = useState(false);
 
-  // Loading states
-  const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(false);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [trainingLoading, setTrainingLoading] = useState(false);
+  const [predictLoading, setPredictLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(false);
   const [comparisonLoading, setComparisonLoading] = useState(false);
 
-  // Error state
   const [error, setError] = useState(null);
 
-  // Check for saved user on mount
+  const previewTimerRef = useRef(null);
+  const isApplyingSavedEditsRef = useRef(false);
+
+  const clearModelState = useCallback(() => {
+    setMetrics(null);
+    setShapeFunctions([]);
+    setPredictionsData(null);
+    setComparisonData(null);
+    setUserSavedEdits({});
+  }, []);
+
+  const fetchNotifications = useCallback(async (userId, modelVersionId) => {
+    if (!userId || !modelVersionId) {
+      setDeletionNotifications([]);
+      setShowNotificationPopup(false);
+      return;
+    }
+
+    try {
+      const data = await apiService.getUserNotifications(userId, modelVersionId);
+      if (data.notifications?.length) {
+        setDeletionNotifications(data.notifications);
+        setShowNotificationPopup(true);
+      } else {
+        setDeletionNotifications([]);
+        setShowNotificationPopup(false);
+      }
+    } catch (err) {
+      console.log("Failed to check notifications:", err);
+    }
+  }, []);
+
+  const loadModelVersionData = useCallback(
+    async (modelVersionId, userId) => {
+      if (!modelVersionId || !userId) {
+        clearModelState();
+        return;
+      }
+
+      try {
+        setChartLoading(true);
+        setComparisonLoading(true);
+
+        const [metricsData, shapeData, predictionsVsActual, comparison, userEdits] =
+          await Promise.all([
+            apiService.getModelMetrics(modelVersionId),
+            apiService.getShapeFunctions(modelVersionId),
+            apiService.getPredictionsVsActual(modelVersionId),
+            apiService.getPredictionsComparison(modelVersionId, userId),
+            apiService.getUserEdits(userId, modelVersionId),
+          ]);
+
+        setMetrics(metricsData);
+        setShapeFunctions(shapeData.shape_functions || []);
+        setPredictionsData(predictionsVsActual);
+        setComparisonData(comparison);
+        setUserSavedEdits(convertEditsListToMap(userEdits.edits || []));
+      } catch (err) {
+        console.error("Failed to load model version data:", err);
+        clearModelState();
+      } finally {
+        setChartLoading(false);
+        setComparisonLoading(false);
+      }
+    },
+    [clearModelState],
+  );
+
+  const refreshContext = useCallback(
+    async (userOverride = null) => {
+      const activeUser = userOverride || currentUser;
+      if (!activeUser?.id) {
+        return;
+      }
+
+      try {
+        setContextLoading(true);
+        const context = await apiService.getUserContext(activeUser.id);
+        setDatasetContext(context);
+        setModelStatus(context.model_status || EMPTY_STATUS);
+        setDataSummary(context.data_summary || null);
+        setPredictionFields(context.prediction_fields || []);
+        setCapabilities(context.capabilities || {});
+
+        if (
+          context.model_status?.dataset_id &&
+          context.capabilities?.hourly_pattern
+        ) {
+          try {
+            const pattern = await apiService.getHourlyPattern(
+              context.model_status.dataset_id,
+            );
+            setHourlyPattern(pattern);
+          } catch (err) {
+            console.log("Failed to fetch hourly pattern:", err);
+            setHourlyPattern(null);
+          }
+        } else {
+          setHourlyPattern(null);
+        }
+
+        if (context.model_status?.model_version_id) {
+          await loadModelVersionData(
+            context.model_status.model_version_id,
+            activeUser.id,
+          );
+          await fetchNotifications(
+            activeUser.id,
+            context.model_status.model_version_id,
+          );
+        } else {
+          clearModelState();
+          setDeletionNotifications([]);
+          setShowNotificationPopup(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch active context:", err);
+      } finally {
+        setContextLoading(false);
+      }
+    },
+    [
+      clearModelState,
+      currentUser,
+      fetchNotifications,
+      loadModelVersionData,
+    ],
+  );
+
   useEffect(() => {
     const validateAndLoadUser = async () => {
       const savedUser = localStorage.getItem("currentUser");
-      if (savedUser) {
-        try {
-          const user = JSON.parse(savedUser);
-          // Verify user still exists in database by trying to get their info
-          try {
-            const validatedUser = await apiService.getUser(user.id);
-            if (validatedUser) {
-              setCurrentUser({ ...user, ...validatedUser });
-              setCurrentPage("main");
-            } else {
-              // User no longer exists, clear localStorage
-              localStorage.removeItem("currentUser");
-            }
-          } catch (err) {
-            // User not found in DB, clear localStorage
-            console.log("Saved user no longer exists, logging out");
-            localStorage.removeItem("currentUser");
-          }
-        } catch (e) {
+      if (!savedUser) {
+        return;
+      }
+
+      try {
+        const user = JSON.parse(savedUser);
+        const validatedUser = await apiService.getUser(user.id);
+        if (!validatedUser) {
           localStorage.removeItem("currentUser");
+          return;
         }
+        setCurrentUser({ ...user, ...validatedUser });
+        setCurrentPage("main");
+      } catch (err) {
+        localStorage.removeItem("currentUser");
       }
     };
+
     validateAndLoadUser();
   }, []);
 
-  // Fetch initial status when on main page
   useEffect(() => {
     if (currentPage === "main" && currentUser) {
-      fetchModelStatus();
-      checkForNotifications();
+      refreshContext();
     }
-  }, [currentPage, currentUser]);
+  }, [currentPage, currentUser, refreshContext]);
 
   useEffect(() => {
     if (currentPage === "superadmin" && !currentUser?.is_superadmin) {
@@ -87,25 +229,25 @@ function App() {
     }
   }, [currentPage, currentUser]);
 
-  const checkForNotifications = async () => {
-    if (!currentUser) return;
-    try {
-      const data = await apiService.getUserNotifications(currentUser.id);
-      if (data.notifications && data.notifications.length > 0) {
-        setDeletionNotifications(data.notifications);
-        setShowNotificationPopup(true);
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
       }
-    } catch (e) {
-      console.log("Failed to check notifications:", e);
-    }
-  };
+    };
+  }, []);
 
   const handleDismissNotifications = async () => {
-    if (!currentUser) return;
+    if (!currentUser?.id || !modelStatus?.model_version_id) {
+      return;
+    }
     try {
-      await apiService.markNotificationsSeen(currentUser.id);
-    } catch (e) {
-      console.log("Failed to mark notifications as seen:", e);
+      await apiService.markNotificationsSeen(
+        currentUser.id,
+        modelStatus.model_version_id,
+      );
+    } catch (err) {
+      console.log("Failed to mark notifications as seen:", err);
     }
     setShowNotificationPopup(false);
     setDeletionNotifications([]);
@@ -121,40 +263,7 @@ function App() {
       localStorage.removeItem("superadminToken");
     }
     setCurrentPage("main");
-
-    // Load user's previous edits if they exist
-    if (!user.is_new) {
-      try {
-        await apiService.loadUserEditsToModel(user.id);
-      } catch (e) {
-        console.log("No previous edits to load");
-      }
-    }
-
-    // Ensure all user-specific data (including comparison chart) is refreshed
-    // against the just-logged-in user context.
-    await fetchModelStatus(user);
-  };
-
-  const handleLogout = () => {
-    setCurrentUser(null);
-    localStorage.removeItem("currentUser");
-    localStorage.removeItem("superadminToken");
-    setCurrentPage("login");
-    // Reset all state
-    setModelStatus(null);
-    setDataSummary(null);
-    setMetrics(null);
-    setShapeFunctions([]);
-    setPredictionsData(null);
-    setHourlyPattern(null);
-    setComparisonData(null);
-    setUserSavedEdits({});
-  };
-
-  const handleResetDatabase = async () => {
-    await apiService.resetDatabase();
-    handleLogout();
+    await refreshContext(user);
   };
 
   const handleRegister = async (username, password, inviteToken) => {
@@ -163,125 +272,115 @@ function App() {
     localStorage.setItem("currentUser", JSON.stringify(user));
     localStorage.removeItem("superadminToken");
     setCurrentPage("main");
-    await fetchModelStatus(user);
+    await refreshContext(user);
   };
 
-  const fetchModelStatus = async (userOverride = null) => {
-    const activeUser = userOverride || currentUser;
-    try {
-      const status = await apiService.getModelStatus();
-      setModelStatus(status);
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem("currentUser");
+    localStorage.removeItem("superadminToken");
+    setCurrentPage("login");
+    setDatasetContext(null);
+    setModelStatus(EMPTY_STATUS);
+    setDataSummary(null);
+    setPredictionFields([]);
+    setCapabilities({});
+    clearModelState();
+    setHourlyPattern(null);
+    setDeletionNotifications([]);
+    setShowNotificationPopup(false);
+    setError(null);
+  };
 
-      // If data is already loaded, fetch summary
-      if (status.data_loaded) {
-        fetchDataSummary();
-        fetchHourlyPattern();
+  const handleResetDatabase = async () => {
+    await apiService.resetDatabase();
+    handleLogout();
+  };
+
+  const handleSelectDataset = async (datasetId) => {
+    if (!currentUser?.id) {
+      return;
+    }
+    setError(null);
+    try {
+      await apiService.selectDataset(currentUser.id, datasetId);
+      await refreshContext();
+    } catch (err) {
+      setError(
+        "Failed to select dataset: " +
+          (err.response?.data?.detail || err.message),
+      );
+    }
+  };
+
+  const handleInspectUpload = async (file) => apiService.inspectDatasetUpload(file);
+
+  const handleUploadDataset = async (payload) => {
+    if (!currentUser?.id) {
+      return;
+    }
+    setError(null);
+    try {
+      const result = await apiService.uploadDataset(payload);
+      const datasetId = result?.dataset?.id;
+      if (datasetId) {
+        await apiService.selectDataset(currentUser.id, datasetId);
       }
-
-      // If model is trained, fetch metrics and visualizations
-      if (status.is_trained) {
-        fetchMetrics();
-        fetchShapeFunctions({ refreshComparison: false });
-
-        // Load user's saved edits FIRST, then fetch comparison data
-        if (activeUser) {
-          try {
-            const result = await apiService.loadUserEditsToModel(activeUser.id);
-            // Convert the edits to the format expected by EditableShapeFunctionsGrid
-            if (result.edits && result.edits.length > 0) {
-              const editsMap = {};
-              for (const sf of result.edits) {
-                editsMap[sf.feature_name] = sf.edited_points.map((p) => ({
-                  x_value: p.x_value,
-                  y_value: p.y_value,
-                }));
-              }
-              setUserSavedEdits(editsMap);
-            } else {
-              setUserSavedEdits({});
-            }
-          } catch (e) {
-            console.log("No previous edits to load");
-            setUserSavedEdits({});
-          }
-        }
-
-        // Now fetch predictions data (with user edits already applied)
-        fetchPredictionsVsActual();
-        await fetchComparisonData();
-      }
+      await refreshContext();
     } catch (err) {
-      console.error("Failed to fetch model status:", err);
+      setError(
+        "Failed to upload dataset: " +
+          (err.response?.data?.detail || err.message),
+      );
+      throw err;
     }
   };
 
-  const fetchDataSummary = async () => {
-    try {
-      const summary = await apiService.getDataSummary();
-      setDataSummary(summary);
-    } catch (err) {
-      console.error("Failed to fetch data summary:", err);
+  const handleTrainModel = async (params) => {
+    if (!currentUser?.id || !modelStatus?.dataset_id) {
+      return;
     }
-  };
-
-  const fetchHourlyPattern = async () => {
     try {
-      const pattern = await apiService.getHourlyPattern();
-      setHourlyPattern(pattern);
+      setTrainingLoading(true);
+      setError(null);
+      await apiService.trainDataset(modelStatus.dataset_id, {
+        user_id: currentUser.id,
+        ...params,
+      });
+      await refreshContext();
     } catch (err) {
-      console.error("Failed to fetch hourly pattern:", err);
-    }
-  };
-
-  const fetchMetrics = async () => {
-    try {
-      const metrics = await apiService.getModelMetrics();
-      setMetrics(metrics);
-    } catch (err) {
-      console.error("Failed to fetch metrics:", err);
-    }
-  };
-
-  const fetchShapeFunctions = async ({ refreshComparison = true } = {}) => {
-    try {
-      setChartLoading(true);
-      const response = await apiService.getShapeFunctions();
-      setShapeFunctions(response.shape_functions || []);
-      // Also fetch initial comparison data after shape functions are loaded
-      if (refreshComparison) {
-        await fetchComparisonData();
-      }
-    } catch (err) {
-      console.error("Failed to fetch shape functions:", err);
+      setError(
+        "Failed to train model: " + (err.response?.data?.detail || err.message),
+      );
     } finally {
-      setChartLoading(false);
+      setTrainingLoading(false);
     }
   };
 
-  const fetchPredictionsVsActual = async () => {
-    try {
-      const data = await apiService.getPredictionsVsActual();
-      setPredictionsData(data);
-    } catch (err) {
-      console.error("Failed to fetch predictions vs actual:", err);
+  const handlePredict = async (inputData) => {
+    if (!modelStatus?.model_version_id) {
+      return null;
     }
-  };
 
-  const fetchComparisonData = async () => {
     try {
-      setComparisonLoading(true);
-      const data = await apiService.getPredictionsComparison();
-      setComparisonData(data);
+      setPredictLoading(true);
+      setError(null);
+      return await apiService.predict(modelStatus.model_version_id, inputData);
     } catch (err) {
-      console.error("Failed to fetch comparison data:", err);
+      setError(
+        "Prediction failed: " + (err.response?.data?.detail || err.message),
+      );
+      return null;
     } finally {
-      setComparisonLoading(false);
+      setPredictLoading(false);
     }
   };
 
   const buildMergedPreviewEdits = useCallback(
     (unsavedEdits = {}) => {
-      if (!shapeFunctions || shapeFunctions.length === 0) return [];
+      if (!shapeFunctions?.length) {
+        return [];
+      }
 
       return shapeFunctions
         .map((sf) => {
@@ -289,15 +388,19 @@ function App() {
           const unsaved = unsavedEdits[sf.feature_name] || [];
 
           const mergedMap = new Map();
-          saved.forEach((p) => mergedMap.set(String(p.x_value), p));
-          unsaved.forEach((p) => mergedMap.set(String(p.x_value), p));
+          saved.forEach((point) => mergedMap.set(String(point.x_value), point));
+          unsaved.forEach((point) =>
+            mergedMap.set(String(point.x_value), point),
+          );
 
-          const mergedPoints = Array.from(mergedMap.values()).map((p) => ({
-            x_value: p.x_value,
-            y_value: p.y_value,
+          const mergedPoints = Array.from(mergedMap.values()).map((point) => ({
+            x_value: point.x_value,
+            y_value: point.y_value,
           }));
 
-          if (mergedPoints.length === 0) return null;
+          if (mergedPoints.length === 0) {
+            return null;
+          }
 
           return {
             feature_name: sf.feature_name,
@@ -312,7 +415,14 @@ function App() {
 
   const handleUnsavedEditsChange = useCallback(
     (unsavedEdits) => {
-      if (!modelStatus?.is_trained || isApplyingSavedEditsRef.current) return;
+      if (
+        !modelStatus?.is_trained ||
+        !currentUser?.id ||
+        !modelStatus?.model_version_id ||
+        isApplyingSavedEditsRef.current
+      ) {
+        return;
+      }
 
       if (previewTimerRef.current) {
         clearTimeout(previewTimerRef.current);
@@ -321,50 +431,63 @@ function App() {
       previewTimerRef.current = setTimeout(async () => {
         try {
           const mergedPreviewEdits = buildMergedPreviewEdits(unsavedEdits);
-          await apiService.updateShapeFunctions(mergedPreviewEdits);
-          const data = await apiService.getPredictionsComparison();
-          setComparisonData(data);
+          const comparison = await apiService.previewPredictionsComparison(
+            modelStatus.model_version_id,
+            currentUser.id,
+            mergedPreviewEdits,
+          );
+          setComparisonData(comparison);
         } catch (err) {
           console.error("Failed to refresh live comparison preview:", err);
         }
       }, 180);
     },
-    [modelStatus?.is_trained, buildMergedPreviewEdits],
+    [buildMergedPreviewEdits, currentUser?.id, modelStatus],
   );
 
-  useEffect(() => {
-    return () => {
-      if (previewTimerRef.current) {
-        clearTimeout(previewTimerRef.current);
-      }
-    };
-  }, []);
+  const fetchComparisonData = useCallback(async () => {
+    if (!currentUser?.id || !modelStatus?.model_version_id) {
+      return;
+    }
+
+    try {
+      setComparisonLoading(true);
+      const data = await apiService.getPredictionsComparison(
+        modelStatus.model_version_id,
+        currentUser.id,
+      );
+      setComparisonData(data);
+    } catch (err) {
+      console.error("Failed to fetch comparison data:", err);
+    } finally {
+      setComparisonLoading(false);
+    }
+  }, [currentUser?.id, modelStatus?.model_version_id]);
 
   const handleShapeFunctionsEdit = async (editedShapeFunctions) => {
+    if (!currentUser?.id || !modelStatus?.model_version_id) {
+      return;
+    }
+
     try {
       isApplyingSavedEditsRef.current = true;
       setComparisonLoading(true);
       setError(null);
 
-      // Send edited shape functions to backend (temporary update)
-      await apiService.updateShapeFunctions(editedShapeFunctions);
+      await apiService.saveUserEdits(
+        currentUser.id,
+        modelStatus.model_version_id,
+        editedShapeFunctions,
+      );
 
-      // Save to user's database record
-      if (currentUser) {
-        await apiService.saveUserEdits(currentUser.id, editedShapeFunctions);
+      setUserSavedEdits((prevEdits) => {
+        const nextEdits = { ...prevEdits };
+        for (const sf of editedShapeFunctions) {
+          nextEdits[sf.feature_name] = sf.edited_points;
+        }
+        return nextEdits;
+      });
 
-        // Update local state with saved edits (merge with existing)
-        setUserSavedEdits((prevEdits) => {
-          const newEdits = { ...prevEdits };
-          for (const sf of editedShapeFunctions) {
-            // Replace all points for this feature with the new ones
-            newEdits[sf.feature_name] = sf.edited_points;
-          }
-          return newEdits;
-        });
-      }
-
-      // Fetch updated comparison data
       await fetchComparisonData();
     } catch (err) {
       setError(
@@ -378,22 +501,18 @@ function App() {
   };
 
   const handleResetShapeFunctions = async () => {
+    if (!currentUser?.id || !modelStatus?.model_version_id) {
+      return;
+    }
+
     try {
       setComparisonLoading(true);
       setError(null);
-
-      // Reset shape functions on backend
-      await apiService.resetShapeFunctions();
-
-      // Clear user's edits in database
-      if (currentUser) {
-        await apiService.clearUserEdits(currentUser.id);
-      }
-
-      // Clear local saved edits
+      await apiService.clearUserEdits(
+        currentUser.id,
+        modelStatus.model_version_id,
+      );
       setUserSavedEdits({});
-
-      // Fetch updated comparison data (should show same values for both)
       await fetchComparisonData();
     } catch (err) {
       setError(
@@ -406,28 +525,23 @@ function App() {
   };
 
   const handleResetFeature = async (featureName) => {
+    if (!currentUser?.id || !modelStatus?.model_version_id) {
+      return;
+    }
+
     try {
       setComparisonLoading(true);
       setError(null);
-
-      // Clear this feature's edits in database
-      if (currentUser) {
-        await apiService.clearUserFeatureEdits(currentUser.id, featureName);
-      }
-
-      // Remove from local saved edits
+      await apiService.clearUserFeatureEdits(
+        currentUser.id,
+        modelStatus.model_version_id,
+        featureName,
+      );
       setUserSavedEdits((prevEdits) => {
-        const newEdits = { ...prevEdits };
-        delete newEdits[featureName];
-        return newEdits;
+        const nextEdits = { ...prevEdits };
+        delete nextEdits[featureName];
+        return nextEdits;
       });
-
-      // Reload user's remaining edits to model
-      if (currentUser) {
-        await apiService.loadUserEditsToModel(currentUser.id);
-      }
-
-      // Fetch updated comparison data
       await fetchComparisonData();
     } catch (err) {
       setError(
@@ -439,63 +553,10 @@ function App() {
     }
   };
 
-  const handleLoadData = async () => {
-    try {
-      setDataLoading(true);
-      setError(null);
-      await apiService.loadData();
-      await fetchModelStatus();
-      await fetchDataSummary();
-      await fetchHourlyPattern();
-    } catch (err) {
-      setError(
-        "Failed to load data: " + (err.response?.data?.detail || err.message),
-      );
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
-  const handleTrainModel = async (params) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await apiService.trainModel(params);
-
-      if (response.success) {
-        setMetrics(response.metrics);
-        await fetchModelStatus();
-        await fetchShapeFunctions();
-        await fetchPredictionsVsActual();
-      }
-    } catch (err) {
-      setError(
-        "Failed to train model: " + (err.response?.data?.detail || err.message),
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePredict = async (inputData) => {
-    try {
-      setError(null);
-      const result = await apiService.predict(inputData);
-      return result;
-    } catch (err) {
-      setError(
-        "Prediction failed: " + (err.response?.data?.detail || err.message),
-      );
-      return null;
-    }
-  };
-
-  // Render login page
   if (currentPage === "login") {
     return <UserLogin onLogin={handleLogin} onRegister={handleRegister} />;
   }
 
-  // Render combined results page
   if (currentPage === "combined") {
     return (
       <CombinedResultsPage
@@ -515,12 +576,16 @@ function App() {
     );
   }
 
-  // Render main app
+  const targetLabel =
+    dataSummary?.target_label ||
+    datasetContext?.active_dataset?.target_column ||
+    "target value";
+  const predictionContextKey = `main-${modelStatus?.model_version_id || modelStatus?.dataset_id || "none"}`;
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header modelStatus={modelStatus} />
 
-      {/* User Bar */}
       <div className="bg-white border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
@@ -543,29 +608,16 @@ function App() {
                 onClick={() => setCurrentPage("combined")}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
               >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
-                </svg>
                 <span>View Combined Results</span>
               </button>
-              {currentUser?.is_superadmin && (
+              {currentUser?.is_superadmin ? (
                 <button
                   onClick={() => setCurrentPage("superadmin")}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   Superadmin
                 </button>
-              )}
+              ) : null}
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -578,8 +630,7 @@ function App() {
       </div>
 
       <main className="container mx-auto px-4 py-8">
-        {/* Error Alert */}
-        {error && (
+        {error ? (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center justify-between">
             <span>{error}</span>
             <button
@@ -589,36 +640,47 @@ function App() {
               ✕
             </button>
           </div>
-        )}
+        ) : null}
 
-        {/* Main Grid Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Controls */}
           <div className="space-y-6">
             <TrainingPanel
-              onLoadData={handleLoadData}
+              currentUser={currentUser}
+              datasets={datasetContext?.datasets || []}
+              activeDatasetId={modelStatus?.dataset_id}
+              activeDatasetName={datasetContext?.active_dataset?.display_name}
+              onSelectDataset={handleSelectDataset}
+              onInspectUpload={handleInspectUpload}
+              onUploadDataset={handleUploadDataset}
               onTrainModel={handleTrainModel}
-              loading={loading || dataLoading}
+              loading={contextLoading || trainingLoading}
               modelStatus={modelStatus}
             />
 
-            <DataSummaryCard summary={dataSummary} loading={dataLoading} />
+            <DataSummaryCard summary={dataSummary} loading={contextLoading} />
 
-            <MetricsCard metrics={metrics} loading={loading} />
+            <MetricsCard metrics={metrics} loading={trainingLoading} />
           </div>
 
-          {/* Right Column - Visualizations */}
           <div className="lg:col-span-2 space-y-6">
             <PredictionForm
+              title="Make Prediction"
+              description="Set the input feature values and run a prediction for the active IGANN model version."
               onPredict={handlePredict}
-              loading={loading}
+              loading={predictLoading}
               modelTrained={modelStatus?.is_trained}
+              predictionFields={predictionFields}
+              targetLabel={targetLabel}
+              submitLabel="Predict Value"
+              contextKey={predictionContextKey}
             />
 
-            <HourlyPatternChart
-              patternData={hourlyPattern}
-              loading={dataLoading}
-            />
+            {capabilities?.hourly_pattern ? (
+              <HourlyPatternChart
+                patternData={hourlyPattern}
+                loading={contextLoading}
+              />
+            ) : null}
 
             <PredictionChart
               predictionsData={predictionsData}
@@ -627,7 +689,6 @@ function App() {
           </div>
         </div>
 
-        {/* Full Width Interactive Shape Functions */}
         <div className="mt-6">
           <EditableShapeFunctionsGrid
             shapeFunctions={shapeFunctions}
@@ -640,19 +701,18 @@ function App() {
           />
         </div>
 
-        {/* Prediction Comparison Section */}
         <div className="mt-6">
           <PredictionComparisonChart
             comparisonData={comparisonData}
             loading={comparisonLoading}
             currentUser={currentUser}
+            targetLabel={targetLabel}
           />
         </div>
 
-        {/* Footer */}
         <footer className="mt-12 text-center text-gray-500 text-sm">
           <p>
-            Bike Rental Prediction using IGANN
+            Interactive IGANN Workspace
             <span className="mx-2">•</span>
             <a
               href="https://github.com/MathiasKraus/igann"
@@ -666,8 +726,7 @@ function App() {
         </footer>
       </main>
 
-      {/* Deletion Notification Popup */}
-      {showNotificationPopup && deletionNotifications.length > 0 && (
+      {showNotificationPopup && deletionNotifications.length > 0 ? (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4">
             <div className="flex items-center space-x-2 mb-4">
@@ -731,7 +790,7 @@ function App() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

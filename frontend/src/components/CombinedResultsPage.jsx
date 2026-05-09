@@ -1,191 +1,7 @@
 import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
-
-const CombinedPredictionForm = ({ modelTrained }) => {
-  const [formData, setFormData] = useState({
-    temperature: 20,
-    humidity: 50,
-    windspeed: 10,
-    time_of_day: 12,
-    type_of_day: "Working Day",
-    weathersituation: "Clear",
-  });
-  const [prediction, setPrediction] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "number" ? parseFloat(value) : value,
-    }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await apiService.predictCombined(formData);
-      if (result) {
-        setPrediction(result.predicted_count);
-      }
-    } catch (err) {
-      setError(
-        err.response?.data?.detail || err.message || "Prediction failed",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-2">
-        Predict with Combined Edits
-      </h3>
-      <p className="text-sm text-gray-500 mb-4">
-        Make a prediction using the model with all combined user edits applied.
-        The result reflects the aggregated shape function modifications from all
-        users.
-      </p>
-
-      {!modelTrained && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
-          Please train the model first before making predictions.
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-          {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Temperature (°C)
-            </label>
-            <input
-              type="number"
-              name="temperature"
-              value={formData.temperature}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="-10"
-              max="40"
-              step="0.5"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Humidity (%)
-            </label>
-            <input
-              type="number"
-              name="humidity"
-              value={formData.humidity}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="0"
-              max="100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Windspeed (km/h)
-            </label>
-            <input
-              type="number"
-              name="windspeed"
-              value={formData.windspeed}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="0"
-              max="70"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Time of Day (Hour)
-            </label>
-            <input
-              type="number"
-              name="time_of_day"
-              value={formData.time_of_day}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="0"
-              max="23"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Type of Day
-            </label>
-            <select
-              name="type_of_day"
-              value={formData.type_of_day}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-            >
-              <option value="Working Day">Working Day</option>
-              <option value="Weekend">Weekend</option>
-              <option value="Holiday">Holiday</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Weather
-            </label>
-            <select
-              name="weathersituation"
-              value={formData.weathersituation}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-            >
-              <option value="Clear">Clear</option>
-              <option value="Cloudy">Cloudy</option>
-              <option value="Light Rain">Light Rain</option>
-              <option value="Heavy Rain">Heavy Rain</option>
-            </select>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={!modelTrained || loading}
-          className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-        >
-          {loading ? "Predicting..." : "Predict Bike Rentals (Combined Model)"}
-        </button>
-      </form>
-
-      {prediction !== null && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
-          <div className="text-center">
-            <div className="text-sm text-gray-600">
-              Predicted Bike Rentals (Combined Edits)
-            </div>
-            <div className="text-4xl font-bold text-primary-600 mt-1">
-              {Math.round(prediction)}
-            </div>
-            <div className="text-sm text-gray-500 mt-1">bikes per hour</div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
+import PredictionForm from "./PredictionForm";
 
 function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const allowDestructiveActions =
@@ -193,6 +9,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     currentUser?.is_superadmin;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeContext, setActiveContext] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
   const [users, setUsers] = useState([]);
   const [editLogs, setEditLogs] = useState(null);
@@ -227,23 +44,50 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [deleteReason, setDeleteReason] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [predictionLoading, setPredictionLoading] = useState(false);
+
+  const activeModelVersionId = activeContext?.model_status?.model_version_id;
+  const activeDatasetName = activeContext?.active_dataset?.display_name;
+  const activeVersionNumber = activeContext?.model_status?.version_number;
+  const predictionFields = activeContext?.prediction_fields || [];
+  const targetLabel =
+    activeContext?.data_summary?.target_label ||
+    activeContext?.active_dataset?.target_column ||
+    "target value";
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentUser?.id]);
 
   const fetchData = async () => {
+    if (!currentUser?.id) {
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      // Always fetch weighted data; also re-fetch unweighted if it was already loaded
+      const context = await apiService.getUserContext(currentUser.id);
+      setActiveContext(context);
+
+      if (!context.model_status?.model_version_id) {
+        setComparisonData(null);
+        setUsers([]);
+        setEditLogs(null);
+        setUnweightedComparisonData(null);
+        setPerUserShapeFunctions(null);
+        return;
+      }
+
+      const modelVersionId = context.model_status.model_version_id;
       const fetches = [
-        apiService.getCombinedPredictionsComparison(true),
-        apiService.getUsersWithEdits(),
-        apiService.getEditLogs(),
+        apiService.getCombinedPredictionsComparison(modelVersionId, true),
+        apiService.getUsersWithEdits(modelVersionId),
+        apiService.getEditLogs(modelVersionId),
       ];
       if (unweightedComparisonData !== null) {
-        fetches.push(apiService.getCombinedPredictionsComparison(false));
+        fetches.push(
+          apiService.getCombinedPredictionsComparison(modelVersionId, false),
+        );
       }
       const results = await Promise.all(fetches);
       setComparisonData(results[0]);
@@ -255,8 +99,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       // Refresh per-user overlay data if visible
       if (showUserOverlay) {
         try {
-          const perUser =
-            await apiService.getPerUserShapeFunctions(useWeighting);
+          const perUser = await apiService.getPerUserShapeFunctions(
+            modelVersionId,
+            useWeighting,
+          );
           setPerUserShapeFunctions(perUser.users || []);
         } catch (_) {
           // silently fail — overlay will show stale data
@@ -276,10 +122,13 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const handleOverlayToggle = async () => {
     const next = !showUserOverlay;
     setShowUserOverlay(next);
-    if (next) {
+    if (next && activeModelVersionId) {
       setLoadingOverlay(true);
       try {
-        const data = await apiService.getPerUserShapeFunctions(useWeighting);
+        const data = await apiService.getPerUserShapeFunctions(
+          activeModelVersionId,
+          useWeighting,
+        );
         setPerUserShapeFunctions(data.users || []);
       } catch (_) {
         // silently fail
@@ -297,17 +146,17 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       // Always re-fetch per-user overlay with new weighting, and lazily fetch
       // unweighted combined data on first toggle-off
       const fetches = [];
-      if (showUserOverlay) {
+      if (showUserOverlay && activeModelVersionId) {
         fetches.push(
           apiService
-            .getPerUserShapeFunctions(next)
+            .getPerUserShapeFunctions(activeModelVersionId, next)
             .then((data) => setPerUserShapeFunctions(data.users || [])),
         );
       }
-      if (!next && !unweightedComparisonData) {
+      if (!next && !unweightedComparisonData && activeModelVersionId) {
         fetches.push(
           apiService
-            .getCombinedPredictionsComparison(false)
+            .getCombinedPredictionsComparison(activeModelVersionId, false)
             .then((data) => setUnweightedComparisonData(data)),
         );
       }
@@ -328,11 +177,28 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     try {
       await onResetDatabase();
       setShowResetConfirm(false);
-      await fetchData();
     } catch (err) {
       setError(err.message || "Failed to reset database");
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleCombinedPredict = async (inputFeatures) => {
+    if (!activeModelVersionId) {
+      return null;
+    }
+
+    setPredictionLoading(true);
+    try {
+      return await apiService.predictCombined(activeModelVersionId, inputFeatures);
+    } catch (err) {
+      setError(
+        err.response?.data?.detail || err.message || "Prediction failed",
+      );
+      return null;
+    } finally {
+      setPredictionLoading(false);
     }
   };
 
@@ -519,8 +385,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             autosize: true,
             height: 400,
             margin: { l: 60, r: 30, t: 20, b: 60 },
-            xaxis: { title: "Actual Bike Rentals" },
-            yaxis: { title: "Predicted Bike Rentals" },
+            xaxis: { title: `Actual ${targetLabel}` },
+            yaxis: { title: `Predicted ${targetLabel}` },
             legend: { orientation: "h", y: -0.2 },
             hovermode: "closest",
           }}
@@ -1078,6 +944,11 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <h1 className="text-xl font-bold text-gray-800">
                 Combined Results - All Users
               </h1>
+              <div className="text-sm text-gray-500">
+                {activeDatasetName
+                  ? `${activeDatasetName}${activeVersionNumber ? ` • v${activeVersionNumber}` : ""}`
+                  : "No trained model version selected"}
+              </div>
             </div>
 
             <div className="flex items-center space-x-3">
@@ -1138,6 +1009,12 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
           </div>
         ) : (
           <>
+            {!activeModelVersionId ? (
+              <div className="bg-white rounded-xl shadow-md p-8 text-center text-gray-600">
+                Train the currently selected dataset to view combined results for a model version.
+              </div>
+            ) : (
+              <>
             {/* Summary Card */}
             <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-md p-6 mb-6 text-white">
               <h2 className="text-2xl font-bold mb-2">
@@ -1146,8 +1023,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               </h2>
               <p className="opacity-90">
                 This page shows the aggregated effect of all user edits on the
-                GAM model. Each point's offset is averaged across all users who
-                edited it.
+                active IGANN model version. Each point's offset is averaged
+                across all users who edited it.
               </p>
             </div>
 
@@ -1161,7 +1038,17 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             {renderScatterPlot()}
 
             {/* Prediction with Combined Edits */}
-            <CombinedPredictionForm modelTrained={true} />
+            <PredictionForm
+              title="Predict with Combined Edits"
+              description="Run a prediction using the current model version with all combined user edits applied."
+              onPredict={handleCombinedPredict}
+              loading={predictionLoading}
+              modelTrained={Boolean(activeModelVersionId)}
+              predictionFields={predictionFields}
+              targetLabel={targetLabel}
+              submitLabel="Predict with Combined Model"
+              contextKey={`combined-${activeModelVersionId || "none"}`}
+            />
 
             {/* Combined Shape Functions Visualization */}
             {renderCombinedShapeFunctions()}
@@ -1170,6 +1057,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
             {/* Edit Logs */}
             {renderEditLogs()}
+              </>
+            )}
           </>
         )}
       </main>

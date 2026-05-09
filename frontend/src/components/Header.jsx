@@ -6,9 +6,9 @@ const Header = ({ modelStatus }) => {
       <div className="container mx-auto px-4 py-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Bike Rental Prediction</h1>
+            <h1 className="text-3xl font-bold">Interactive IGANN Workspace</h1>
             <p className="text-primary-100 mt-1">
-              IGANN - Interpretable Generalized Additive Neural Networks
+              Train versioned IGANN models on uploaded datasets
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -29,10 +29,13 @@ const Header = ({ modelStatus }) => {
             </div>
             {modelStatus?.data_loaded && (
               <div className="text-right border-l border-primary-400 pl-4">
-                <div className="text-sm text-primary-200">Data Loaded</div>
-                <div className="text-white">
-                  {modelStatus?.train_size + modelStatus?.test_size} records
-                </div>
+                <div className="text-sm text-primary-200">Active Dataset</div>
+                <div className="text-white">{modelStatus?.dataset_name}</div>
+                {modelStatus?.version_number ? (
+                  <div className="text-primary-100 text-sm">
+                    Model v{modelStatus.version_number}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

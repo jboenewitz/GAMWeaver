@@ -1,22 +1,49 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-const PredictionForm = ({ onPredict, loading, modelTrained }) => {
-  const [formData, setFormData] = useState({
-    temperature: 20,
-    humidity: 50,
-    windspeed: 10,
-    time_of_day: 12,
-    type_of_day: "Working Day",
-    weathersituation: "Clear",
-  });
+const buildDefaultFormData = (predictionFields = []) => {
+  const defaults = {};
+  for (const field of predictionFields) {
+    defaults[field.name] = field.default ?? "";
+  }
+  return defaults;
+};
 
+const PredictionForm = ({
+  title = "Make Prediction",
+  description = "Set the input feature values and run a prediction.",
+  onPredict,
+  loading,
+  modelTrained,
+  predictionFields = [],
+  targetLabel = "prediction target",
+  submitLabel = "Run Prediction",
+  contextKey = "default",
+  resultLabel,
+  resultUnit = "",
+}) => {
+  const [formData, setFormData] = useState(() =>
+    buildDefaultFormData(predictionFields),
+  );
   const [prediction, setPrediction] = useState(null);
 
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
+  useEffect(() => {
+    setFormData(buildDefaultFormData(predictionFields));
+    setPrediction(null);
+  }, [predictionFields, contextKey]);
+
+  const hasFields = predictionFields.length > 0;
+  const resolvedResultLabel = useMemo(
+    () => resultLabel || `Predicted ${targetLabel}`,
+    [resultLabel, targetLabel],
+  );
+
+  const handleChange = (field, rawValue) => {
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "number" ? parseFloat(value) : value,
+      [field.name]:
+        field.feature_type === "numeric" && rawValue !== ""
+          ? Number(rawValue)
+          : rawValue,
     }));
   };
 
@@ -24,129 +51,80 @@ const PredictionForm = ({ onPredict, loading, modelTrained }) => {
     e.preventDefault();
     const result = await onPredict(formData);
     if (result) {
-      setPrediction(result.predicted_count);
+      setPrediction(result.predicted_value);
     }
   };
 
   return (
     <div className="card">
-      <h3 className="text-lg font-semibold text-gray-700 mb-2">
-        Make Prediction
-      </h3>
-      <p className="text-sm text-gray-500 mb-4">
-        Set the input feature values and run a prediction. The result reflects
-        the currently trained model, including any shape function edits you have
-        applied.
-      </p>
+      <h3 className="text-lg font-semibold text-gray-700 mb-2">{title}</h3>
+      <p className="text-sm text-gray-500 mb-4">{description}</p>
 
       {!modelTrained && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
-          Please train the model first before making predictions
+          Train the selected model version before making predictions.
+        </div>
+      )}
+
+      {modelTrained && !hasFields && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+          No prediction fields are available for the selected dataset.
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="label">Temperature (°C)</label>
-            <input
-              type="number"
-              name="temperature"
-              value={formData.temperature}
-              onChange={handleChange}
-              className="input-field"
-              min="-10"
-              max="40"
-              step="0.5"
-            />
-          </div>
-
-          <div>
-            <label className="label">Humidity (%)</label>
-            <input
-              type="number"
-              name="humidity"
-              value={formData.humidity}
-              onChange={handleChange}
-              className="input-field"
-              min="0"
-              max="100"
-            />
-          </div>
-
-          <div>
-            <label className="label">Windspeed (km/h)</label>
-            <input
-              type="number"
-              name="windspeed"
-              value={formData.windspeed}
-              onChange={handleChange}
-              className="input-field"
-              min="0"
-              max="70"
-            />
-          </div>
-
-          <div>
-            <label className="label">Time of Day (Hour)</label>
-            <input
-              type="number"
-              name="time_of_day"
-              value={formData.time_of_day}
-              onChange={handleChange}
-              className="input-field"
-              min="0"
-              max="23"
-            />
-          </div>
-
-          <div>
-            <label className="label">Type of Day</label>
-            <select
-              name="type_of_day"
-              value={formData.type_of_day}
-              onChange={handleChange}
-              className="select-field"
-            >
-              <option value="Working Day">Working Day</option>
-              <option value="Weekend">Weekend</option>
-              <option value="Holiday">Holiday</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Weather</label>
-            <select
-              name="weathersituation"
-              value={formData.weathersituation}
-              onChange={handleChange}
-              className="select-field"
-            >
-              <option value="Clear">Clear</option>
-              <option value="Cloudy">Cloudy</option>
-              <option value="Light Rain">Light Rain</option>
-              <option value="Heavy Rain">Heavy Rain</option>
-            </select>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {predictionFields.map((field) => (
+            <div key={field.name}>
+              <label className="label">{field.label}</label>
+              {field.feature_type === "categorical" ? (
+                <select
+                  name={field.name}
+                  value={formData[field.name] ?? ""}
+                  onChange={(e) => handleChange(field, e.target.value)}
+                  className="select-field"
+                >
+                  {(field.options || []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  name={field.name}
+                  value={formData[field.name] ?? ""}
+                  onChange={(e) => handleChange(field, e.target.value)}
+                  className="input-field"
+                  min={field.min}
+                  max={field.max}
+                  step={field.step || (field.is_integer ? 1 : 0.1)}
+                />
+              )}
+            </div>
+          ))}
         </div>
 
         <button
           type="submit"
-          disabled={!modelTrained || loading}
+          disabled={!modelTrained || !hasFields || loading}
           className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? "Predicting..." : "Predict Bike Rentals"}
+          {loading ? "Predicting..." : submitLabel}
         </button>
       </form>
 
       {prediction !== null && (
         <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
           <div className="text-center">
-            <div className="text-sm text-gray-600">Predicted Bike Rentals</div>
+            <div className="text-sm text-gray-600">{resolvedResultLabel}</div>
             <div className="text-4xl font-bold text-primary-600 mt-1">
-              {Math.round(prediction)}
+              {Math.round(prediction * 1000) / 1000}
             </div>
-            <div className="text-sm text-gray-500 mt-1">bikes per hour</div>
+            {resultUnit ? (
+              <div className="text-sm text-gray-500 mt-1">{resultUnit}</div>
+            ) : null}
           </div>
         </div>
       )}

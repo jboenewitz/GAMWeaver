@@ -106,7 +106,7 @@ const ShapeFunctionsGrid = ({ shapeFunctions, loading }) => {
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-gray-700">Shape Functions</h3>
         <p className="text-sm text-gray-500">
-          These plots show how each feature affects the bike rental prediction.
+          These plots show how each feature affects the model prediction.
           Values above zero increase the prediction, values below decrease it.
         </p>
       </div>

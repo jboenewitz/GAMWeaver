@@ -51,6 +51,7 @@ const PredictionComparisonChart = ({
   comparisonData,
   loading,
   currentUser,
+  targetLabel = "target value",
 }) => {
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [showColorPanel, setShowColorPanel] = useState(false);
@@ -227,8 +228,8 @@ const PredictionComparisonChart = ({
         : "Predictions vs Actual",
       font: { size: 14, color: "#374151" },
     },
-    xaxis: { title: "Actual Bike Rentals", gridcolor: "#e5e7eb" },
-    yaxis: { title: "Predicted Bike Rentals", gridcolor: "#e5e7eb" },
+    xaxis: { title: `Actual ${targetLabel}`, gridcolor: "#e5e7eb" },
+    yaxis: { title: `Predicted ${targetLabel}`, gridcolor: "#e5e7eb" },
     margin: { l: 60, r: 30, t: 50, b: 50 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
