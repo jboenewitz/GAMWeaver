@@ -1,14 +1,6 @@
 name: Deploy Backend
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "backend/**"
-      - "bike.csv"
-      - "requirements.txt"
-      - ".github/workflows/deploy-backend.yml"
   workflow_dispatch:
 
 jobs:
