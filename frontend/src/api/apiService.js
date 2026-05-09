@@ -24,8 +24,22 @@ export const apiService = {
   },
 
   // Data endpoints
-  loadData: async () => {
-    const response = await api.post("/data/load");
+  uploadDataset: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post("/data/upload", formData, {
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
+  loadData: async (params = {}) => {
+    const response = await api.post("/data/load", params, {
+      headers: adminHeaders(),
+    });
     return response.data;
   },
 
@@ -46,7 +60,9 @@ export const apiService = {
 
   // Model endpoints
   trainModel: async (params = {}) => {
-    const response = await api.post("/model/train", params);
+    const response = await api.post("/model/train", params, {
+      headers: adminHeaders(),
+    });
     return response.data;
   },
 

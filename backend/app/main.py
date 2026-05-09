@@ -1,34 +1,28 @@
 """FastAPI main application for Bike Rental Prediction API."""
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Body
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
+from pathlib import Path
 
 from .models import (
-    PredictionInput,
     PredictionOutput,
-    BatchPredictionInput,
     BatchPredictionOutput,
     ModelMetrics,
-    ShapeFunctionData,
-    DataSummary,
+    DataLoadRequest,
+    DatasetUploadResponse,
     TrainModelRequest,
     TrainModelResponse,
     EditedShapeFunctionsRequest,
-    PredictionComparisonResponse,
-    ComparisonMetrics,
     UserLoginRequest,
     UserResponse,
     UserListResponse,
     UserRegisterRequest,
     AdminCreateUserRequest,
     InviteCreateResponse,
-    UserEditsRequest,
-    CombinedEditsResponse,
     ResetDatabaseResponse,
     DeleteEditRequest,
     DeleteEditResponse,
-    NotificationsResponse,
     UserPreferencesRequest,
     UserPreferencesResponse,
 )
@@ -58,6 +52,20 @@ def _get_superadmin_payload(request: Request) -> Dict[str, Any]:
 def _require_superadmin(request: Request) -> None:
     if not _get_superadmin_payload(request):
         raise HTTPException(status_code=403, detail="Superadmin access required")
+
+
+def _extract_prediction_features(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Accept both direct feature dictionaries and {"features": {...}} payloads.
+    """
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid prediction payload")
+    if "features" in payload:
+        features = payload.get("features")
+        if not isinstance(features, dict):
+            raise HTTPException(status_code=400, detail="'features' must be an object")
+        return features
+    return payload
 
 
 def _require_destructive_access(request: Request) -> None:
@@ -116,12 +124,45 @@ async def health_check_root():
     return {"status": "healthy"}
 
 
-@app.post("/api/data/load")
-async def load_data():
-    """Load and prepare the dataset."""
+@app.post("/api/data/upload", response_model=DatasetUploadResponse)
+async def upload_data(request: Request, file: UploadFile = File(...)):
+    """Upload CSV and return columns for target selection (superadmin only)."""
     try:
-        result = ml_service.load_data()
+        _require_superadmin(request)
+        file_name = file.filename or "dataset.csv"
+        file_bytes = await file.read()
+        preview = ml_service.inspect_uploaded_dataset(file_name, file_bytes)
+        return DatasetUploadResponse(**preview)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/data/load")
+async def load_data(http_request: Request, request: Optional[DataLoadRequest] = None):
+    """Load and prepare the selected dataset (superadmin only)."""
+    try:
+        _require_superadmin(http_request)
+        if request is None:
+            request = DataLoadRequest()
+
+        result = ml_service.load_data(
+            dataset_id=request.dataset_id,
+            target_column=request.target_column,
+            feature_columns=request.feature_columns,
+        )
+        if result.get("dataset_changed"):
+            db_service.clear_all_shape_edits()
         return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -132,6 +173,8 @@ async def get_data_summary():
     try:
         summary = ml_service.get_data_summary()
         return summary
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -142,6 +185,8 @@ async def get_feature_distributions():
     try:
         distributions = ml_service.get_feature_distributions()
         return distributions
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -152,14 +197,17 @@ async def get_hourly_pattern():
     try:
         pattern = ml_service.get_hourly_pattern()
         return pattern
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/model/train", response_model=TrainModelResponse)
-async def train_model(request: TrainModelRequest = None):
-    """Train the IGANN model."""
+async def train_model(http_request: Request, request: Optional[TrainModelRequest] = None):
+    """Train the IGANN model (superadmin only)."""
     try:
+        _require_superadmin(http_request)
         if request is None:
             request = TrainModelRequest()
         
@@ -175,6 +223,8 @@ async def train_model(request: TrainModelRequest = None):
             message="Model trained successfully",
             metrics=ModelMetrics(**metrics)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -225,21 +275,13 @@ async def get_predictions_vs_actual():
 
 
 @app.post("/api/predict", response_model=PredictionOutput)
-async def predict(input_data: PredictionInput):
-    """Make a single bike rental prediction."""
+async def predict(input_data: Dict[str, Any] = Body(...)):
+    """Make a single prediction using dynamic feature schema."""
     try:
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet. Call /api/model/train first.")
-        
-        features = {
-            "temperature": input_data.temperature,
-            "humidity": input_data.humidity,
-            "windspeed": input_data.windspeed,
-            "time_of_day": input_data.time_of_day,
-            "type_of_day": input_data.type_of_day,
-            "weathersituation": input_data.weathersituation,
-        }
-        
+
+        features = _extract_prediction_features(input_data)
         prediction = ml_service.predict(features)
         
         return PredictionOutput(
@@ -248,28 +290,26 @@ async def predict(input_data: PredictionInput):
         )
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/predict/batch", response_model=BatchPredictionOutput)
-async def batch_predict(input_data: BatchPredictionInput):
+async def batch_predict(input_data: Dict[str, Any] = Body(...)):
     """Make batch predictions."""
     try:
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet")
-        
-        features_list = [
-            {
-                "temperature": p.temperature,
-                "humidity": p.humidity,
-                "windspeed": p.windspeed,
-                "time_of_day": p.time_of_day,
-                "type_of_day": p.type_of_day,
-                "weathersituation": p.weathersituation,
-            }
-            for p in input_data.predictions
-        ]
+
+        if not isinstance(input_data, dict):
+            raise HTTPException(status_code=400, detail="Invalid batch payload")
+        predictions_payload = input_data.get("predictions", [])
+        if not isinstance(predictions_payload, list):
+            raise HTTPException(status_code=400, detail="'predictions' must be an array")
+
+        features_list = [_extract_prediction_features(p) for p in predictions_payload]
         
         predictions = ml_service.batch_predict(features_list)
         predictions = [max(0, p) for p in predictions]  # Ensure non-negative
@@ -277,6 +317,8 @@ async def batch_predict(input_data: BatchPredictionInput):
         return BatchPredictionOutput(predictions=predictions)
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -288,6 +330,11 @@ async def get_model_status():
         "is_trained": ml_service.is_trained,
         "data_loaded": ml_service.X_train is not None,
         "features": ml_service.feature_names if ml_service.feature_names else [],
+        "feature_schema": ml_service.feature_schema if ml_service.feature_schema else [],
+        "target_column": ml_service.target_column,
+        "selected_feature_columns": ml_service.selected_feature_columns if ml_service.selected_feature_columns else [],
+        "dataset_id": ml_service.active_dataset_id,
+        "dataset_name": Path(ml_service.active_dataset_path).name if ml_service.active_dataset_path else None,
         "train_size": len(ml_service.X_train) if ml_service.X_train is not None else 0,
         "test_size": len(ml_service.X_test) if ml_service.X_test is not None else 0,
     }
@@ -882,7 +929,7 @@ async def update_user_preferences(user_id: int, request: UserPreferencesRequest)
 # ==================== Combined Predict Endpoint ====================
 
 @app.post("/api/combined/predict", response_model=PredictionOutput)
-async def combined_predict(input_data: PredictionInput):
+async def combined_predict(input_data: Dict[str, Any] = Body(...)):
     """Make a prediction using the combined shape function edits from all users."""
     try:
         if not ml_service.is_trained:
@@ -895,14 +942,7 @@ async def combined_predict(input_data: PredictionInput):
         # Get combined edits from all users
         combined_offsets = db_service.get_combined_edits()
         
-        features = {
-            "temperature": input_data.temperature,
-            "humidity": input_data.humidity,
-            "windspeed": input_data.windspeed,
-            "time_of_day": input_data.time_of_day,
-            "type_of_day": input_data.type_of_day,
-            "weathersituation": input_data.weathersituation,
-        }
+        features = _extract_prediction_features(input_data)
         
         prediction = ml_service.predict_with_offsets(features, combined_offsets)
         
@@ -912,6 +952,8 @@ async def combined_predict(input_data: PredictionInput):
         )
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

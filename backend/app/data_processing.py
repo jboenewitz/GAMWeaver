@@ -1,135 +1,198 @@
-"""Data processing utilities for bike rental prediction."""
+"""Data processing utilities for generic tabular regression datasets."""
+
+from pathlib import Path
+from typing import List, Optional, Tuple
 
 import pandas as pd
-import numpy as np
-from sklearn.pipeline import Pipeline
+from pandas.api.types import is_numeric_dtype
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
-from pathlib import Path
+from sklearn.pipeline import Pipeline
 
 # Determine the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DATA_FILE = PROJECT_ROOT / "bike.csv"
 
 
-def scale_values(values, new_min, new_max):
-    """Scale values to a new range."""
-    if isinstance(values, (pd.Series, pd.DataFrame)):
-        old_min, old_max = values.min(), values.max()
-        return (values - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
-
-    arr = np.array(values)
-    old_min, old_max = arr.min(), arr.max()
-    return (arr - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
-
-
-def load_and_preprocess_data(csv_path: str = None):
-    """Load and preprocess the bike rental dataset."""
-    if csv_path is None:
-        csv_path = DATA_FILE
-    
-    # Ensure the file exists
-    if not Path(csv_path).exists():
-        raise FileNotFoundError(f"Dataset not found at: {csv_path}")
-    
-    df = pd.read_csv(csv_path)
-    
-    # Remap numeric features
-    df["Time of Day"] = df["hr"].astype(int)  # Keep as integer for numeric treatment
-    df["Windspeed"] = scale_values(df["windspeed"], 0, 67)
-    df["Temperature"] = scale_values(df["temp"], -8, 39)
-    df["Perceived Temperature"] = scale_values(df["atemp"], -16, 50)
-    df["Humidity"] = scale_values(df["hum"], 0, 100)
-    
-    # Remap categorical features
-    df["Season"] = df["season"].replace({1: "Winter", 2: "Spring", 3: "Summer", 4: "Fall"})
-    df["Weathersituation"] = df["weathersit"].replace({
-        1: "Clear",
-        2: "Cloudy",
-        3: "Light Rain",
-        4: "Heavy Rain",
-    })
-    
-    # Create Day Type variable
-    df["Type of Day"] = np.where(
-        (df["workingday"] == 1) & (df["holiday"] == 0),
-        "Working Day",
-        np.where((df["workingday"] == 0) & (df["holiday"] == 0), "Weekend", "Holiday"),
-    )
-    
-    # Drop NaN in target
-    df.dropna(subset=["cnt"], inplace=True)
-    
-    # Set correct nan and drop
-    df.replace("-", np.nan, inplace=True)
-    df.dropna(inplace=True)
-    
-    # Set X and y
-    y = pd.DataFrame(df["cnt"])
-    
-    # Columns to drop
-    feature_to_drop = [
-        "dteday", "season", "yr", "mnth", "hr", "holiday", "weathersit",
-        "temp", "atemp", "hum", "windspeed", "cnt", "instant", "workingday",
-        "casual", "registered", "weekday", "Perceived Temperature", "Season",
-    ]
-    
-    X = df.drop(columns=feature_to_drop, inplace=False)
-    
-    return X, y, df
+def _resolve_target_column(df: pd.DataFrame, target_column: Optional[str]) -> str:
+    """Resolve target column with a bike-compatible fallback."""
+    if target_column and target_column in df.columns:
+        return target_column
+    if "cnt" in df.columns:
+        return "cnt"
+    if not len(df.columns):
+        raise ValueError("Dataset has no columns")
+    return str(df.columns[-1])
 
 
-def get_preprocessor(X):
-    """Create and return the preprocessing pipeline."""
-    cat_features = ["Weathersituation", "Type of Day"]
-    num_features = [feature for feature in X.columns if feature not in cat_features]
-    
-    # Create transformers
-    num_transformer = Pipeline([
-        ("num_imputer", SimpleImputer(strategy="mean")),
-    ])
-    
-    cat_transformer = Pipeline([
-        ("cat_imputer", SimpleImputer(strategy="most_frequent")),
-    ])
-    
-    # Column transformer
+def _resolve_feature_columns(
+    df: pd.DataFrame,
+    target_column: str,
+    feature_columns: Optional[List[str]],
+) -> List[str]:
+    """Resolve selected feature columns and validate against dataset columns."""
+    all_columns = [str(col) for col in df.columns]
+    available_features = [col for col in all_columns if col != target_column]
+
+    if feature_columns is None:
+        selected = list(available_features)
+    else:
+        requested = [str(col) for col in feature_columns]
+        missing = [col for col in requested if col not in all_columns]
+        if missing:
+            raise ValueError(f"Selected feature columns not found in dataset: {missing}")
+
+        deduped: List[str] = []
+        seen = set()
+        for col in requested:
+            if col == target_column:
+                continue
+            if col in seen:
+                continue
+            seen.add(col)
+            deduped.append(col)
+        selected = deduped
+
+    if not selected:
+        raise ValueError("At least one feature column must be selected")
+
+    return selected
+
+
+def _infer_feature_types(X: pd.DataFrame) -> Tuple[List[str], List[str]]:
+    """Infer categorical and numeric features from dtypes."""
+    numeric_features: List[str] = []
+    categorical_features: List[str] = []
+
+    for column in X.columns:
+        series = X[column]
+        if is_numeric_dtype(series):
+            numeric_features.append(column)
+        else:
+            categorical_features.append(column)
+
+    return categorical_features, numeric_features
+
+
+def load_dataset(csv_path: Optional[str] = None) -> pd.DataFrame:
+    """Load raw dataset from CSV path."""
+    resolved_path = Path(csv_path or DATA_FILE)
+    if not resolved_path.exists():
+        raise FileNotFoundError(f"Dataset not found at: {resolved_path}")
+
+    df = pd.read_csv(resolved_path)
+    if df.empty:
+        raise ValueError("Dataset is empty")
+    return df
+
+
+def get_preprocessor(
+    X: pd.DataFrame,
+    categorical_features: Optional[List[str]] = None,
+    numeric_features: Optional[List[str]] = None,
+):
+    """Create and return a preprocessing pipeline with type-specific imputers."""
+    if categorical_features is None or numeric_features is None:
+        categorical_features, numeric_features = _infer_feature_types(X)
+
+    transformers = []
+    if numeric_features:
+        num_transformer = Pipeline([("num_imputer", SimpleImputer(strategy="mean"))])
+        transformers.append(("num", num_transformer, numeric_features))
+
+    if categorical_features:
+        cat_transformer = Pipeline(
+            [("cat_imputer", SimpleImputer(strategy="most_frequent"))]
+        )
+        transformers.append(("cat", cat_transformer, categorical_features))
+
+    if not transformers:
+        raise ValueError("No usable features found after preprocessing setup")
+
     column_transformer = ColumnTransformer(
-        transformers=[
-            ("num", num_transformer, num_features),
-            ("cat", cat_transformer, cat_features),
-        ],
+        transformers=transformers,
         verbose_feature_names_out=False,
     ).set_output(transform="pandas")
-    
-    return column_transformer, cat_features, num_features
+
+    return column_transformer, categorical_features, numeric_features
 
 
-def preprocess_data(X, preprocessor=None):
+def preprocess_data(
+    X: pd.DataFrame,
+    preprocessor=None,
+    categorical_features: Optional[List[str]] = None,
+) -> Tuple[pd.DataFrame, ColumnTransformer]:
     """Apply preprocessing to the data."""
     if preprocessor is None:
-        preprocessor, _, _ = get_preprocessor(X)
+        preprocessor, categorical_features, _ = get_preprocessor(X)
         X_transformed = preprocessor.fit_transform(X)
     else:
         X_transformed = preprocessor.transform(X)
-    
-    # Convert categorical columns to object type
-    X_transformed = X_transformed.astype({
-        "Type of Day": "object",
-        "Weathersituation": "object",
-    })
-    
+
+    # Keep categorical features as object/string-like for IGANN categorical handling.
+    if categorical_features:
+        for column in categorical_features:
+            if column in X_transformed.columns:
+                X_transformed[column] = X_transformed[column].astype(str)
+
     return X_transformed, preprocessor
 
 
-def prepare_training_data(csv_path: str = None, test_size: float = 0.2, random_state: int = 42):
-    """Load, preprocess and split the data for training."""
-    X, y, df = load_and_preprocess_data(csv_path)
-    X_processed, preprocessor = preprocess_data(X)
-    
-    X_train, X_test, y_train, y_test = train_test_split(
-        X_processed, y, test_size=test_size, random_state=random_state
+def prepare_training_data(
+    csv_path: Optional[str] = None,
+    target_column: Optional[str] = None,
+    feature_columns: Optional[List[str]] = None,
+    test_size: float = 0.2,
+    random_state: int = 42,
+):
+    """Load, preprocess and split generic tabular data for training."""
+    df = load_dataset(csv_path).replace("-", pd.NA)
+    resolved_target = _resolve_target_column(df, target_column)
+
+    y_series = pd.to_numeric(df[resolved_target], errors="coerce")
+    valid_target_mask = y_series.notna()
+    df = df.loc[valid_target_mask].copy()
+    y_series = y_series.loc[valid_target_mask]
+
+    if df.empty:
+        raise ValueError("No rows remain after dropping invalid target values")
+
+    selected_features = _resolve_feature_columns(df, resolved_target, feature_columns)
+    X = df[selected_features].copy()
+    if X.empty or len(X.columns) == 0:
+        raise ValueError("Dataset must contain at least one feature column")
+
+    categorical_features, numeric_features = _infer_feature_types(X)
+
+    # Ensure numeric columns are coercible to numeric for downstream modeling.
+    for column in numeric_features:
+        X[column] = pd.to_numeric(X[column], errors="coerce")
+
+    X_processed, preprocessor = preprocess_data(
+        X,
+        preprocessor=None,
+        categorical_features=categorical_features,
     )
-    
-    return X_train, X_test, y_train, y_test, preprocessor, df
+
+    y = pd.DataFrame({resolved_target: y_series})
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_processed,
+        y,
+        test_size=test_size,
+        random_state=random_state,
+    )
+
+    return (
+        X_train,
+        X_test,
+        y_train,
+        y_test,
+        preprocessor,
+        df,
+        resolved_target,
+        selected_features,
+        categorical_features,
+        numeric_features,
+    )

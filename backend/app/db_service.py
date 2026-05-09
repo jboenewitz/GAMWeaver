@@ -408,6 +408,20 @@ class DatabaseService:
         finally:
             db.close()
 
+    def clear_all_shape_edits(self) -> bool:
+        """Clear all persisted shape-function edits and deletion notifications."""
+        db = self.get_db()
+        try:
+            db.query(ShapeFunctionEdit).delete()
+            db.query(DeletedEditNotification).delete()
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
+        finally:
+            db.close()
+
     # ==================== Aggregation Operations ====================
 
     def get_combined_edits(self, weighted: bool = True) -> Dict[str, Dict[Any, float]]:

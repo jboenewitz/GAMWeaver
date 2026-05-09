@@ -34,6 +34,7 @@ logs/
 # Build
 build/
 *.egg
+backend/data_store/
 
 # Testing
 .coverage

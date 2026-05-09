@@ -41,7 +41,7 @@ const DataSummaryCard = ({ summary, loading }) => {
 
         <div>
           <div className="text-sm text-gray-500 mb-2">
-            Target Variable (Bike Rentals)
+            Target Variable ({summary.target_column || "Target"})
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="bg-gray-50 rounded p-2">

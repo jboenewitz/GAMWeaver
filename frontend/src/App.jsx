@@ -13,6 +13,38 @@ import UserLogin from "./components/UserLogin";
 import CombinedResultsPage from "./components/CombinedResultsPage";
 import SuperadminPage from "./components/SuperadminPage";
 
+const formatApiError = (err, fallback = "Request failed") => {
+  const responseData = err?.response?.data;
+  const detail = err?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    try {
+      return detail
+        .map((item) => {
+          if (typeof item === "string") return item;
+          if (item?.msg) return item.msg;
+          return JSON.stringify(item);
+        })
+        .join("; ");
+    } catch (_) {
+      return fallback;
+    }
+  }
+  if (detail && typeof detail === "object") {
+    if (detail.msg) return detail.msg;
+    try {
+      return JSON.stringify(detail);
+    } catch (_) {
+      return fallback;
+    }
+  }
+  if (typeof responseData?.message === "string" && responseData.message.trim()) {
+    return responseData.message;
+  }
+  if (typeof err?.message === "string" && err.message.trim()) return err.message;
+  return fallback;
+};
+
 function App() {
   // User state
   const [currentUser, setCurrentUser] = useState(null);
@@ -166,6 +198,14 @@ function App() {
     await fetchModelStatus(user);
   };
 
+  const clearTrainedModelState = () => {
+    setMetrics(null);
+    setShapeFunctions([]);
+    setPredictionsData(null);
+    setComparisonData(null);
+    setUserSavedEdits({});
+  };
+
   const fetchModelStatus = async (userOverride = null) => {
     const activeUser = userOverride || currentUser;
     try {
@@ -176,12 +216,15 @@ function App() {
       if (status.data_loaded) {
         fetchDataSummary();
         fetchHourlyPattern();
+      } else {
+        setDataSummary(null);
+        setHourlyPattern(null);
       }
 
       // If model is trained, fetch metrics and visualizations
       if (status.is_trained) {
         fetchMetrics();
-        fetchShapeFunctions({ refreshComparison: false });
+        await fetchShapeFunctions({ refreshComparison: false });
 
         // Load user's saved edits FIRST, then fetch comparison data
         if (activeUser) {
@@ -209,6 +252,8 @@ function App() {
         // Now fetch predictions data (with user edits already applied)
         fetchPredictionsVsActual();
         await fetchComparisonData();
+      } else {
+        clearTrainedModelState();
       }
     } catch (err) {
       console.error("Failed to fetch model status:", err);
@@ -369,7 +414,7 @@ function App() {
     } catch (err) {
       setError(
         "Failed to apply shape function edits: " +
-          (err.response?.data?.detail || err.message),
+          formatApiError(err, "Failed to apply shape function edits"),
       );
     } finally {
       isApplyingSavedEditsRef.current = false;
@@ -398,7 +443,7 @@ function App() {
     } catch (err) {
       setError(
         "Failed to reset shape functions: " +
-          (err.response?.data?.detail || err.message),
+          formatApiError(err, "Failed to reset shape functions"),
       );
     } finally {
       setComparisonLoading(false);
@@ -432,25 +477,36 @@ function App() {
     } catch (err) {
       setError(
         "Failed to reset feature: " +
-          (err.response?.data?.detail || err.message),
+          formatApiError(err, "Failed to reset feature"),
       );
     } finally {
       setComparisonLoading(false);
     }
   };
 
-  const handleLoadData = async () => {
+  const handleUploadDataset = async (file) => {
+    try {
+      setError(null);
+      const result = await apiService.uploadDataset(file);
+      return result;
+    } catch (err) {
+      throw new Error(formatApiError(err, "Failed to upload dataset"));
+    }
+  };
+
+  const handleLoadData = async (loadRequest) => {
     try {
       setDataLoading(true);
       setError(null);
-      await apiService.loadData();
+      await apiService.loadData(loadRequest);
+      clearTrainedModelState();
       await fetchModelStatus();
-      await fetchDataSummary();
-      await fetchHourlyPattern();
     } catch (err) {
+      const message = formatApiError(err, "Failed to load data");
       setError(
-        "Failed to load data: " + (err.response?.data?.detail || err.message),
+        "Failed to load data: " + message,
       );
+      throw new Error(message);
     } finally {
       setDataLoading(false);
     }
@@ -465,12 +521,11 @@ function App() {
       if (response.success) {
         setMetrics(response.metrics);
         await fetchModelStatus();
-        await fetchShapeFunctions();
-        await fetchPredictionsVsActual();
       }
     } catch (err) {
       setError(
-        "Failed to train model: " + (err.response?.data?.detail || err.message),
+        "Failed to train model: " +
+          formatApiError(err, "Failed to train model"),
       );
     } finally {
       setLoading(false);
@@ -484,7 +539,7 @@ function App() {
       return result;
     } catch (err) {
       setError(
-        "Prediction failed: " + (err.response?.data?.detail || err.message),
+        "Prediction failed: " + formatApiError(err, "Prediction failed"),
       );
       return null;
     }
@@ -596,10 +651,12 @@ function App() {
           {/* Left Column - Controls */}
           <div className="space-y-6">
             <TrainingPanel
+              onUploadDataset={handleUploadDataset}
               onLoadData={handleLoadData}
               onTrainModel={handleTrainModel}
               loading={loading || dataLoading}
               modelStatus={modelStatus}
+              isSuperadmin={Boolean(currentUser?.is_superadmin)}
             />
 
             <DataSummaryCard summary={dataSummary} loading={dataLoading} />
@@ -613,6 +670,8 @@ function App() {
               onPredict={handlePredict}
               loading={loading}
               modelTrained={modelStatus?.is_trained}
+              featureSchema={modelStatus?.feature_schema || []}
+              targetColumn={modelStatus?.target_column}
             />
 
             <HourlyPatternChart

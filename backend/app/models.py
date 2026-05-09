@@ -5,13 +5,8 @@ from typing import List, Optional, Dict, Any
 
 
 class PredictionInput(BaseModel):
-    """Input schema for bike rental prediction."""
-    temperature: float
-    humidity: float
-    windspeed: float
-    time_of_day: int
-    type_of_day: str
-    weathersituation: str
+    """Dynamic input schema for single prediction."""
+    features: Dict[str, Any]
 
 
 class PredictionOutput(BaseModel):
@@ -22,7 +17,7 @@ class PredictionOutput(BaseModel):
 
 class BatchPredictionInput(BaseModel):
     """Input schema for batch predictions."""
-    predictions: List[PredictionInput]
+    predictions: List[Dict[str, Any]]
 
 
 class BatchPredictionOutput(BaseModel):
@@ -51,7 +46,23 @@ class DataSummary(BaseModel):
     features: List[str]
     numeric_features: List[str]
     categorical_features: List[str]
+    target_column: str
     target_stats: Dict[str, float]
+
+
+class DataLoadRequest(BaseModel):
+    """Request to load a selected dataset and target column."""
+    dataset_id: Optional[str] = None
+    target_column: Optional[str] = None
+    feature_columns: Optional[List[str]] = None
+
+
+class DatasetUploadResponse(BaseModel):
+    """Response after uploading/inspecting CSV dataset."""
+    dataset_id: str
+    original_filename: str
+    columns: List[str]
+    default_target_column: str
 
 
 class FeatureImportance(BaseModel):

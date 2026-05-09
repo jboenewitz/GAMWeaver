@@ -2,24 +2,41 @@ import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
 
-const CombinedPredictionForm = ({ modelTrained }) => {
-  const [formData, setFormData] = useState({
-    temperature: 20,
-    humidity: 50,
-    windspeed: 10,
-    time_of_day: 12,
-    type_of_day: "Working Day",
-    weathersituation: "Clear",
+const buildInitialFormData = (featureSchema = []) => {
+  const initial = {};
+  featureSchema.forEach((feature) => {
+    if (feature.feature_type === "numeric") {
+      initial[feature.name] = Number.isFinite(feature.default_value)
+        ? feature.default_value
+        : 0;
+    } else {
+      const options = feature.categorical_options || [];
+      initial[feature.name] = feature.default_value || options[0] || "";
+    }
   });
+  return initial;
+};
+
+const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) => {
+  const [formData, setFormData] = useState({});
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
+  useEffect(() => {
+    setFormData(buildInitialFormData(featureSchema));
+    setPrediction(null);
+  }, [featureSchema]);
+
+  const handleChange = (feature, value) => {
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "number" ? parseFloat(value) : value,
+      [feature.name]:
+        feature.feature_type === "numeric"
+          ? value === ""
+            ? ""
+            : Number(value)
+          : value,
     }));
   };
 
@@ -64,109 +81,54 @@ const CombinedPredictionForm = ({ modelTrained }) => {
         </div>
       )}
 
+      {(!featureSchema || featureSchema.length === 0) && (
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+          No feature schema available. Ask the superadmin to load a dataset.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Temperature (°C)
-            </label>
-            <input
-              type="number"
-              name="temperature"
-              value={formData.temperature}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="-10"
-              max="40"
-              step="0.5"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Humidity (%)
-            </label>
-            <input
-              type="number"
-              name="humidity"
-              value={formData.humidity}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="0"
-              max="100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Windspeed (km/h)
-            </label>
-            <input
-              type="number"
-              name="windspeed"
-              value={formData.windspeed}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="0"
-              max="70"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Time of Day (Hour)
-            </label>
-            <input
-              type="number"
-              name="time_of_day"
-              value={formData.time_of_day}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-              min="0"
-              max="23"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Type of Day
-            </label>
-            <select
-              name="type_of_day"
-              value={formData.type_of_day}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-            >
-              <option value="Working Day">Working Day</option>
-              <option value="Weekend">Weekend</option>
-              <option value="Holiday">Holiday</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Weather
-            </label>
-            <select
-              name="weathersituation"
-              value={formData.weathersituation}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
-            >
-              <option value="Clear">Clear</option>
-              <option value="Cloudy">Cloudy</option>
-              <option value="Light Rain">Light Rain</option>
-              <option value="Heavy Rain">Heavy Rain</option>
-            </select>
-          </div>
+          {(featureSchema || []).map((feature) => (
+            <div key={feature.name}>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {feature.name}
+              </label>
+              {feature.feature_type === "categorical" ? (
+                <select
+                  value={formData[feature.name] ?? ""}
+                  onChange={(e) => handleChange(feature, e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                >
+                  {(feature.categorical_options || []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  value={formData[feature.name] ?? ""}
+                  onChange={(e) => handleChange(feature, e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  min={Number.isFinite(feature.min_value) ? feature.min_value : undefined}
+                  max={Number.isFinite(feature.max_value) ? feature.max_value : undefined}
+                  step="0.01"
+                />
+              )}
+            </div>
+          ))}
         </div>
 
         <button
           type="submit"
-          disabled={!modelTrained || loading}
+          disabled={!modelTrained || loading || !featureSchema?.length}
           className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
         >
-          {loading ? "Predicting..." : "Predict Bike Rentals (Combined Model)"}
+          {loading
+            ? "Predicting..."
+            : `Predict ${targetColumn || "Target"} (Combined Model)`}
         </button>
       </form>
 
@@ -174,12 +136,11 @@ const CombinedPredictionForm = ({ modelTrained }) => {
         <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
           <div className="text-center">
             <div className="text-sm text-gray-600">
-              Predicted Bike Rentals (Combined Edits)
+              Predicted {targetColumn || "Target"} (Combined Edits)
             </div>
             <div className="text-4xl font-bold text-primary-600 mt-1">
               {Math.round(prediction)}
             </div>
-            <div className="text-sm text-gray-500 mt-1">bikes per hour</div>
           </div>
         </div>
       )}
@@ -194,6 +155,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
+  const [modelStatus, setModelStatus] = useState(null);
   const [users, setUsers] = useState([]);
   const [editLogs, setEditLogs] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -236,21 +198,22 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     setLoading(true);
     setError(null);
     try {
-      // Always fetch weighted data; also re-fetch unweighted if it was already loaded
-      const fetches = [
+      const [weightedComparison, usersData, logsData, statusData] =
+        await Promise.all([
         apiService.getCombinedPredictionsComparison(true),
         apiService.getUsersWithEdits(),
         apiService.getEditLogs(),
-      ];
+        apiService.getModelStatus(),
+      ]);
+
+      setComparisonData(weightedComparison);
+      setUsers(usersData.users || []);
+      setEditLogs(logsData);
+      setModelStatus(statusData);
+
       if (unweightedComparisonData !== null) {
-        fetches.push(apiService.getCombinedPredictionsComparison(false));
-      }
-      const results = await Promise.all(fetches);
-      setComparisonData(results[0]);
-      setUsers(results[1].users || []);
-      setEditLogs(results[2]);
-      if (unweightedComparisonData !== null) {
-        setUnweightedComparisonData(results[3]);
+        const unweighted = await apiService.getCombinedPredictionsComparison(false);
+        setUnweightedComparisonData(unweighted);
       }
       // Refresh per-user overlay data if visible
       if (showUserOverlay) {
@@ -1161,7 +1124,11 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             {renderScatterPlot()}
 
             {/* Prediction with Combined Edits */}
-            <CombinedPredictionForm modelTrained={true} />
+            <CombinedPredictionForm
+              modelTrained={Boolean(modelStatus?.is_trained)}
+              featureSchema={modelStatus?.feature_schema || []}
+              targetColumn={modelStatus?.target_column}
+            />
 
             {/* Combined Shape Functions Visualization */}
             {renderCombinedShapeFunctions()}

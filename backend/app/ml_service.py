@@ -1,21 +1,27 @@
 """Machine Learning service for IGANN model training and prediction."""
 
+from __future__ import annotations
+
+import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from uuid import uuid4
+
 import numpy as np
 import pandas as pd
-from sklearn.metrics import root_mean_squared_error, mean_absolute_error
 from igann import IGANN
-from typing import Dict, List, Tuple, Optional, Any
-import plotly.graph_objects as go
-from pathlib import Path
+from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
-from .data_processing import prepare_training_data, preprocess_data, get_preprocessor
+from .data_processing import prepare_training_data
 
 DATA_FILE_NAME = "bike.csv"
+MAX_PREVIEW_ROWS = 500
 
 
 def _candidate_data_files() -> List[Path]:
-    """Return likely dataset locations across local and Azure runtime layouts."""
+    """Return likely built-in dataset locations across runtime layouts."""
     app_dir = Path(__file__).resolve().parent
     backend_dir = app_dir.parent
     repo_root = backend_dir.parent
@@ -47,15 +53,8 @@ def _candidate_data_files() -> List[Path]:
     return deduped
 
 
-def _resolve_data_file(csv_path: Optional[str]) -> Path:
-    """Resolve the dataset path and raise a clear error if not found."""
-    if csv_path:
-        explicit = Path(csv_path).expanduser()
-        resolved = explicit.resolve() if not explicit.is_absolute() else explicit
-        if resolved.is_file():
-            return resolved
-        raise FileNotFoundError(f"Dataset not found at explicit path: {resolved}")
-
+def _resolve_fallback_data_file() -> Path:
+    """Resolve the default dataset path and raise a clear error if missing."""
     checked_paths: List[Path] = []
     for candidate in _candidate_data_files():
         checked_paths.append(candidate)
@@ -66,15 +65,190 @@ def _resolve_data_file(csv_path: Optional[str]) -> Path:
     raise FileNotFoundError(
         "Dataset not found. Checked the following locations:\n"
         f"{checked}\n"
-        "Set DATA_FILE_PATH to a valid bike.csv location if needed."
+        "Set DATA_FILE_PATH to a valid CSV path if needed."
     )
 
 
 class MLService:
-    """Service for managing IGANN models and predictions."""
-    
-    def __init__(self):
+    """Service for managing IGANN models, datasets and predictions."""
+
+    def __init__(self) -> None:
         self.model: Optional[IGANN] = None
+        self.preprocessor = None
+
+        self.X_train: Optional[pd.DataFrame] = None
+        self.X_test: Optional[pd.DataFrame] = None
+        self.y_train: Optional[pd.DataFrame] = None
+        self.y_test: Optional[pd.DataFrame] = None
+        self.df: Optional[pd.DataFrame] = None
+
+        self.is_trained = False
+        self.feature_names: List[str] = []
+        self.selected_feature_columns: List[str] = []
+        self.cat_features: List[str] = []
+        self.num_features: List[str] = []
+        self.target_column: Optional[str] = None
+
+        self.feature_schema: List[Dict[str, Any]] = []
+        self.feature_schema_map: Dict[str, Dict[str, Any]] = {}
+
+        # Store original shape functions for interactive editing
+        self.original_shape_functions: Dict[str, Dict[str, Any]] = {}
+        self.shape_function_offsets: Dict[str, Dict[Any, float]] = {}
+
+        # Dataset persistence
+        backend_dir = Path(__file__).resolve().parent.parent
+        self.data_store_dir = backend_dir / "data_store"
+        self.datasets_dir = self.data_store_dir / "datasets"
+        self.active_dataset_file = self.data_store_dir / "active_dataset.json"
+        self.data_store_dir.mkdir(parents=True, exist_ok=True)
+        self.datasets_dir.mkdir(parents=True, exist_ok=True)
+
+        self.active_dataset_id: Optional[str] = None
+        self.active_dataset_path: Optional[str] = None
+
+        self._restore_active_dataset_metadata()
+        self._auto_load_persisted_dataset()
+
+    # ==================== Dataset management ====================
+
+    def _restore_active_dataset_metadata(self) -> None:
+        if not self.active_dataset_file.exists():
+            return
+        try:
+            data = json.loads(self.active_dataset_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+
+        dataset_path = data.get("dataset_path")
+        target_column = data.get("target_column")
+        selected_feature_columns = data.get("selected_feature_columns")
+        dataset_id = data.get("dataset_id")
+        if dataset_path:
+            self.active_dataset_path = str(Path(dataset_path))
+        if target_column:
+            self.target_column = str(target_column)
+        if isinstance(selected_feature_columns, list):
+            self.selected_feature_columns = [str(col) for col in selected_feature_columns]
+        if dataset_id:
+            self.active_dataset_id = str(dataset_id)
+
+    def _persist_active_dataset_metadata(self) -> None:
+        payload = {
+            "dataset_id": self.active_dataset_id,
+            "dataset_path": self.active_dataset_path,
+            "target_column": self.target_column,
+            "selected_feature_columns": self.selected_feature_columns,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        self.active_dataset_file.write_text(
+            json.dumps(payload, ensure_ascii=True, indent=2),
+            encoding="utf-8",
+        )
+
+    def _auto_load_persisted_dataset(self) -> None:
+        if not self.active_dataset_path or not self.target_column:
+            return
+        dataset_path = Path(self.active_dataset_path)
+        if not dataset_path.is_file():
+            return
+        try:
+            self.load_data(
+                dataset_id=self.active_dataset_id,
+                target_column=self.target_column,
+                feature_columns=self.selected_feature_columns or None,
+            )
+        except Exception:
+            # Keep service usable even if persisted dataset is invalid.
+            self._reset_runtime_state()
+
+    def _resolve_dataset_path(self, dataset_id: Optional[str] = None) -> Tuple[Path, Optional[str]]:
+        if dataset_id:
+            safe_name = Path(dataset_id).name
+            candidate = (self.datasets_dir / safe_name).resolve()
+            if not str(candidate).startswith(str(self.datasets_dir.resolve())):
+                raise ValueError("Invalid dataset_id")
+            if not candidate.is_file():
+                raise FileNotFoundError(f"Uploaded dataset not found: {safe_name}")
+            return candidate, safe_name
+
+        if self.active_dataset_path:
+            active_path = Path(self.active_dataset_path).resolve()
+            if active_path.is_file():
+                return active_path, self.active_dataset_id
+
+        return _resolve_fallback_data_file(), None
+
+    def inspect_uploaded_dataset(self, file_name: str, file_bytes: bytes) -> Dict[str, Any]:
+        """Persist an uploaded CSV and return column preview information."""
+        if not file_name or not file_name.lower().endswith(".csv"):
+            raise ValueError("Only CSV files are supported")
+        if not file_bytes:
+            raise ValueError("Uploaded file is empty")
+
+        dataset_id = f"{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid4().hex}.csv"
+        dataset_path = self.datasets_dir / dataset_id
+        dataset_path.write_bytes(file_bytes)
+
+        try:
+            preview_df = pd.read_csv(dataset_path, nrows=MAX_PREVIEW_ROWS)
+        except Exception as exc:
+            dataset_path.unlink(missing_ok=True)
+            raise ValueError(f"Failed to parse CSV: {exc}") from exc
+
+        columns = [str(col) for col in preview_df.columns]
+        if len(columns) < 2:
+            dataset_path.unlink(missing_ok=True)
+            raise ValueError("CSV must contain at least one target and one feature column")
+
+        default_target = "cnt" if "cnt" in columns else columns[-1]
+        return {
+            "dataset_id": dataset_id,
+            "original_filename": file_name,
+            "columns": columns,
+            "default_target_column": default_target,
+        }
+
+    def _build_feature_schema(self, X_all: pd.DataFrame) -> List[Dict[str, Any]]:
+        schema: List[Dict[str, Any]] = []
+        for feature_name in self.feature_names:
+            if feature_name in self.num_features:
+                numeric_series = pd.to_numeric(X_all[feature_name], errors="coerce")
+                min_val = float(numeric_series.min())
+                max_val = float(numeric_series.max())
+                default_val = float(numeric_series.median())
+
+                schema.append(
+                    {
+                        "name": feature_name,
+                        "feature_type": "numeric",
+                        "default_value": default_val,
+                        "min_value": min_val,
+                        "max_value": max_val,
+                    }
+                )
+            else:
+                cat_series = X_all[feature_name].astype(str)
+                unique_values = [str(v) for v in pd.unique(cat_series)]
+                unique_values = sorted(unique_values)
+                if not unique_values:
+                    unique_values = ["Unknown"]
+                value_counts = cat_series.value_counts()
+                default_val = str(value_counts.index[0]) if not value_counts.empty else unique_values[0]
+
+                schema.append(
+                    {
+                        "name": feature_name,
+                        "feature_type": "categorical",
+                        "default_value": default_val,
+                        "categorical_options": unique_values,
+                    }
+                )
+
+        return schema
+
+    def _reset_runtime_state(self) -> None:
+        self.model = None
         self.preprocessor = None
         self.X_train = None
         self.X_test = None
@@ -83,324 +257,422 @@ class MLService:
         self.df = None
         self.is_trained = False
         self.feature_names = []
-        self.cat_features = ["Weathersituation", "Type of Day"]
-        self.num_features = ["Temperature", "Humidity", "Windspeed", "Time of Day"]
-        # Store original shape functions for interactive editing
-        self.original_shape_functions: Dict[str, Dict[str, Any]] = {}
-        self.shape_function_offsets: Dict[str, Dict[Any, float]] = {}
-    
-    def load_data(self, csv_path: Optional[str] = None) -> Dict[str, Any]:
-        """Load and prepare the dataset."""
-        resolved_csv_path = _resolve_data_file(csv_path)
+        self.selected_feature_columns = []
+        self.cat_features = []
+        self.num_features = []
+        self.feature_schema = []
+        self.feature_schema_map = {}
+        self.original_shape_functions = {}
+        self.shape_function_offsets = {}
 
-        self.X_train, self.X_test, self.y_train, self.y_test, self.preprocessor, self.df = \
-            prepare_training_data(resolved_csv_path)
-        
-        self.feature_names = list(self.X_train.columns)
-        
+    def load_data(
+        self,
+        dataset_id: Optional[str] = None,
+        target_column: Optional[str] = None,
+        feature_columns: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Load and prepare the active dataset."""
+        previous_dataset_path = self.active_dataset_path
+        previous_target = self.target_column
+        previous_selected_features = list(self.selected_feature_columns)
+
+        resolved_path, resolved_dataset_id = self._resolve_dataset_path(dataset_id)
+        (
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            preprocessor,
+            df_loaded,
+            resolved_target,
+            selected_features,
+            cat_features,
+            num_features,
+        ) = prepare_training_data(
+            csv_path=str(resolved_path),
+            target_column=target_column,
+            feature_columns=feature_columns,
+        )
+
+        # Any dataset load invalidates trained state and shape offsets.
+        self.model = None
+        self.is_trained = False
+        self.original_shape_functions = {}
+        self.shape_function_offsets = {}
+
+        self.X_train = X_train
+        self.X_test = X_test
+        self.y_train = y_train
+        self.y_test = y_test
+        self.preprocessor = preprocessor
+        self.df = df_loaded
+        self.feature_names = list(X_train.columns)
+        self.selected_feature_columns = list(selected_features)
+        self.cat_features = list(cat_features)
+        self.num_features = list(num_features)
+        self.target_column = resolved_target
+
+        X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
+        self.feature_schema = self._build_feature_schema(X_all)
+        self.feature_schema_map = {item["name"]: item for item in self.feature_schema}
+
+        self.active_dataset_id = resolved_dataset_id
+        self.active_dataset_path = str(resolved_path)
+        self._persist_active_dataset_metadata()
+
+        dataset_changed = (
+            previous_dataset_path != self.active_dataset_path
+            or previous_target != self.target_column
+            or previous_selected_features != self.selected_feature_columns
+        )
+
         return {
             "total_records": len(self.df),
             "train_size": len(self.X_train),
             "test_size": len(self.X_test),
             "features": self.feature_names,
+            "feature_schema": self.feature_schema,
+            "target_column": self.target_column,
+            "selected_feature_columns": self.selected_feature_columns,
+            "dataset_id": self.active_dataset_id,
+            "dataset_name": Path(self.active_dataset_path).name if self.active_dataset_path else None,
+            "dataset_changed": dataset_changed,
         }
-    
+
+    # ==================== Model lifecycle ====================
+
     def train_model(self, n_estimators: int = 100) -> Dict[str, float]:
         """Train the IGANN model."""
         if self.X_train is None:
             self.load_data()
-        
+
         self.model = IGANN(
             task="regression",
             n_estimators=n_estimators,
             verbose=0,
             scale_y=True,
         )
-        
         self.model.fit(self.X_train, self.y_train)
         self.is_trained = True
-        
-        # Calculate metrics
+
         metrics = self.evaluate_model()
         return metrics
-    
+
     def evaluate_model(self) -> Dict[str, float]:
         """Evaluate the model on test data."""
-        if not self.is_trained:
+        if not self.is_trained or self.model is None:
             raise ValueError("Model not trained yet")
-        
+
         y_pred = self.model.predict(self.X_test)
         rmse = root_mean_squared_error(self.y_test, y_pred)
         mae = mean_absolute_error(self.y_test, y_pred)
-        
+
         return {
             "rmse": float(rmse),
             "mae": float(mae),
-            "model_type": "IGANN"
+            "model_type": "IGANN",
         }
-    
+
+    # ==================== Prediction helpers ====================
+
+    def _validate_and_normalize_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate prediction payload against loaded feature schema."""
+        if self.X_train is None:
+            raise ValueError("Data not loaded yet")
+
+        provided_keys = set(features.keys())
+        expected_keys = set(self.feature_names)
+        missing = sorted(expected_keys - provided_keys)
+        extra = sorted(provided_keys - expected_keys)
+        if missing or extra:
+            details = []
+            if missing:
+                details.append(f"missing={missing}")
+            if extra:
+                details.append(f"extra={extra}")
+            raise ValueError(f"Prediction features do not match dataset schema ({', '.join(details)})")
+
+        normalized: Dict[str, Any] = {}
+        for feature_name in self.feature_names:
+            value = features[feature_name]
+            schema = self.feature_schema_map.get(feature_name, {})
+            feature_type = schema.get("feature_type")
+
+            if feature_type == "numeric":
+                try:
+                    normalized[feature_name] = float(value)
+                except (TypeError, ValueError) as exc:
+                    raise ValueError(f"Feature '{feature_name}' must be numeric") from exc
+            else:
+                value_str = str(value)
+                valid_options = schema.get("categorical_options") or []
+                if valid_options and value_str not in valid_options:
+                    raise ValueError(
+                        f"Feature '{feature_name}' value '{value_str}' is not in allowed options"
+                    )
+                normalized[feature_name] = value_str
+
+        return normalized
+
     def _build_input_df(self, features: Dict[str, Any]) -> pd.DataFrame:
-        """Build a single-row DataFrame from prediction input features."""
-        input_df = pd.DataFrame([{
-            "Temperature": features["temperature"],
-            "Humidity": features["humidity"],
-            "Windspeed": features["windspeed"],
-            "Time of Day": int(features["time_of_day"]),
-            "Type of Day": features["type_of_day"],
-            "Weathersituation": features["weathersituation"],
-        }])
-        input_df = input_df.astype({
-            "Type of Day": "object",
-            "Weathersituation": "object",
-        })
+        """Build a single-row DataFrame from dynamic prediction features."""
+        normalized = self._validate_and_normalize_features(features)
+        input_df = pd.DataFrame(
+            [{feature_name: normalized[feature_name] for feature_name in self.feature_names}]
+        )
+        for cat_feature in self.cat_features:
+            if cat_feature in input_df.columns:
+                input_df[cat_feature] = input_df[cat_feature].astype(str)
+        for num_feature in self.num_features:
+            if num_feature in input_df.columns:
+                input_df[num_feature] = pd.to_numeric(input_df[num_feature], errors="coerce")
         return input_df
+
+    # ==================== Prediction APIs ====================
 
     def predict(self, features: Dict[str, Any]) -> float:
         """Make a single prediction, applying current shape function offsets."""
-        if not self.is_trained:
+        if not self.is_trained or self.model is None:
             raise ValueError("Model not trained yet")
-        
+
         input_df = self._build_input_df(features)
-        
         base_prediction = float(self.model.predict(input_df)[0])
-        
-        # Apply shape function offsets if any exist
+
         total_offset = 0.0
         for feature_name in self.shape_function_offsets:
             if feature_name in input_df.columns:
                 value = input_df[feature_name].iloc[0]
                 total_offset += self._get_offset_for_value(feature_name, value)
-        
+
         return base_prediction + total_offset
 
-    def predict_with_offsets(self, features: Dict[str, Any], offsets: Dict[str, Dict[Any, float]]) -> float:
-        """Make a single prediction using the provided shape function offsets."""
-        if not self.is_trained:
+    def predict_with_offsets(
+        self,
+        features: Dict[str, Any],
+        offsets: Dict[str, Dict[Any, float]],
+    ) -> float:
+        """Make a single prediction using provided shape-function offsets."""
+        if not self.is_trained or self.model is None:
             raise ValueError("Model not trained yet")
-        
+
         input_df = self._build_input_df(features)
-        
         base_prediction = float(self.model.predict(input_df)[0])
-        
-        # Temporarily swap offsets to use the provided ones
+
         original_offsets = self.shape_function_offsets
         self.shape_function_offsets = offsets
-        
+
         total_offset = 0.0
         for feature_name in offsets:
             if feature_name in input_df.columns:
                 value = input_df[feature_name].iloc[0]
                 total_offset += self._get_offset_for_value(feature_name, value)
-        
-        # Restore original offsets
+
         self.shape_function_offsets = original_offsets
-        
         return base_prediction + total_offset
-    
+
     def batch_predict(self, features_list: List[Dict[str, Any]]) -> List[float]:
         """Make batch predictions."""
-        return [self.predict(f) for f in features_list]
-    
+        return [self.predict(features) for features in features_list]
+
+    # ==================== Shape functions ====================
+
     def get_shape_functions(self) -> List[Dict[str, Any]]:
         """Get shape function data for all features."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
-        
+
         shape_functions = []
-        
-        # Get shape functions from the model
-        for i, feature_name in enumerate(self.feature_names):
+        for idx, feature_name in enumerate(self.feature_names):
             try:
-                # Get the shape function data from the model
-                shape_data = self._extract_shape_function(feature_name, i)
+                shape_data = self._extract_shape_function(feature_name, idx)
                 shape_functions.append(shape_data)
-                # Store for later use in interactive predictions
                 self.original_shape_functions[feature_name] = shape_data
-            except Exception as e:
-                print(f"Error extracting shape function for {feature_name}: {e}")
-                import traceback
-                traceback.print_exc()
+            except Exception as exc:
+                print(f"Error extracting shape function for {feature_name}: {exc}")
                 continue
-        
-        # Reset offsets when getting fresh shape functions
+
         self.shape_function_offsets = {}
-        
         return shape_functions
-    
+
+    def _build_shape_baseline(self) -> Dict[str, Any]:
+        baseline: Dict[str, Any] = {}
+        for num_feat in self.num_features:
+            baseline[num_feat] = float(pd.to_numeric(self.X_train[num_feat], errors="coerce").mean())
+        for cat_feat in self.cat_features:
+            mode = self.X_train[cat_feat].astype(str).mode()
+            baseline[cat_feat] = str(mode.iloc[0]) if not mode.empty else "Unknown"
+        return baseline
+
     def _extract_shape_function(self, feature_name: str, feature_idx: int) -> Dict[str, Any]:
         """Extract shape function data for a single feature."""
         is_categorical = feature_name in self.cat_features
-        
-        # Get baseline values for all features
-        baseline = {}
-        for num_feat in self.num_features:
-            baseline[num_feat] = float(self.X_train[num_feat].mean())
-        for cat_feat in self.cat_features:
-            baseline[cat_feat] = str(self.X_train[cat_feat].mode().iloc[0])
-        
+        baseline = self._build_shape_baseline()
+
         if is_categorical:
-            # For categorical features, get unique values
-            unique_values = [str(v) for v in self.X_train[feature_name].unique().tolist()]
-            
+            options = self.feature_schema_map.get(feature_name, {}).get("categorical_options", [])
+            unique_values = [str(v) for v in options] or [
+                str(v) for v in self.X_train[feature_name].astype(str).unique().tolist()
+            ]
+
             shape_values = []
-            for val in unique_values:
-                # Create a sample with this category value
+            for value in unique_values:
                 sample_data = baseline.copy()
-                sample_data[feature_name] = val
-                
-                # Create DataFrame with correct column order
+                sample_data[feature_name] = value
                 sample = pd.DataFrame([sample_data])[self.feature_names]
-                
-                # Ensure correct types
+
                 for cat_feat in self.cat_features:
                     sample[cat_feat] = sample[cat_feat].astype(str)
                 for num_feat in self.num_features:
                     sample[num_feat] = sample[num_feat].astype(float)
-                
+
                 pred = self.model.predict(sample)
-                pred_val = float(pred[0]) if hasattr(pred, '__iter__') else float(pred)
+                pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
                 shape_values.append(pred_val)
-            
-            # Normalize to show relative effect
+
             mean_val = np.mean(shape_values)
-            shape_values = [v - mean_val for v in shape_values]
-            
+            shape_values = [value - mean_val for value in shape_values]
+
             return {
                 "feature_name": feature_name,
                 "x_values": unique_values,
                 "y_values": shape_values,
-                "feature_type": "categorical"
+                "feature_type": "categorical",
             }
+
+        min_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").min())
+        max_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").max())
+        if min_val == max_val:
+            x_range = np.array([min_val])
         else:
-            # For numeric features, create a range of values
-            min_val = float(self.X_train[feature_name].min())
-            max_val = float(self.X_train[feature_name].max())
-            x_range = np.linspace(min_val, max_val, 30)  # Reduced for performance
-            
-            shape_values = []
-            for x_val in x_range:
-                # Create a sample with this numeric value
-                sample_data = baseline.copy()
-                sample_data[feature_name] = float(x_val)
-                
-                # Create DataFrame with correct column order
-                sample = pd.DataFrame([sample_data])[self.feature_names]
-                
-                # Ensure correct types
-                for cat_feat in self.cat_features:
-                    sample[cat_feat] = sample[cat_feat].astype(str)
-                for num_feat in self.num_features:
-                    sample[num_feat] = sample[num_feat].astype(float)
-                
-                pred = self.model.predict(sample)
-                pred_val = float(pred[0]) if hasattr(pred, '__iter__') else float(pred)
-                shape_values.append(pred_val)
-            
-            # Normalize
-            mean_val = np.mean(shape_values)
-            shape_values = [v - mean_val for v in shape_values]
-            
-            return {
-                "feature_name": feature_name,
-                "x_values": x_range.tolist(),
-                "y_values": shape_values,
-                "feature_type": "numeric"
-            }
-    
+            x_range = np.linspace(min_val, max_val, 30)
+
+        shape_values = []
+        for x_val in x_range:
+            sample_data = baseline.copy()
+            sample_data[feature_name] = float(x_val)
+            sample = pd.DataFrame([sample_data])[self.feature_names]
+
+            for cat_feat in self.cat_features:
+                sample[cat_feat] = sample[cat_feat].astype(str)
+            for num_feat in self.num_features:
+                sample[num_feat] = sample[num_feat].astype(float)
+
+            pred = self.model.predict(sample)
+            pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
+            shape_values.append(pred_val)
+
+        mean_val = np.mean(shape_values)
+        shape_values = [value - mean_val for value in shape_values]
+
+        return {
+            "feature_name": feature_name,
+            "x_values": x_range.tolist(),
+            "y_values": shape_values,
+            "feature_type": "numeric",
+        }
+
+    # ==================== Dataset analytics ====================
+
     def get_predictions_vs_actual(self) -> Dict[str, List[float]]:
         """Get predictions vs actual values for visualization."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
-        
+
         y_pred = self.model.predict(self.X_test)
         y_actual = self.y_test.values.flatten().tolist()
-        
         return {
-            "predicted": [float(p) for p in y_pred],
-            "actual": y_actual
+            "predicted": [float(value) for value in y_pred],
+            "actual": y_actual,
         }
-    
+
     def get_data_summary(self) -> Dict[str, Any]:
-        """Get summary statistics of the dataset."""
+        """Get summary statistics for the loaded dataset."""
         if self.df is None:
-            self.load_data()
-        
+            raise ValueError("Data not loaded yet")
+
+        target_values = pd.to_numeric(self.df[self.target_column], errors="coerce")
         return {
             "total_records": len(self.df),
             "features": self.feature_names,
             "numeric_features": self.num_features,
             "categorical_features": self.cat_features,
+            "target_column": self.target_column,
             "target_stats": {
-                "mean": float(self.df["cnt"].mean()),
-                "std": float(self.df["cnt"].std()),
-                "min": float(self.df["cnt"].min()),
-                "max": float(self.df["cnt"].max()),
-            }
+                "mean": float(target_values.mean()),
+                "std": float(target_values.std()),
+                "min": float(target_values.min()),
+                "max": float(target_values.max()),
+            },
         }
-    
+
     def get_feature_distributions(self) -> Dict[str, Any]:
         """Get feature distributions for visualization."""
         if self.X_train is None:
-            self.load_data()
-        
-        distributions = {}
-        
+            raise ValueError("Data not loaded yet")
+
+        distributions: Dict[str, Any] = {}
         for feature in self.num_features:
-            values = self.X_train[feature].values.tolist()
+            values = pd.to_numeric(self.X_train[feature], errors="coerce").dropna().tolist()
             distributions[feature] = {
                 "type": "numeric",
-                "values": values[:1000],  # Limit for performance
-                "mean": float(np.mean(values)),
-                "std": float(np.std(values)),
+                "values": values[:1000],
+                "mean": float(np.mean(values)) if values else 0.0,
+                "std": float(np.std(values)) if values else 0.0,
             }
-        
+
         for feature in self.cat_features:
-            value_counts = self.X_train[feature].value_counts().to_dict()
+            value_counts = self.X_train[feature].astype(str).value_counts().to_dict()
             distributions[feature] = {
                 "type": "categorical",
-                "counts": {str(k): int(v) for k, v in value_counts.items()}
+                "counts": {str(key): int(value) for key, value in value_counts.items()},
             }
-        
+
         return distributions
-    
+
     def get_hourly_pattern(self) -> Dict[str, Any]:
-        """Get hourly bike rental pattern."""
+        """Get hourly target pattern when standard bike columns exist."""
         if self.df is None:
-            self.load_data()
-        
-        hourly_avg = self.df.groupby("hr")["cnt"].mean()
-        
+            raise ValueError("Data not loaded yet")
+
+        if "hr" not in self.df.columns or self.target_column not in self.df.columns:
+            return {
+                "available": False,
+                "hours": [],
+                "avg_rentals": [],
+                "message": "Hourly pattern is not available for this dataset.",
+            }
+
+        hourly_avg = self.df.groupby("hr")[self.target_column].mean()
         return {
+            "available": True,
             "hours": hourly_avg.index.tolist(),
-            "avg_rentals": hourly_avg.values.tolist()
+            "avg_rentals": hourly_avg.values.tolist(),
         }
-    
+
+    # ==================== Interactive edits ====================
+
     def update_shape_functions(self, edited_shape_functions: List[Dict[str, Any]]) -> None:
         """Update shape function offsets based on user edits."""
         self.shape_function_offsets = {}
-        
+
         for edited_sf in edited_shape_functions:
             feature_name = edited_sf["feature_name"]
             feature_type = edited_sf["feature_type"]
             edited_points = edited_sf["edited_points"]
-            
+
             if feature_name not in self.original_shape_functions:
                 continue
-            
+
             original = self.original_shape_functions[feature_name]
             original_x = original["x_values"]
             original_y = original["y_values"]
-            
-            # Create offset mapping for this feature
             self.shape_function_offsets[feature_name] = {}
-            
+
             for edited_point in edited_points:
                 x_val = edited_point["x_value"]
                 new_y = edited_point["y_value"]
-                
-                # Find the closest original x value and its y value
+
                 if feature_type == "categorical":
-                    # For categorical, match by string value
                     x_str = str(x_val)
                     if x_str in original_x:
                         idx = original_x.index(x_str)
@@ -408,232 +680,224 @@ class MLService:
                         offset = new_y - original_y_val
                         self.shape_function_offsets[feature_name][x_str] = offset
                 else:
-                    # For numeric, find closest x value
-                    x_float = float(x_val)
-                    closest_idx = np.argmin(np.abs(np.array(original_x) - x_float))
-                    original_y_val = original_y[closest_idx]
-                    offset = new_y - original_y_val
-                    self.shape_function_offsets[feature_name][closest_idx] = offset
-
-    def convert_edits_for_storage(self, edited_shape_functions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Convert edited shape functions to a format suitable for database storage.
-        For numeric features, converts x_value to index and y_value to offset.
-        Preserves the weight for weighted averaging.
-        """
-        result = []
-        
-        for edited_sf in edited_shape_functions:
-            feature_name = edited_sf["feature_name"]
-            feature_type = edited_sf["feature_type"]
-            edited_points = edited_sf["edited_points"]
-            
-            if feature_name not in self.original_shape_functions:
-                continue
-            
-            original = self.original_shape_functions[feature_name]
-            original_x = original["x_values"]
-            original_y = original["y_values"]
-            
-            converted_points = []
-            for edited_point in edited_points:
-                x_val = edited_point["x_value"]
-                new_y = edited_point["y_value"]
-                weight = edited_point.get("weight", 0.5)  # Default to 0.5 if not provided
-                message = edited_point.get("message", "")  # Preserve commit message
-                
-                if feature_type == "categorical":
-                    x_str = str(x_val)
-                    if x_str in original_x:
-                        idx = original_x.index(x_str)
-                        original_y_val = original_y[idx]
-                        offset = new_y - original_y_val
-                        converted_points.append({
-                            "x_value": x_str,  # Keep as string for categorical
-                            "y_value": offset,  # Store as offset
-                            "weight": weight,   # Preserve weight
-                            "message": message  # Preserve commit message
-                        })
-                else:
                     x_float = float(x_val)
                     closest_idx = int(np.argmin(np.abs(np.array(original_x) - x_float)))
                     original_y_val = original_y[closest_idx]
                     offset = new_y - original_y_val
-                    converted_points.append({
-                        "x_value": closest_idx,  # Store as index for numeric
-                        "y_value": offset,       # Store as offset
-                        "weight": weight,        # Preserve weight
-                        "message": message       # Preserve commit message
-                    })
-            
-            if converted_points:
-                result.append({
-                    "feature_name": feature_name,
-                    "feature_type": feature_type,
-                    "edited_points": converted_points
-                })
-        
-        return result
+                    self.shape_function_offsets[feature_name][closest_idx] = offset
 
-    def convert_storage_to_display_format(self, storage_edits: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def convert_edits_for_storage(
+        self,
+        edited_shape_functions: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
         """
-        Convert stored edits (with indices and offsets) back to display format
-        (with actual x_values and full y_values) for the frontend.
+        Convert edited shape functions to storage format.
+
+        Numeric features: x_value -> index, y_value -> offset.
+        Categorical features: x_value string, y_value -> offset.
         """
         result = []
-        
+        for edited_sf in edited_shape_functions:
+            feature_name = edited_sf["feature_name"]
+            feature_type = edited_sf["feature_type"]
+            edited_points = edited_sf["edited_points"]
+
+            if feature_name not in self.original_shape_functions:
+                continue
+
+            original = self.original_shape_functions[feature_name]
+            original_x = original["x_values"]
+            original_y = original["y_values"]
+
+            converted_points = []
+            for edited_point in edited_points:
+                x_val = edited_point["x_value"]
+                new_y = edited_point["y_value"]
+                weight = edited_point.get("weight", 0.5)
+                message = edited_point.get("message", "")
+
+                if feature_type == "categorical":
+                    x_str = str(x_val)
+                    if x_str in original_x:
+                        idx = original_x.index(x_str)
+                        offset = new_y - original_y[idx]
+                        converted_points.append(
+                            {
+                                "x_value": x_str,
+                                "y_value": offset,
+                                "weight": weight,
+                                "message": message,
+                            }
+                        )
+                else:
+                    x_float = float(x_val)
+                    closest_idx = int(np.argmin(np.abs(np.array(original_x) - x_float)))
+                    offset = new_y - original_y[closest_idx]
+                    converted_points.append(
+                        {
+                            "x_value": closest_idx,
+                            "y_value": offset,
+                            "weight": weight,
+                            "message": message,
+                        }
+                    )
+
+            if converted_points:
+                result.append(
+                    {
+                        "feature_name": feature_name,
+                        "feature_type": feature_type,
+                        "edited_points": converted_points,
+                    }
+                )
+        return result
+
+    def convert_storage_to_display_format(
+        self,
+        storage_edits: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Convert stored edits back to display format for frontend rendering."""
+        result = []
         for stored_sf in storage_edits:
             feature_name = stored_sf["feature_name"]
             feature_type = stored_sf["feature_type"]
             stored_points = stored_sf.get("edited_points", [])
-            
+
             if feature_name not in self.original_shape_functions:
                 continue
-            
+
             original = self.original_shape_functions[feature_name]
             original_x = original["x_values"]
             original_y = original["y_values"]
-            
+
             display_points = []
             for stored_point in stored_points:
                 x_val = stored_point["x_value"]
-                offset = stored_point["y_value"]  # This is the offset
-                
+                offset = stored_point["y_value"]
+
                 if feature_type == "categorical":
-                    # For categorical, x_val is the category string
                     x_str = str(x_val)
                     if x_str in original_x:
                         idx = original_x.index(x_str)
-                        original_y_val = original_y[idx]
-                        display_points.append({
-                            "x_value": x_str,
-                            "y_value": original_y_val + offset  # Convert offset to full y value
-                        })
+                        display_points.append(
+                            {
+                                "x_value": x_str,
+                                "y_value": original_y[idx] + offset,
+                            }
+                        )
                 else:
-                    # For numeric, x_val is the index
                     try:
                         idx = int(x_val)
                         if 0 <= idx < len(original_x):
-                            actual_x = original_x[idx]
-                            original_y_val = original_y[idx]
-                            display_points.append({
-                                "x_value": actual_x,  # Convert index to actual x value
-                                "y_value": original_y_val + offset  # Convert offset to full y value
-                            })
+                            display_points.append(
+                                {
+                                    "x_value": original_x[idx],
+                                    "y_value": original_y[idx] + offset,
+                                }
+                            )
                     except (ValueError, IndexError):
                         continue
-            
+
             if display_points:
-                result.append({
-                    "feature_name": feature_name,
-                    "feature_type": feature_type,
-                    "edited_points": display_points
-                })
-        
+                result.append(
+                    {
+                        "feature_name": feature_name,
+                        "feature_type": feature_type,
+                        "edited_points": display_points,
+                    }
+                )
         return result
-    
+
     def _get_offset_for_value(self, feature_name: str, value: Any) -> float:
-        """Get the offset to apply for a given feature value."""
+        """Get interpolated offset for a feature value."""
         if feature_name not in self.shape_function_offsets:
             return 0.0
-        
+
         offsets = self.shape_function_offsets[feature_name]
-        
         if feature_name in self.cat_features:
-            # Categorical: direct lookup
             return offsets.get(str(value), 0.0)
-        else:
-            # Numeric: interpolate between edited points
-            if not offsets:
-                return 0.0
-            
-            original = self.original_shape_functions.get(feature_name, {})
-            original_x = original.get("x_values", [])
-            
-            if not original_x:
-                return 0.0
-            
-            # Find where this value falls in the original x range
-            value_float = float(value)
-            
-            # If we have offsets, interpolate
-            # Ensure keys are integers (indices)
-            try:
-                indices = sorted([int(k) if isinstance(k, str) else k for k in offsets.keys()])
-                offset_values = [offsets.get(i, offsets.get(str(i), 0.0)) for i in indices]
-                x_positions = [original_x[i] for i in indices]
-            except (ValueError, IndexError, TypeError) as e:
-                print(f"Error processing offsets for {feature_name}: {e}")
-                return 0.0
-            
-            if len(indices) == 1:
-                return offset_values[0]
-            
-            # Linear interpolation
-            if value_float <= x_positions[0]:
-                return offset_values[0]
-            if value_float >= x_positions[-1]:
-                return offset_values[-1]
-            
-            # Find bracketing points
-            for i in range(len(x_positions) - 1):
-                if x_positions[i] <= value_float <= x_positions[i + 1]:
-                    # Linear interpolation
-                    t = (value_float - x_positions[i]) / (x_positions[i + 1] - x_positions[i])
-                    return offset_values[i] + t * (offset_values[i + 1] - offset_values[i])
-            
+
+        if not offsets:
             return 0.0
-    
+
+        original = self.original_shape_functions.get(feature_name, {})
+        original_x = original.get("x_values", [])
+        if not original_x:
+            return 0.0
+
+        try:
+            indices = sorted(
+                [int(key) if isinstance(key, str) else int(key) for key in offsets.keys()]
+            )
+            offset_values = [offsets.get(idx, offsets.get(str(idx), 0.0)) for idx in indices]
+            x_positions = [float(original_x[idx]) for idx in indices]
+        except (ValueError, IndexError, TypeError):
+            return 0.0
+
+        if len(indices) == 1:
+            return float(offset_values[0])
+
+        value_float = float(value)
+        if value_float <= x_positions[0]:
+            return float(offset_values[0])
+        if value_float >= x_positions[-1]:
+            return float(offset_values[-1])
+
+        for idx in range(len(x_positions) - 1):
+            left_x = x_positions[idx]
+            right_x = x_positions[idx + 1]
+            if left_x <= value_float <= right_x:
+                span = right_x - left_x
+                if span == 0:
+                    return float(offset_values[idx])
+                t_val = (value_float - left_x) / span
+                return float(
+                    offset_values[idx] + t_val * (offset_values[idx + 1] - offset_values[idx])
+                )
+
+        return 0.0
+
     def predict_interactive(self, X: pd.DataFrame) -> np.ndarray:
         """Make predictions with interactive shape function modifications."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
-        
-        # Get base predictions
+
         base_predictions = self.model.predict(X)
-        
-        # Apply offsets based on feature values
         offsets = np.zeros(len(X))
-        
+
         for feature_name in self.shape_function_offsets:
             if feature_name in X.columns:
-                for i, value in enumerate(X[feature_name].values):
-                    offsets[i] += self._get_offset_for_value(feature_name, value)
-        
+                for idx, value in enumerate(X[feature_name].values):
+                    offsets[idx] += self._get_offset_for_value(feature_name, value)
+
         return base_predictions + offsets
-    
+
     def get_predictions_comparison(self) -> Dict[str, Any]:
         """Get comparison between original and interactive predictions."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
-        
-        # Original predictions
+
         y_pred_original = self.model.predict(self.X_test)
-        
-        # Interactive predictions (with offsets)
         y_pred_interactive = self.predict_interactive(self.X_test)
-        
         y_actual = self.y_test.values.flatten()
-        
-        # Calculate metrics
+
         original_rmse = root_mean_squared_error(y_actual, y_pred_original)
         original_mae = mean_absolute_error(y_actual, y_pred_original)
-        
         interactive_rmse = root_mean_squared_error(y_actual, y_pred_interactive)
         interactive_mae = mean_absolute_error(y_actual, y_pred_interactive)
-        
+
         return {
-            "original_predictions": [float(p) for p in y_pred_original],
-            "interactive_predictions": [float(p) for p in y_pred_interactive],
-            "actual_values": y_actual.tolist(),
+            "original_predictions": [float(value) for value in y_pred_original],
+            "interactive_predictions": [float(value) for value in y_pred_interactive],
+            "actual_values": [float(value) for value in y_actual],
             "metrics": {
                 "original_rmse": float(original_rmse),
                 "original_mae": float(original_mae),
                 "interactive_rmse": float(interactive_rmse),
                 "interactive_mae": float(interactive_mae),
-            }
+            },
         }
 
 
-# Global service instance
+# Create singleton instance
 ml_service = MLService()
