@@ -18,7 +18,7 @@ jobs:
     permissions:
       contents: read #This is required for actions/checkout
     env:
-      VITE_API_BASE_URL: https://GAMWeaverBackend.azurewebsites.net/api
+      VITE_API_BASE_URL: https://gamweaverbackend-fdhjgmctbybec5db.swedencentral-01.azurewebsites.net/api
       VITE_BASE_PATH: /
       VITE_ALLOW_DESTRUCTIVE_ACTIONS: 'false'
 
