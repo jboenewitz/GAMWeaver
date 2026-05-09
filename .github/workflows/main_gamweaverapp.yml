@@ -60,5 +60,4 @@ jobs:
           app-name: 'GAMWeaverApp'
           slot-name: 'Production'
           package: .
-          startup-command: 'node server.js'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_7824528E65E6463A9C7A5F62F2A88F73 }}

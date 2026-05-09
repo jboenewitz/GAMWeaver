@@ -72,5 +72,4 @@ jobs:
           app-name: 'GAMWeaverBackend'
           slot-name: 'Production'
           package: .
-          startup-command: 'bash backend/startup.sh'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_3A77B74140A94E5E9ED727B32D288211 }}
