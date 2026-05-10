@@ -59,7 +59,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+    <div className="card mb-6">
       <h3 className="text-lg font-semibold text-gray-800 mb-2">
         Predict with Combined Edits
       </h3>
@@ -70,19 +70,19 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
       </p>
 
       {!modelTrained && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-700 text-sm">
           Please train the model first before making predictions.
         </div>
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
           {error}
         </div>
       )}
 
       {(!featureSchema || featureSchema.length === 0) && (
-        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 text-sm">
           No feature schema available. Ask the superadmin to load a dataset.
         </div>
       )}
@@ -98,7 +98,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
                 <select
                   value={formData[feature.name] ?? ""}
                   onChange={(e) => handleChange(feature, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  className="select-field text-sm"
                 >
                   {(feature.categorical_options || []).map((option) => (
                     <option key={option} value={option}>
@@ -111,7 +111,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
                   type="number"
                   value={formData[feature.name] ?? ""}
                   onChange={(e) => handleChange(feature, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  className="input-field text-sm"
                   min={Number.isFinite(feature.min_value) ? feature.min_value : undefined}
                   max={Number.isFinite(feature.max_value) ? feature.max_value : undefined}
                   step="0.01"
@@ -124,7 +124,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
         <button
           type="submit"
           disabled={!modelTrained || loading || !featureSchema?.length}
-          className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          className="w-full px-4 py-2 btn-primary disabled:opacity-50 disabled:cursor-not-allowed font-medium"
         >
           {loading
             ? "Predicting..."
@@ -133,7 +133,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
       </form>
 
       {prediction !== null && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
+        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
           <div className="text-center">
             <div className="text-sm text-gray-600">
               Predicted {targetColumn || "Target"} (Combined Edits)
@@ -364,7 +364,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="card">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
             Original Model
           </h3>
@@ -384,7 +384,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
+        <div className="card">
           <h3 className="text-lg font-semibold text-gray-800 mb-4">
             Combined User Edits
           </h3>
@@ -444,7 +444,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     const maxVal = Math.max(...allValues);
 
     return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+      <div className="card mb-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           Predicted vs Original (Scatter Plot)
         </h3>
@@ -486,6 +486,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             yaxis: { title: "Predicted Bike Rentals" },
             legend: { orientation: "h", y: -0.2 },
             hovermode: "closest",
+            paper_bgcolor: "rgba(255,255,255,0)",
+            plot_bgcolor: "rgba(246,251,255,0.5)",
           }}
           config={{ responsive: true }}
           style={{ width: "100%" }}
@@ -501,7 +503,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const renderCombinedShapeFunctions = () => {
     if (!comparisonData?.combined_shape_functions_display?.length) {
       return (
-        <div className="bg-white rounded-xl shadow-md p-6 text-center text-gray-500">
+        <div className="card text-center text-gray-500">
           No shape function data available.
         </div>
       );
@@ -537,7 +539,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       : [];
 
     return (
-      <div className="bg-white rounded-xl shadow-md p-6">
+      <div className="card">
         {/* Section header with toggle buttons */}
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-gray-800">
@@ -547,7 +549,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             <button
               onClick={handleWeightingToggle}
               disabled={loadingOverlay}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 ${
                 useWeighting
                   ? "bg-amber-500 text-white hover:bg-amber-600"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -563,7 +565,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             <button
               onClick={handleOverlayToggle}
               disabled={loadingOverlay}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 ${
                 showUserOverlay
                   ? "bg-indigo-600 text-white hover:bg-indigo-700"
                   : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -580,7 +582,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
         {/* Horizontal color legend — visible when overlay is active */}
         {showUserOverlay && !loadingOverlay && (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs">
             <span className="font-semibold text-gray-500 shrink-0">
               Legend:
             </span>
@@ -622,7 +624,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
         )}
 
         {!hasEdits && (
-          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg">
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl">
             No user edits have been made yet. The charts below show the original
             shape functions.
           </div>
@@ -751,7 +753,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             return (
               <div
                 key={idx}
-                className={`border rounded-lg p-4 ${
+                className={`border rounded-xl p-4 ${
                   hasChanges
                     ? "border-green-300 bg-green-50"
                     : "border-gray-200"
@@ -790,9 +792,12 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                         y: 1,
                         yanchor: "top",
                         font: { size: 9 },
+                        bgcolor: "rgba(255,255,255,0.58)",
                       },
                       showlegend: !showUserOverlay,
                       barmode: "group",
+                      paper_bgcolor: "rgba(255,255,255,0)",
+                      plot_bgcolor: "rgba(246,251,255,0.5)",
                     }}
                     config={{ responsive: true, displayModeBar: false }}
                     style={{ width: "100%" }}
@@ -819,7 +824,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     };
 
     return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+      <div className="card mb-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit Logs</h3>
         <p className="text-sm text-gray-500 mb-4">
           Detailed log of all user edits, grouped by feature. Shows who edited,
@@ -834,7 +839,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             ];
 
             return (
-              <div key={idx} className="border rounded-lg overflow-hidden">
+              <div key={idx} className="border rounded-xl overflow-hidden">
                 {/* Feature Header - Clickable */}
                 <button
                   onClick={() => toggleFeature(feature.feature_name)}
@@ -991,7 +996,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
   const renderUsersList = () => {
     return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
+      <div className="card mb-6">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           Participating Users ({users.length})
         </h3>
@@ -1014,15 +1019,15 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="glass-root min-h-screen">
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="glass-toolbar">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <button
                 onClick={onBack}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
               >
                 <svg
                   className="w-6 h-6 text-gray-600"
@@ -1047,14 +1052,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <button
                 onClick={fetchData}
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50"
               >
                 Refresh
               </button>
               {allowDestructiveActions && (
                 <button
                   onClick={() => setShowResetConfirm(true)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
                 >
                   Reset Database
                 </button>
@@ -1068,7 +1073,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       <main className="container mx-auto px-4 py-8">
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-xl">
             {error}
           </div>
         )}
@@ -1102,7 +1107,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
         ) : (
           <>
             {/* Summary Card */}
-            <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-md p-6 mb-6 text-white">
+            <div className="rounded-2xl border border-white/40 bg-gradient-to-r from-primary-500/85 to-primary-600/75 shadow-xl p-6 mb-6 text-white backdrop-blur-xl">
               <h2 className="text-2xl font-bold mb-2">
                 Combined Analysis from{" "}
                 {comparisonData?.total_users_with_edits || 0} Users
@@ -1143,8 +1148,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
       {/* Reset Confirmation Modal */}
       {showResetConfirm && allowDestructiveActions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="glass-overlay fixed inset-0 flex items-center justify-center z-50">
+          <div className="glass-modal rounded-2xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold text-gray-800 mb-4">
               Reset Database?
             </h3>
@@ -1156,14 +1161,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <button
                 onClick={() => setShowResetConfirm(false)}
                 disabled={resetting}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleResetDatabase}
                 disabled={resetting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+                className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
               >
                 {resetting ? (
                   <>
@@ -1199,8 +1204,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
       {/* Delete Edit Modal */}
       {showDeleteModal && editToDelete && allowDestructiveActions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
+        <div className="glass-overlay fixed inset-0 flex items-center justify-center z-50">
+          <div className="glass-modal rounded-2xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold text-gray-800 mb-2">
               Delete Edit
             </h3>
@@ -1232,7 +1237,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               }}
               placeholder="Provide a reason for removing this edit..."
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
             />
             {deleteError && (
               <p className="text-red-600 text-xs mt-1">{deleteError}</p>
@@ -1241,14 +1246,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <button
                 onClick={handleCancelDelete}
                 disabled={deleting}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors text-sm"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteEdit}
                 disabled={deleting || !deleteReason.trim()}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center text-sm"
+                className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center text-sm"
               >
                 {deleting ? (
                   <>

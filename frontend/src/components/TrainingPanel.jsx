@@ -141,7 +141,7 @@ const TrainingPanel = ({
       <h3 className="text-lg font-semibold text-gray-700 mb-4">Model Training</h3>
 
       <div className="space-y-4">
-        <div className="border border-gray-200 rounded-lg p-4">
+        <div className="border border-gray-200 rounded-xl p-4 bg-white/40">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-medium">
@@ -173,7 +173,7 @@ const TrainingPanel = ({
           )}
         </div>
 
-        <div className="border border-gray-200 rounded-lg p-4">
+        <div className="border border-gray-200 rounded-xl p-4 bg-white/40">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center text-sm font-medium">
@@ -256,8 +256,8 @@ const TrainingPanel = ({
       </div>
 
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl">
+        <div className="glass-overlay fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="glass-modal rounded-2xl w-full max-w-xl">
             <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
               <h4 className="text-lg font-semibold text-gray-800">Upload Dataset</h4>
               <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
@@ -284,7 +284,7 @@ const TrainingPanel = ({
                     setTargetColumn("");
                     setModalError(null);
                   }}
-                  className="block w-full text-sm text-gray-700 file:mr-4 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                  className="block w-full text-sm text-gray-700 file:mr-4 file:px-4 file:py-2 file:rounded-xl file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                 />
               </div>
 
@@ -297,7 +297,7 @@ const TrainingPanel = ({
               </button>
 
               {uploadPreview && (
-                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
                   <div className="text-sm text-gray-700">
                     <span className="font-medium">Columns detected:</span> {uploadPreview.columns.length}
                   </div>
@@ -335,7 +335,7 @@ const TrainingPanel = ({
                         </button>
                       </div>
                     </div>
-                    <div className="max-h-40 overflow-y-auto rounded border border-gray-200 bg-white p-2 space-y-1">
+                    <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 space-y-1">
                       {uploadPreview.columns.map((column) => {
                         const isTarget = column === targetColumn;
                         const checked =
@@ -343,7 +343,7 @@ const TrainingPanel = ({
                         return (
                           <label
                             key={column}
-                            className={`flex items-center justify-between gap-2 px-2 py-1 rounded ${
+                            className={`flex items-center justify-between gap-2 px-2 py-1 rounded-lg ${
                               isTarget ? "bg-amber-50 text-amber-700" : "hover:bg-gray-50"
                             }`}
                           >
@@ -365,7 +365,7 @@ const TrainingPanel = ({
                       Selected features: {selectedFeatureColumns.length}
                     </p>
                   </div>
-                  <div className="max-h-28 overflow-y-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-600">
+                  <div className="max-h-28 overflow-y-auto rounded-xl border border-gray-200 bg-white p-2 text-xs text-gray-600">
                     {uploadPreview.columns.join(", ")}
                   </div>
                 </div>
@@ -376,7 +376,7 @@ const TrainingPanel = ({
               <button
                 onClick={closeModal}
                 disabled={uploading}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50"
               >
                 Cancel
               </button>
@@ -388,7 +388,7 @@ const TrainingPanel = ({
                   !selectedFeatureColumns.length ||
                   uploading
                 }
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {uploading ? "Loading..." : "Load Dataset"}
               </button>

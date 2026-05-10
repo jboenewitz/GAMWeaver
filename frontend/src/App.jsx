@@ -572,11 +572,11 @@ function App() {
 
   // Render main app
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="glass-root min-h-screen app-shell">
       <Header modelStatus={modelStatus} />
 
       {/* User Bar */}
-      <div className="bg-white border-b">
+      <div className="glass-toolbar border-b">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -596,7 +596,7 @@ function App() {
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setCurrentPage("combined")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-2 shadow-md"
               >
                 <svg
                   className="w-5 h-5"
@@ -616,14 +616,14 @@ function App() {
               {currentUser?.is_superadmin && (
                 <button
                   onClick={() => setCurrentPage("superadmin")}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md"
                 >
                   Superadmin
                 </button>
               )}
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
               >
                 Logout
               </button>
@@ -632,7 +632,7 @@ function App() {
         </div>
       </div>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 lg:py-10">
         {/* Error Alert */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center justify-between">
@@ -727,8 +727,8 @@ function App() {
 
       {/* Deletion Notification Popup */}
       {showNotificationPopup && deletionNotifications.length > 0 && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4">
+        <div className="glass-overlay fixed inset-0 flex items-center justify-center z-50">
+          <div className="glass-modal rounded-2xl p-6 max-w-lg w-full mx-4">
             <div className="flex items-center space-x-2 mb-4">
               <svg
                 className="w-6 h-6 text-amber-500"
@@ -783,7 +783,7 @@ function App() {
             <div className="flex justify-end">
               <button
                 onClick={handleDismissNotifications}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+                className="px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors text-sm"
               >
                 Got it
               </button>

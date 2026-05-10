@@ -70,10 +70,10 @@ function UserLogin({ onLogin, onRegister }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <div className="glass-root min-h-screen flex items-center justify-center p-4">
+      <div className="glass-modal rounded-2xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-white/65 rounded-full mb-4 border border-white/70 shadow-sm">
             <svg
               className="w-8 h-8 text-primary-600"
               fill="none"
@@ -88,7 +88,7 @@ function UserLogin({ onLogin, onRegister }) {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">
+            <h1 className="text-2xl font-bold text-gray-800 tracking-tight">
             Interactive GAM Editor
           </h1>
           <p className="text-sm text-gray-500 mt-1">
@@ -112,7 +112,7 @@ function UserLogin({ onLogin, onRegister }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Your username"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              className="input-field px-4 py-3"
               disabled={loading}
               autoFocus
             />
@@ -131,7 +131,7 @@ function UserLogin({ onLogin, onRegister }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Your password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              className="input-field px-4 py-3"
               disabled={loading}
             />
           </div>
@@ -151,7 +151,7 @@ function UserLogin({ onLogin, onRegister }) {
           <button
             type="submit"
             disabled={loading || !username.trim() || !password}
-            className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="w-full py-3 px-4 btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {loading ? (
               <>
@@ -191,7 +191,7 @@ function UserLogin({ onLogin, onRegister }) {
               <button
                 type="button"
                 onClick={() => setMode("register")}
-                className="text-primary-600 hover:underline"
+                className="text-primary-700 hover:underline font-medium"
               >
                 Register here
               </button>
@@ -203,7 +203,7 @@ function UserLogin({ onLogin, onRegister }) {
               <button
                 type="button"
                 onClick={() => setMode("login")}
-                className="text-primary-600 hover:underline"
+                className="text-primary-700 hover:underline font-medium"
               >
                 Sign in
               </button>

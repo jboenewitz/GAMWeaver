@@ -756,8 +756,8 @@ const EditableShapeFunctionChart = ({
     margin: enlarged
       ? { l: 70, r: 40, t: 50, b: 60 }
       : { l: 50, r: 20, t: 40, b: 50 },
-    paper_bgcolor: "white",
-    plot_bgcolor: isDragging ? "#fef2f2" : "white",
+    paper_bgcolor: "rgba(255,255,255,0)",
+    plot_bgcolor: isDragging ? "rgba(255, 233, 233, 0.55)" : "rgba(246, 251, 255, 0.5)",
     height: enlarged ? 520 : 280,
     dragmode: false,
     hovermode: "closest",
@@ -807,11 +807,11 @@ const EditableShapeFunctionChart = ({
       {/* Precise Value Entry Modal */}
       {preciseEntry && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
+          className="glass-overlay fixed inset-0 flex items-center justify-center z-50"
           onClick={() => setPreciseEntry(null)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl p-5 max-w-sm w-full mx-4"
+            className="glass-modal rounded-2xl p-5 max-w-sm w-full mx-4"
             onClick={(e) => e.stopPropagation()}
           >
             <h4 className="text-base font-semibold text-gray-800 mb-1">
@@ -968,8 +968,8 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
   const isValid = message.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
+    <div className="glass-overlay fixed inset-0 flex items-center justify-center z-50">
+      <div className="glass-modal rounded-2xl p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-2">
           Submit Edit for {featureName}
         </h3>
@@ -1128,11 +1128,11 @@ const FeatureEditCard = ({
       {/* Enlarged Chart Modal */}
       {isEnlarged && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-6"
+          className="glass-overlay fixed inset-0 flex items-center justify-center z-50 p-6"
           onClick={() => setIsEnlarged(false)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-auto"
+            className="glass-modal rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-auto"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal header */}

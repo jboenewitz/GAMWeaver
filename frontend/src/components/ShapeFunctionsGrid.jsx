@@ -48,8 +48,8 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
       tickfont: { size: 10 },
     },
     margin: { l: 50, r: 20, t: 40, b: 50 },
-    paper_bgcolor: "white",
-    plot_bgcolor: "white",
+    paper_bgcolor: "rgba(255,255,255,0)",
+    plot_bgcolor: "rgba(246,251,255,0.5)",
     height: 250,
   };
 
@@ -59,7 +59,7 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <Plot data={data} layout={layout} config={config} className="w-full" />
     </div>
   );

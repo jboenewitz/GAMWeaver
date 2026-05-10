@@ -44,25 +44,25 @@ const DataSummaryCard = ({ summary, loading }) => {
             Target Variable ({summary.target_column || "Target"})
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="bg-gray-50 rounded p-2">
+            <div className="bg-gray-50 rounded-lg p-2">
               <div className="text-gray-500">Mean</div>
               <div className="font-medium">
                 {summary.target_stats?.mean?.toFixed(1)}
               </div>
             </div>
-            <div className="bg-gray-50 rounded p-2">
+            <div className="bg-gray-50 rounded-lg p-2">
               <div className="text-gray-500">Std Dev</div>
               <div className="font-medium">
                 {summary.target_stats?.std?.toFixed(1)}
               </div>
             </div>
-            <div className="bg-gray-50 rounded p-2">
+            <div className="bg-gray-50 rounded-lg p-2">
               <div className="text-gray-500">Min</div>
               <div className="font-medium">
                 {summary.target_stats?.min?.toFixed(0)}
               </div>
             </div>
-            <div className="bg-gray-50 rounded p-2">
+            <div className="bg-gray-50 rounded-lg p-2">
               <div className="text-gray-500">Max</div>
               <div className="font-medium">
                 {summary.target_stats?.max?.toFixed(0)}

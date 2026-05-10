@@ -230,10 +230,10 @@ const PredictionComparisonChart = ({
     xaxis: { title: "Actual Bike Rentals", gridcolor: "#e5e7eb" },
     yaxis: { title: "Predicted Bike Rentals", gridcolor: "#e5e7eb" },
     margin: { l: 60, r: 30, t: 50, b: 50 },
-    paper_bgcolor: "white",
-    plot_bgcolor: "white",
+    paper_bgcolor: "rgba(255,255,255,0)",
+    plot_bgcolor: "rgba(246,251,255,0.55)",
     height: 350,
-    legend: { x: 0.02, y: 0.98, bgcolor: "rgba(255,255,255,0.9)" },
+    legend: { x: 0.02, y: 0.98, bgcolor: "rgba(255,255,255,0.62)" },
     hovermode: "closest",
   };
 
@@ -279,7 +279,7 @@ const PredictionComparisonChart = ({
               setDraftColors(colors);
               setShowColorPanel((v) => !v);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
             title="Customise chart colours"
           >
             <span className="flex gap-0.5 items-center">
@@ -292,7 +292,7 @@ const PredictionComparisonChart = ({
 
           {/* Colour picker dropdown */}
           {showColorPanel && (
-            <div className="absolute right-0 top-10 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64">
+            <div className="absolute right-0 top-10 z-50 glass-modal rounded-2xl p-4 w-64">
               <p className="text-sm font-semibold text-gray-700 mb-3">
                 Chart Colours
               </p>

@@ -81,8 +81,8 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm">
+    <div className="glass-root min-h-screen">
+      <header className="glass-toolbar">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -110,13 +110,13 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
           <div className="flex items-center gap-3">
             <button
               onClick={onOpenCombined}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              className="px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors shadow-md"
             >
               Open Combined Results
             </button>
             <button
               onClick={() => setShowCreateForm((prev) => !prev)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
+              className="px-4 py-2 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors flex items-center gap-2 shadow-md"
             >
               <span className="text-lg">+</span>
               <span>Create User</span>
@@ -132,18 +132,18 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
           </div>
         )}
 
-        <section className="bg-white rounded-xl shadow-md p-6">
+        <section className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Invite Link</h2>
             <button
               onClick={handleCreateInvite}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors shadow-md"
             >
               Generate Invite
             </button>
           </div>
           {inviteLink ? (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
               <div className="text-sm text-gray-600 mb-2">
                 Invite link copied to clipboard.
               </div>
@@ -164,7 +164,7 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
         </section>
 
         {showCreateForm && (
-          <section className="bg-white rounded-xl shadow-md p-6">
+          <section className="card">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">
               Create User
             </h2>
@@ -177,7 +177,7 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
                   type="text"
                   value={newUsername}
                   onChange={(e) => setNewUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input-field"
                 />
               </div>
               <div>
@@ -188,13 +188,13 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="input-field"
                 />
               </div>
               <button
                 type="submit"
                 disabled={creating}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 btn-primary disabled:opacity-50"
               >
                 {creating ? "Creating..." : "Create User"}
               </button>
@@ -202,7 +202,7 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
           </section>
         )}
 
-        <section className="bg-white rounded-xl shadow-md p-6">
+        <section className="card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800">
               Users ({users.length})
@@ -210,7 +210,7 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
             <button
               onClick={fetchUsers}
               disabled={loading}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-4 py-2 border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
             >
               Refresh
             </button>
@@ -224,7 +224,7 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
               {users.map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between border rounded-lg px-4 py-3"
+                  className="flex items-center justify-between border rounded-xl px-4 py-3 bg-white/45"
                 >
                   <div>
                     <div className="font-medium text-gray-800">{user.name}</div>

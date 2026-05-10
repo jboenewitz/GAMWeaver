@@ -65,13 +65,13 @@ const PredictionForm = ({
       </p>
 
       {!modelTrained && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-yellow-700 text-sm">
           Please train the model first before making predictions.
         </div>
       )}
 
       {!hasFeatures && (
-        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-600 text-sm">
           No feature schema available. Ask the superadmin to load a dataset.
         </div>
       )}
@@ -122,7 +122,7 @@ const PredictionForm = ({
       </form>
 
       {prediction !== null && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
+        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
           <div className="text-center">
             <div className="text-sm text-gray-600">Predicted {targetColumn || "Target"}</div>
             <div className="text-4xl font-bold text-primary-600 mt-1">
