@@ -1,5 +1,31 @@
 import React, { useMemo, useState } from "react";
 
+const formatAuthError = (err, fallback) => {
+  const detail = err?.response?.data?.detail;
+  const message = err?.response?.data?.message;
+
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const joined = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (typeof item?.msg === "string") return item.msg;
+        return "";
+      })
+      .filter(Boolean)
+      .join("; ");
+    if (joined) return joined;
+  }
+  if (typeof message === "string" && message.trim()) return message;
+  if (typeof err?.message === "string" && err.message === "Network Error") {
+    return "Unable to reach the server. Please try again.";
+  }
+  if (typeof err?.message === "string" && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
+};
+
 function UserLogin({ onLogin, onRegister }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -35,7 +61,9 @@ function UserLogin({ onLogin, onRegister }) {
         await onRegister(username.trim(), password, inviteToken);
       }
     } catch (err) {
-      setError(err.message || "Failed to login");
+      const fallback =
+        mode === "login" ? "Failed to login" : "Failed to register";
+      setError(formatAuthError(err, fallback));
     } finally {
       setLoading(false);
     }
