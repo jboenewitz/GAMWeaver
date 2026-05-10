@@ -129,8 +129,11 @@ For production deployment:
 ```bash
 cd backend
 pip install gunicorn
-gunicorn app.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
+gunicorn app.main:app -w 1 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8000
 ```
+
+Use a single backend worker unless model/data state is externalized, because the
+current ML runtime state is kept in-process.
 
 ### Frontend
 

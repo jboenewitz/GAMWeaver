@@ -12,6 +12,9 @@ Backend startup command is defined in:
 
 - `backend/startup.sh`
 
+The startup script defaults to one Gunicorn worker (`GUNICORN_WORKERS=1`) so all
+users share the same in-memory loaded dataset/trained model state.
+
 Build locally:
 
 ```bash

@@ -6,8 +6,10 @@ cd "$SCRIPT_DIR"
 
 export PORT="${PORT:-${WEBSITES_PORT:-8000}}"
 
+# ML service state is process-local; keep one worker by default so all users
+# share the same loaded dataset/trained model state.
 exec gunicorn app.main:app \
   -k uvicorn.workers.UvicornWorker \
   -b "0.0.0.0:${PORT}" \
-  --workers 2 \
+  --workers "${GUNICORN_WORKERS:-1}" \
   --timeout 120
