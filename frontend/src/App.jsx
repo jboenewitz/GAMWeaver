@@ -574,31 +574,34 @@ function App() {
 
   // Render main app
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app-ambient-bg relative min-h-screen overflow-hidden">
+      <div className="pointer-events-none absolute -top-20 left-8 h-64 w-64 rounded-full bg-primary-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute top-64 right-0 h-72 w-72 rounded-full bg-cyan-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-20 left-1/3 h-72 w-72 rounded-full bg-sky-200/25 blur-3xl" />
       <Header modelStatus={modelStatus} />
 
       {/* User Bar */}
-      <div className="bg-white border-b">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
+      <div className="relative z-10 pt-2">
+        <div className="container mx-auto px-4">
+          <div className="glass-surface-strong flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-5">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100">
                 <span className="text-primary-600 font-medium text-sm">
                   {currentUser?.name?.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div>
-                <span className="text-sm text-gray-600">Logged in as </span>
-                <span className="font-medium text-gray-800">
+                <span className="text-sm text-slate-600">Logged in as </span>
+                <span className="font-medium text-slate-800">
                   {currentUser?.name}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 onClick={() => setCurrentPage("combined")}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
+                className="flex items-center space-x-2 rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-white shadow-lg shadow-emerald-800/20 transition-all hover:from-emerald-500 hover:to-cyan-500"
               >
                 <svg
                   className="w-5 h-5"
@@ -618,14 +621,14 @@ function App() {
               {currentUser?.is_superadmin && (
                 <button
                   onClick={() => setCurrentPage("superadmin")}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="rounded-lg bg-indigo-600 px-4 py-2 text-white transition-colors hover:bg-indigo-700"
                 >
                   Superadmin
                 </button>
               )}
               <button
                 onClick={handleLogout}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className="rounded-lg border border-slate-300 bg-white/70 px-4 py-2 text-slate-700 transition-colors hover:bg-white"
               >
                 Logout
               </button>
@@ -634,10 +637,10 @@ function App() {
         </div>
       </div>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="relative z-10 container mx-auto px-4 py-8">
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center justify-between">
+          <div className="mb-6 flex items-center justify-between rounded-xl border border-red-200/80 bg-red-50/90 p-4 text-red-700 shadow-md">
             <span>{error}</span>
             <button
               onClick={() => setError(null)}
@@ -713,7 +716,7 @@ function App() {
         </div>
 
         {/* Footer */}
-        <footer className="mt-12 text-center text-gray-500 text-sm">
+        <footer className="glass-surface mt-12 px-4 py-5 text-center text-sm text-slate-600">
           <p>
             GAMWeaver - Interactive GAM Editor for interactive modeling and
             explainability. Developed by{" Johann Boenewitz"} as part of a
@@ -733,8 +736,8 @@ function App() {
 
       {/* Deletion Notification Popup */}
       {showNotificationPopup && deletionNotifications.length > 0 && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="glass-surface-strong mx-4 w-full max-w-lg p-6">
             <div className="flex items-center space-x-2 mb-4">
               <svg
                 className="w-6 h-6 text-amber-500"
@@ -749,11 +752,11 @@ function App() {
                   d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                 />
               </svg>
-              <h3 className="text-lg font-bold text-gray-800">
+              <h3 className="text-lg font-bold text-slate-800">
                 Edit{deletionNotifications.length > 1 ? "s" : ""} Removed
               </h3>
             </div>
-            <p className="text-gray-600 mb-4 text-sm">
+            <p className="mb-4 text-sm text-slate-600">
               {deletionNotifications.length === 1
                 ? "One of your edits was removed by another user:"
                 : `${deletionNotifications.length} of your edits were removed by other users:`}
@@ -762,7 +765,7 @@ function App() {
               {deletionNotifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className="bg-amber-50 border border-amber-200 rounded-lg p-3"
+                  className="rounded-lg border border-amber-200 bg-amber-50/90 p-3"
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-gray-700">

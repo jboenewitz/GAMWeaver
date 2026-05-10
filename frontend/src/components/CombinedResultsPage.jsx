@@ -17,6 +17,9 @@ const buildInitialFormData = (featureSchema = []) => {
   return initial;
 };
 
+const GLASS_CARD_CLASS = "glass-surface-strong p-6 mb-6";
+const GLASS_INSET_CLASS = "rounded-xl border border-slate-200/80 bg-white/85";
+
 const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) => {
   const [formData, setFormData] = useState({});
   const [prediction, setPrediction] = useState(null);
@@ -59,30 +62,30 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-2">
+    <div className={GLASS_CARD_CLASS}>
+      <h3 className="mb-2 text-lg font-semibold text-slate-800">
         Predict with Combined Edits
       </h3>
-      <p className="text-sm text-gray-500 mb-4">
+      <p className="mb-4 text-sm text-slate-600">
         Make a prediction using the model with all combined user edits applied.
         The result reflects the aggregated shape function modifications from all
         users.
       </p>
 
       {!modelTrained && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-800">
           Please train the model first before making predictions.
         </div>
       )}
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50/90 p-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
       {(!featureSchema || featureSchema.length === 0) && (
-        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
+        <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/90 p-3 text-sm text-slate-600">
           No feature schema available. Ask the superadmin to load a dataset.
         </div>
       )}
@@ -91,14 +94,14 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {(featureSchema || []).map((feature) => (
             <div key={feature.name}>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
                 {feature.name}
               </label>
               {feature.feature_type === "categorical" ? (
                 <select
                   value={formData[feature.name] ?? ""}
                   onChange={(e) => handleChange(feature, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
                 >
                   {(feature.categorical_options || []).map((option) => (
                     <option key={option} value={option}>
@@ -111,7 +114,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
                   type="number"
                   value={formData[feature.name] ?? ""}
                   onChange={(e) => handleChange(feature, e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-sm"
+                  className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
                   min={Number.isFinite(feature.min_value) ? feature.min_value : undefined}
                   max={Number.isFinite(feature.max_value) ? feature.max_value : undefined}
                   step="0.01"
@@ -124,7 +127,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
         <button
           type="submit"
           disabled={!modelTrained || loading || !featureSchema?.length}
-          className="w-full px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          className="w-full rounded-lg bg-gradient-to-r from-primary-600 to-cyan-600 px-4 py-2 font-medium text-white shadow-md shadow-primary-800/20 transition-all hover:from-primary-500 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading
             ? "Predicting..."
@@ -133,9 +136,9 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
       </form>
 
       {prediction !== null && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
+        <div className="mt-6 rounded-lg border border-emerald-200 bg-gradient-to-r from-emerald-50/95 to-sky-50/95 p-4">
           <div className="text-center">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-slate-600">
               Predicted {targetColumn || "Target"} (Combined Edits)
             </div>
             <div className="text-4xl font-bold text-primary-600 mt-1">
@@ -377,35 +380,35 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     ).toFixed(1);
 
     return (
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+      <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+        <div className={GLASS_CARD_CLASS}>
+          <h3 className="mb-4 text-lg font-semibold text-slate-800">
             Original Model
           </h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-600">RMSE:</span>
-              <span className="font-medium">
+              <span className="text-slate-600">RMSE:</span>
+              <span className="font-semibold text-slate-800">
                 {metrics.original_rmse.toFixed(4)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">MAE:</span>
-              <span className="font-medium">
+              <span className="text-slate-600">MAE:</span>
+              <span className="font-semibold text-slate-800">
                 {metrics.original_mae.toFixed(4)}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">
+        <div className={GLASS_CARD_CLASS}>
+          <h3 className="mb-4 text-lg font-semibold text-slate-800">
             Combined User Edits
           </h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-gray-600">RMSE:</span>
-              <span className="font-medium">
+              <span className="text-slate-600">RMSE:</span>
+              <span className="font-semibold text-slate-800">
                 {metrics.interactive_rmse.toFixed(4)}
               </span>
               <span
@@ -419,8 +422,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-600">MAE:</span>
-              <span className="font-medium">
+              <span className="text-slate-600">MAE:</span>
+              <span className="font-semibold text-slate-800">
                 {metrics.interactive_mae.toFixed(4)}
               </span>
               <span
@@ -458,8 +461,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     const maxVal = Math.max(...allValues);
 
     return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+      <div className={GLASS_CARD_CLASS}>
+        <h3 className="mb-4 text-lg font-semibold text-slate-800">
           Predicted vs Original (Scatter Plot)
         </h3>
         <Plot
@@ -504,7 +507,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
           config={{ responsive: true }}
           style={{ width: "100%" }}
         />
-        <p className="text-sm text-gray-500 mt-2 text-center">
+        <p className="mt-2 text-center text-sm text-slate-600">
           Points closer to the diagonal line indicate better predictions.
           Compare how the combined user edits affect prediction accuracy.
         </p>
@@ -515,7 +518,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const renderCombinedShapeFunctions = () => {
     if (!comparisonData?.combined_shape_functions_display?.length) {
       return (
-        <div className="bg-white rounded-xl shadow-md p-6 text-center text-gray-500">
+        <div className={`${GLASS_CARD_CLASS} text-center text-slate-500`}>
           No shape function data available.
         </div>
       );
@@ -551,10 +554,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       : [];
 
     return (
-      <div className="bg-white rounded-xl shadow-md p-6">
+      <div className={GLASS_CARD_CLASS}>
         {/* Section header with toggle buttons */}
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-800">
+          <h3 className="text-lg font-semibold text-slate-800">
             Shape Functions: Original vs Combined Edits
           </h3>
           <div className="flex items-center gap-2">
@@ -564,7 +567,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
                 useWeighting
                   ? "bg-amber-500 text-white hover:bg-amber-600"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
               title="Toggle whether the combined line uses confidence-weighted averaging or a simple mean"
             >
@@ -580,7 +583,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
                 showUserOverlay
                   ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
               {loadingOverlay && useWeighting
@@ -594,8 +597,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
         {/* Horizontal color legend — visible when overlay is active */}
         {showUserOverlay && !loadingOverlay && (
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs">
-            <span className="font-semibold text-gray-500 shrink-0">
+          <div className={`${GLASS_INSET_CLASS} mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2.5 text-xs`}>
+            <span className="shrink-0 font-semibold text-slate-500">
               Legend:
             </span>
             {userNames.map((name, i) => (
@@ -608,7 +611,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                     backgroundColor: USER_COLORS[i % USER_COLORS.length],
                   }}
                 />
-                <span className="text-gray-700">{name}</span>
+                <span className="text-slate-700">{name}</span>
               </div>
             ))}
             <div className="flex items-center gap-1.5 shrink-0">
@@ -623,14 +626,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                   strokeDasharray="4 2"
                 />
               </svg>
-              <span className="text-gray-500">Original</span>
+              <span className="text-slate-500">Original</span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <span
                 className="inline-block rounded-full"
                 style={{ width: 28, height: 3, backgroundColor: "#10b981" }}
               />
-              <span className="text-gray-500">Combined</span>
+              <span className="text-slate-500">Combined</span>
             </div>
           </div>
         )}
@@ -765,14 +768,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             return (
               <div
                 key={idx}
-                className={`border rounded-lg p-4 ${
+                className={`${GLASS_INSET_CLASS} p-4 ${
                   hasChanges
-                    ? "border-green-300 bg-green-50"
-                    : "border-gray-200"
+                    ? "border-emerald-300 bg-emerald-50/95"
+                    : ""
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-gray-700">
+                  <h4 className="font-medium text-slate-700">
                     {sf.feature_name}
                   </h4>
                   {hasChanges && (
@@ -823,7 +826,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const renderEditLogs = () => {
     if (editLogsError) {
       return (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 text-sm">
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/95 p-4 text-sm text-amber-800">
           Edit logs are temporarily unavailable: {editLogsError}
         </div>
       );
@@ -841,9 +844,9 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
     };
 
     return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit Logs</h3>
-        <p className="text-sm text-gray-500 mb-4">
+      <div className={GLASS_CARD_CLASS}>
+        <h3 className="mb-4 text-lg font-semibold text-slate-800">Edit Logs</h3>
+        <p className="mb-4 text-sm text-slate-600">
           Detailed log of all user edits, grouped by feature. Shows who edited,
           their self-reported confidence rating (1-10), raw input value, and the
           weighted result applied to the combined view.
@@ -856,17 +859,17 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
             ];
 
             return (
-              <div key={idx} className="border rounded-lg overflow-hidden">
+              <div key={idx} className={`${GLASS_INSET_CLASS} overflow-hidden`}>
                 {/* Feature Header - Clickable */}
                 <button
                   onClick={() => toggleFeature(feature.feature_name)}
-                  className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  className="flex w-full items-center justify-between bg-slate-50/80 p-4 text-left transition-colors hover:bg-slate-100/90"
                 >
                   <div>
-                    <h4 className="font-medium text-gray-700">
+                    <h4 className="font-medium text-slate-700">
                       {feature.feature_name}
                     </h4>
-                    <span className="text-sm text-gray-500">
+                    <span className="text-sm text-slate-500">
                       {feature.edits.length} edit
                       {feature.edits.length !== 1 ? "s" : ""} by{" "}
                       {uniqueUsers.length} user
@@ -874,7 +877,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                     </span>
                   </div>
                   <svg
-                    className={`w-5 h-5 text-gray-400 transform transition-transform ${
+                    className={`w-5 h-5 transform text-slate-400 transition-transform ${
                       isExpanded ? "rotate-180" : ""
                     }`}
                     fill="none"
@@ -892,10 +895,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
                 {/* Expanded Content */}
                 {isExpanded && (
-                  <div className="p-4 border-t">
+                  <div className="border-t border-slate-200/70 p-4">
                     {/* Table Header */}
                     <div
-                      className="grid gap-2 text-xs font-medium text-gray-500 uppercase mb-2 px-2"
+                      className="mb-2 grid gap-2 px-2 text-xs font-medium uppercase text-slate-500"
                       style={{
                         gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr 28px",
                       }}
@@ -914,15 +917,15 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                       {feature.edits.map((edit, editIdx) => (
                         <div
                           key={editIdx}
-                          className="group grid gap-2 text-sm py-2 px-2 bg-gray-50 rounded hover:bg-gray-100"
+                          className="group grid rounded bg-slate-50/90 px-2 py-2 text-sm hover:bg-slate-100"
                           style={{
                             gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr 28px",
                           }}
                         >
-                          <span className="font-medium text-gray-700 truncate">
+                          <span className="truncate font-medium text-slate-700">
                             {edit.user_name}
                           </span>
-                          <span className="font-mono text-gray-600">
+                          <span className="font-mono text-slate-600">
                             {typeof edit.x_value === "number"
                               ? edit.x_value.toFixed(2)
                               : edit.x_value}
@@ -961,7 +964,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                             {edit.weighted_result.toFixed(3)}
                           </span>
                           <span
-                            className="text-gray-600 text-xs break-words"
+                            className="break-words text-xs text-slate-600"
                             title={edit.message}
                           >
                             {edit.message || "-"}
@@ -978,8 +981,8 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                             }}
                             className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
                               allowDestructiveActions
-                                ? "text-gray-400 hover:text-red-600 hover:bg-red-50"
-                                : "text-gray-300 cursor-not-allowed"
+                                ? "text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                : "cursor-not-allowed text-slate-300"
                             }`}
                             title="Delete this edit"
                             disabled={!allowDestructiveActions}
@@ -1013,12 +1016,12 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
   const renderUsersList = () => {
     return (
-      <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-800 mb-4">
+      <div className={GLASS_CARD_CLASS}>
+        <h3 className="mb-4 text-lg font-semibold text-slate-800">
           Participating Users ({users.length})
         </h3>
         {users.length === 0 ? (
-          <p className="text-gray-500">No users yet.</p>
+          <p className="text-slate-500">No users yet.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {users.map((user) => (
@@ -1036,18 +1039,20 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="app-ambient-bg relative min-h-screen overflow-hidden">
+      <div className="pointer-events-none absolute -left-16 top-20 h-72 w-72 rounded-full bg-primary-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-72 h-80 w-80 rounded-full bg-cyan-200/30 blur-3xl" />
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+      <header className="relative z-10 pt-5">
+        <div className="container mx-auto px-4">
+          <div className="glass-surface-strong flex items-center justify-between px-4 py-4 sm:px-6">
             <div className="flex items-center space-x-4">
               <button
                 onClick={onBack}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-slate-100"
               >
                 <svg
-                  className="w-6 h-6 text-gray-600"
+                  className="h-6 w-6 text-slate-600"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -1060,7 +1065,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                   />
                 </svg>
               </button>
-              <h1 className="text-xl font-bold text-gray-800">
+              <h1 className="text-xl font-bold text-slate-800">
                 Combined Results - All Users
               </h1>
             </div>
@@ -1069,14 +1074,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <button
                 onClick={fetchData}
                 disabled={loading}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+                className="rounded-lg bg-gradient-to-r from-primary-600 to-cyan-600 px-4 py-2 text-white shadow-md shadow-primary-800/20 transition-all hover:from-primary-500 hover:to-cyan-500 disabled:opacity-50"
               >
                 Refresh
               </button>
               {allowDestructiveActions && (
                 <button
                   onClick={() => setShowResetConfirm(true)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700"
                 >
                   Reset Database
                 </button>
@@ -1087,10 +1092,10 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main className="relative z-10 container mx-auto px-4 py-8">
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50/95 p-4 text-red-700">
             {error}
           </div>
         )}
@@ -1118,18 +1123,19 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 />
               </svg>
-              <p className="text-gray-600">Loading combined results...</p>
+              <p className="text-slate-600">Loading combined results...</p>
             </div>
           </div>
         ) : (
           <>
             {/* Summary Card */}
-            <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl shadow-md p-6 mb-6 text-white">
+            <div className="glass-surface relative mb-6 overflow-hidden border-primary-200/60 bg-gradient-to-r from-primary-600 to-cyan-600 p-6 text-white">
+              <div className="pointer-events-none absolute -top-14 right-8 h-40 w-40 rounded-full bg-white/20 blur-3xl" />
               <h2 className="text-2xl font-bold mb-2">
                 Combined Analysis from{" "}
                 {comparisonData?.total_users_with_edits || 0} Users
               </h2>
-              <p className="opacity-90">
+              <p className="max-w-3xl opacity-95">
                 This page shows the aggregated effect of all user edits on the
                 GAM model. Each point's offset is averaged across all users who
                 edited it.
@@ -1165,12 +1171,12 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
       {/* Reset Confirmation Modal */}
       {showResetConfirm && allowDestructiveActions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="glass-surface-strong mx-4 w-full max-w-md p-6">
+            <h3 className="mb-4 text-lg font-bold text-slate-800">
               Reset Database?
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="mb-6 text-slate-600">
               This will permanently delete all users and their edits. This
               action cannot be undone.
             </p>
@@ -1178,7 +1184,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <button
                 onClick={() => setShowResetConfirm(false)}
                 disabled={resetting}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="rounded-lg border border-slate-300 px-4 py-2 transition-colors hover:bg-slate-100"
               >
                 Cancel
               </button>
@@ -1221,16 +1227,16 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
 
       {/* Delete Edit Modal */}
       {showDeleteModal && editToDelete && allowDestructiveActions && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold text-gray-800 mb-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="glass-surface-strong mx-4 w-full max-w-md p-6">
+            <h3 className="mb-2 text-lg font-bold text-slate-800">
               Delete Edit
             </h3>
-            <p className="text-gray-600 mb-1 text-sm">
+            <p className="mb-1 text-sm text-slate-600">
               You are about to delete an edit by{" "}
               <span className="font-semibold">{editToDelete.user_name}</span>.
             </p>
-            <p className="text-gray-500 mb-4 text-xs">
+            <p className="mb-4 text-xs text-slate-500">
               Feature:{" "}
               <span className="font-mono">
                 {editToDelete.feature_name || "—"}
@@ -1242,7 +1248,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
                   : editToDelete.x_value}
               </span>
             </p>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-1 block text-sm font-medium text-slate-700">
               Why is this edit being removed?{" "}
               <span className="text-red-500">*</span>
             </label>
@@ -1254,7 +1260,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               }}
               placeholder="Provide a reason for removing this edit..."
               rows={3}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+              className="w-full resize-none rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 focus:border-red-500 focus:ring-2 focus:ring-red-500"
             />
             {deleteError && (
               <p className="text-red-600 text-xs mt-1">{deleteError}</p>
@@ -1263,7 +1269,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               <button
                 onClick={handleCancelDelete}
                 disabled={deleting}
-                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm transition-colors hover:bg-slate-100"
               >
                 Cancel
               </button>
