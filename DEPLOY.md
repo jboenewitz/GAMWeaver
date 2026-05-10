@@ -72,6 +72,7 @@ Set these in GitHub (`Settings -> Secrets and variables -> Actions`):
    - `ENVIRONMENT=production`
    - `DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require`
    - `CORS_ALLOW_ORIGINS=https://<your-frontend-webapp-name>.azurewebsites.net`
+   - `FRONTEND_URL=https://<your-frontend-webapp-name>.azurewebsites.net` (optional fallback if `CORS_ALLOW_ORIGINS` is not set)
    - `ALLOW_DESTRUCTIVE_ACTIONS=false`
    - `SUPERADMIN_USERNAME=superadmin`
    - `SUPERADMIN_PASSWORD=<strong-random-password>`

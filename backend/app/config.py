@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from typing import List
+from urllib.parse import urlsplit
 
 
 def _bool_from_env(value: str, default: bool = False) -> bool:
@@ -14,7 +15,24 @@ def _bool_from_env(value: str, default: bool = False) -> bool:
 def _parse_origins(raw: str) -> List[str]:
     if not raw:
         return []
-    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    origins: List[str] = []
+    seen = set()
+    for token in raw.replace("\n", ",").replace(";", ",").split(","):
+        value = token.strip().strip('"').strip("'")
+        if not value:
+            continue
+
+        # CORS expects an origin (scheme + host + optional port).
+        parsed = urlsplit(value)
+        if parsed.scheme and parsed.netloc:
+            value = f"{parsed.scheme}://{parsed.netloc}"
+        else:
+            value = value.rstrip("/")
+
+        if value and value not in seen:
+            seen.add(value)
+            origins.append(value)
+    return origins
 
 
 class Settings:
@@ -30,6 +48,8 @@ class Settings:
         self.database_url = raw_db_url
 
         raw_origins = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+        if not raw_origins:
+            raw_origins = os.getenv("FRONTEND_URL", "").strip()
         self.cors_allow_origins = _parse_origins(raw_origins)
         if not self.cors_allow_origins and self.environment != "production":
             self.cors_allow_origins = [
