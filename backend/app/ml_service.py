@@ -651,6 +651,147 @@ class MLService:
 
     # ==================== Interactive edits ====================
 
+    @staticmethod
+    def _interpolate_curve_value(
+        x_values: List[Any],
+        y_values: List[Any],
+        target_x: float,
+    ) -> float:
+        """Linearly interpolate y on a curve at target_x."""
+        if not x_values or not y_values or len(x_values) != len(y_values):
+            return 0.0
+
+        try:
+            pairs = sorted(
+                [(float(x), float(y)) for x, y in zip(x_values, y_values)],
+                key=lambda item: item[0],
+            )
+        except (TypeError, ValueError):
+            return 0.0
+
+        if not pairs:
+            return 0.0
+        if len(pairs) == 1:
+            return pairs[0][1]
+
+        if target_x <= pairs[0][0]:
+            return pairs[0][1]
+        if target_x >= pairs[-1][0]:
+            return pairs[-1][1]
+
+        for idx in range(len(pairs) - 1):
+            left_x, left_y = pairs[idx]
+            right_x, right_y = pairs[idx + 1]
+            if left_x <= target_x <= right_x:
+                span = right_x - left_x
+                if span == 0:
+                    return left_y
+                ratio = (target_x - left_x) / span
+                return left_y + ratio * (right_y - left_y)
+
+        return pairs[-1][1]
+
+    @staticmethod
+    def _encode_numeric_storage_key(x_value: float) -> str:
+        """Encode numeric x values with an explicit prefix for persistence."""
+        return f"x:{x_value:.12g}"
+
+    @staticmethod
+    def _decode_numeric_storage_key(raw_key: Any, original_x: List[Any]) -> Optional[float]:
+        """
+        Decode numeric storage key.
+
+        Supported formats:
+        - Legacy index (int / numeric string)
+        - Explicit coordinate ("x:<float>")
+        - Fallback direct float value
+        """
+        if isinstance(raw_key, (int, np.integer)):
+            idx = int(raw_key)
+            if 0 <= idx < len(original_x):
+                return float(original_x[idx])
+            return None
+
+        if isinstance(raw_key, (float, np.floating)):
+            return float(raw_key)
+
+        raw_str = str(raw_key).strip()
+        if not raw_str:
+            return None
+
+        if raw_str.startswith("x:"):
+            try:
+                return float(raw_str[2:])
+            except ValueError:
+                return None
+
+        try:
+            idx = int(raw_str)
+            if 0 <= idx < len(original_x):
+                return float(original_x[idx])
+        except ValueError:
+            pass
+
+        try:
+            return float(raw_str)
+        except ValueError:
+            return None
+
+    def _decode_numeric_offsets_for_feature(
+        self,
+        feature_name: str,
+        offsets: Dict[Any, float],
+    ) -> List[Tuple[float, float]]:
+        """Convert stored/legacy numeric offsets into sorted (x, offset) points."""
+        original = self.original_shape_functions.get(feature_name, {})
+        original_x = original.get("x_values", [])
+
+        point_map: Dict[float, float] = {}
+        for raw_key, raw_offset in (offsets or {}).items():
+            x_val = self._decode_numeric_storage_key(raw_key, original_x)
+            if x_val is None:
+                continue
+            try:
+                point_map[float(x_val)] = float(raw_offset)
+            except (TypeError, ValueError):
+                continue
+
+        return sorted(point_map.items(), key=lambda item: item[0])
+
+    def load_shape_function_offsets_from_storage(
+        self,
+        storage_edits: List[Dict[str, Any]],
+    ) -> None:
+        """Load persisted edits into runtime offsets (supports legacy and new formats)."""
+        self.shape_function_offsets = {}
+
+        for stored_sf in storage_edits:
+            feature_name = stored_sf.get("feature_name")
+            feature_type = stored_sf.get("feature_type")
+            stored_points = stored_sf.get("edited_points", [])
+
+            if not feature_name or feature_name not in self.original_shape_functions:
+                continue
+
+            self.shape_function_offsets[feature_name] = {}
+            original_x = self.original_shape_functions[feature_name]["x_values"]
+
+            for stored_point in stored_points:
+                x_val = stored_point.get("x_value")
+                offset = stored_point.get("y_value", 0.0)
+                try:
+                    offset_float = float(offset)
+                except (TypeError, ValueError):
+                    continue
+
+                if feature_type == "categorical":
+                    self.shape_function_offsets[feature_name][str(x_val)] = offset_float
+                else:
+                    decoded_x = self._decode_numeric_storage_key(x_val, original_x)
+                    if decoded_x is None:
+                        continue
+                    self.shape_function_offsets[feature_name][float(decoded_x)] = offset_float
+
     def update_shape_functions(self, edited_shape_functions: List[Dict[str, Any]]) -> None:
         """Update shape function offsets based on user edits."""
         self.shape_function_offsets = {}
@@ -681,10 +822,9 @@ class MLService:
                         self.shape_function_offsets[feature_name][x_str] = offset
                 else:
                     x_float = float(x_val)
-                    closest_idx = int(np.argmin(np.abs(np.array(original_x) - x_float)))
-                    original_y_val = original_y[closest_idx]
+                    original_y_val = self._interpolate_curve_value(original_x, original_y, x_float)
                     offset = new_y - original_y_val
-                    self.shape_function_offsets[feature_name][closest_idx] = offset
+                    self.shape_function_offsets[feature_name][x_float] = offset
 
     def convert_edits_for_storage(
         self,
@@ -693,7 +833,7 @@ class MLService:
         """
         Convert edited shape functions to storage format.
 
-        Numeric features: x_value -> index, y_value -> offset.
+        Numeric features: x_value -> encoded coordinate key, y_value -> offset.
         Categorical features: x_value string, y_value -> offset.
         """
         result = []
@@ -731,11 +871,10 @@ class MLService:
                         )
                 else:
                     x_float = float(x_val)
-                    closest_idx = int(np.argmin(np.abs(np.array(original_x) - x_float)))
-                    offset = new_y - original_y[closest_idx]
+                    offset = new_y - self._interpolate_curve_value(original_x, original_y, x_float)
                     converted_points.append(
                         {
-                            "x_value": closest_idx,
+                            "x_value": self._encode_numeric_storage_key(x_float),
                             "y_value": offset,
                             "weight": weight,
                             "message": message,
@@ -786,17 +925,16 @@ class MLService:
                             }
                         )
                 else:
-                    try:
-                        idx = int(x_val)
-                        if 0 <= idx < len(original_x):
-                            display_points.append(
-                                {
-                                    "x_value": original_x[idx],
-                                    "y_value": original_y[idx] + offset,
-                                }
-                            )
-                    except (ValueError, IndexError):
+                    decoded_x = self._decode_numeric_storage_key(x_val, original_x)
+                    if decoded_x is None:
                         continue
+                    base_y = self._interpolate_curve_value(original_x, original_y, decoded_x)
+                    display_points.append(
+                        {
+                            "x_value": float(decoded_x),
+                            "y_value": base_y + offset,
+                        }
+                    )
 
             if display_points:
                 result.append(
@@ -814,46 +952,54 @@ class MLService:
             return 0.0
 
         offsets = self.shape_function_offsets[feature_name]
-        if feature_name in self.cat_features:
-            return offsets.get(str(value), 0.0)
+        return self.get_offset_for_feature_value(feature_name, value, offsets)
 
+    def get_offset_for_feature_value(
+        self,
+        feature_name: str,
+        value: Any,
+        offsets: Optional[Dict[Any, float]] = None,
+    ) -> float:
+        """Get interpolated offset for a feature value from a given offsets map."""
+        offsets = offsets if offsets is not None else self.shape_function_offsets.get(feature_name, {})
         if not offsets:
             return 0.0
 
-        original = self.original_shape_functions.get(feature_name, {})
-        original_x = original.get("x_values", [])
-        if not original_x:
+        if feature_name in self.cat_features:
+            try:
+                return float(offsets.get(str(value), 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+
+        points = self._decode_numeric_offsets_for_feature(feature_name, offsets)
+        if not points:
             return 0.0
 
         try:
-            indices = sorted(
-                [int(key) if isinstance(key, str) else int(key) for key in offsets.keys()]
-            )
-            offset_values = [offsets.get(idx, offsets.get(str(idx), 0.0)) for idx in indices]
-            x_positions = [float(original_x[idx]) for idx in indices]
-        except (ValueError, IndexError, TypeError):
+            value_float = float(value)
+        except (TypeError, ValueError):
             return 0.0
 
-        if len(indices) == 1:
-            return float(offset_values[0])
+        if len(points) == 1:
+            return float(points[0][1])
 
-        value_float = float(value)
+        x_positions = [point[0] for point in points]
+        offset_values = [point[1] for point in points]
+
         if value_float <= x_positions[0]:
             return float(offset_values[0])
         if value_float >= x_positions[-1]:
             return float(offset_values[-1])
 
-        for idx in range(len(x_positions) - 1):
-            left_x = x_positions[idx]
-            right_x = x_positions[idx + 1]
+        for idx in range(len(points) - 1):
+            left_x, left_offset = points[idx]
+            right_x, right_offset = points[idx + 1]
             if left_x <= value_float <= right_x:
                 span = right_x - left_x
                 if span == 0:
-                    return float(offset_values[idx])
+                    return float(left_offset)
                 t_val = (value_float - left_x) / span
-                return float(
-                    offset_values[idx] + t_val * (offset_values[idx + 1] - offset_values[idx])
-                )
+                return float(left_offset + t_val * (right_offset - left_offset))
 
         return 0.0
 

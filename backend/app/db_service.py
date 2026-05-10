@@ -18,6 +18,26 @@ from .config import settings
 from .security import hash_password, verify_password
 
 
+def _decode_numeric_x_for_display(raw_value: Any) -> Any:
+    """Best-effort numeric x-value decoding for API display endpoints."""
+    if raw_value is None:
+        return raw_value
+    if isinstance(raw_value, (int, float)):
+        return float(raw_value)
+
+    raw_str = str(raw_value).strip()
+    if raw_str.startswith("x:"):
+        try:
+            return float(raw_str[2:])
+        except ValueError:
+            return raw_value
+
+    try:
+        return float(raw_str)
+    except ValueError:
+        return raw_value
+
+
 class DatabaseService:
     """Service for managing users and their shape function edits."""
 
@@ -351,7 +371,7 @@ class DatabaseService:
             db.close()
 
     def get_user_edits_as_list(self, user_id: int) -> List[Dict[str, Any]]:
-        """Get all edits for a specific user as a list of shape functions."""
+        """Get all edits for a specific user as a list of shape functions (display-oriented)."""
         db = self.get_db()
         try:
             edits = db.query(ShapeFunctionEdit).filter(
@@ -368,11 +388,39 @@ class DatabaseService:
                         "edited_points": []
                     }
                 features[edit.feature_name]["edited_points"].append({
-                    "x_value": edit.x_value if edit.feature_type == "categorical" else float(edit.x_value),
+                    "x_value": edit.x_value if edit.feature_type == "categorical" else _decode_numeric_x_for_display(edit.x_value),
                     "y_value": edit.y_offset,
                     "weight": edit.weight
                 })
             
+            return list(features.values())
+        finally:
+            db.close()
+
+    def get_user_edits_storage_as_list(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all edits for a user preserving raw storage keys (for model loading)."""
+        db = self.get_db()
+        try:
+            edits = db.query(ShapeFunctionEdit).filter(
+                ShapeFunctionEdit.user_id == user_id
+            ).all()
+
+            features: Dict[str, Dict[str, Any]] = {}
+            for edit in edits:
+                if edit.feature_name not in features:
+                    features[edit.feature_name] = {
+                        "feature_name": edit.feature_name,
+                        "feature_type": edit.feature_type,
+                        "edited_points": [],
+                    }
+                features[edit.feature_name]["edited_points"].append(
+                    {
+                        "x_value": edit.x_value,
+                        "y_value": edit.y_offset,
+                        "weight": edit.weight,
+                    }
+                )
+
             return list(features.values())
         finally:
             db.close()
@@ -464,14 +512,7 @@ class DatabaseService:
 
                 avg_offset = float(row.offset_sum) / float(row.user_count) if row.user_count > 0 else 0.0
 
-                if row.feature_type == "categorical":
-                    combined[row.feature_name][row.x_value] = avg_offset
-                else:
-                    try:
-                        idx = int(row.x_value)
-                        combined[row.feature_name][idx] = avg_offset
-                    except ValueError:
-                        combined[row.feature_name][row.x_value] = avg_offset
+                combined[row.feature_name][row.x_value] = avg_offset
 
             return combined
         finally:
@@ -519,7 +560,7 @@ class DatabaseService:
                 avg_weighted_offset = float(row.weighted_sum) / float(row.user_count) if row.user_count > 0 else 0.0
                 
                 features[row.feature_name]["edited_points"].append({
-                    "x_value": row.x_value if row.feature_type == "categorical" else float(row.x_value),
+                    "x_value": row.x_value if row.feature_type == "categorical" else _decode_numeric_x_for_display(row.x_value),
                     "y_value": avg_weighted_offset,
                     "min_weighted": row.min_weighted,
                     "max_weighted": row.max_weighted,
@@ -571,7 +612,7 @@ class DatabaseService:
                     "edit_id": edit.id,
                     "user_id": edit.user_id,
                     "user_name": user_name,
-                    "x_value": edit.x_value if edit.feature_type == "categorical" else float(edit.x_value),
+                    "x_value": edit.x_value if edit.feature_type == "categorical" else _decode_numeric_x_for_display(edit.x_value),
                     "sureness": sureness,
                     "raw_input": raw_input,
                     "weighted_result": weighted_result,

@@ -7,6 +7,144 @@ import React, {
 } from "react";
 import Plot from "react-plotly.js";
 
+const NUMERIC_X_PRECISION = 6;
+const NUMERIC_BRUSH_SIGMA_RATIO = 0.08;
+const NUMERIC_BRUSH_MIN_SIGMA = 0.25;
+const NUMERIC_BRUSH_RADIUS_MULTIPLIER = 3.0;
+const NUMERIC_BRUSH_SMOOTHING_WINDOW = 5;
+
+const roundNumericX = (x) =>
+  Math.round(Number(x) * 10 ** NUMERIC_X_PRECISION) /
+  10 ** NUMERIC_X_PRECISION;
+
+const interpolateYAtX = (sortedPoints, targetX) => {
+  if (!sortedPoints || sortedPoints.length === 0) return 0;
+  if (sortedPoints.length === 1) return sortedPoints[0].y;
+
+  if (targetX <= sortedPoints[0].x) return sortedPoints[0].y;
+  if (targetX >= sortedPoints[sortedPoints.length - 1].x)
+    return sortedPoints[sortedPoints.length - 1].y;
+
+  for (let idx = 0; idx < sortedPoints.length - 1; idx += 1) {
+    const left = sortedPoints[idx];
+    const right = sortedPoints[idx + 1];
+    if (targetX >= left.x && targetX <= right.x) {
+      const span = right.x - left.x;
+      if (span === 0) return left.y;
+      const ratio = (targetX - left.x) / span;
+      return left.y + ratio * (right.y - left.y);
+    }
+  }
+  return sortedPoints[sortedPoints.length - 1].y;
+};
+
+const toSortedCurvePoints = (xValues, yValues) =>
+  (xValues || [])
+    .map((x, idx) => ({
+      x: Number(x),
+      y: Number(yValues?.[idx]),
+    }))
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+    .sort((a, b) => a.x - b.x);
+
+const normalizeNumericPoints = (points) =>
+  (points || [])
+    .map((p) => ({
+      x: roundNumericX(Number(p.x_value)),
+      y: Number(p.y_value),
+    }))
+    .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+    .sort((a, b) => a.x - b.x);
+
+const buildEditableNumericCurvePoints = (shapeFunction, editedPoints) => {
+  const originalCurve = toSortedCurvePoints(
+    shapeFunction?.x_values || [],
+    shapeFunction?.y_values || [],
+  );
+  if (originalCurve.length === 0) return [];
+
+  const editMap = new Map();
+  normalizeNumericPoints(editedPoints).forEach((point) => {
+    editMap.set(String(point.x), point.y);
+  });
+
+  return originalCurve.map((point) => {
+    const key = String(roundNumericX(point.x));
+    return {
+      x: point.x,
+      y: editMap.has(key) ? editMap.get(key) : point.y,
+    };
+  });
+};
+
+const toEditedPointsFormat = (curvePoints) =>
+  curvePoints.map((point) => ({
+    x_value: roundNumericX(point.x),
+    y_value: point.y,
+  }));
+
+const applyMovingAverageInWindow = (points, centerIndex, windowSize) => {
+  if (windowSize <= 1 || points.length < 3) return points;
+  const half = Math.floor(windowSize / 2);
+  const result = points.map((point) => ({ ...point }));
+
+  for (let idx = Math.max(1, centerIndex - half); idx <= Math.min(points.length - 2, centerIndex + half); idx += 1) {
+    let weightedSum = 0;
+    let weightTotal = 0;
+    for (let j = Math.max(0, idx - half); j <= Math.min(points.length - 1, idx + half); j += 1) {
+      const dist = Math.abs(j - idx);
+      const weight = Math.exp(-(dist * dist) / (2 * Math.max(1, half) ** 2));
+      weightedSum += points[j].y * weight;
+      weightTotal += weight;
+    }
+    result[idx].y = weightedSum / weightTotal;
+  }
+  return result;
+};
+
+const applyGaussianBrushDeformation = (
+  curvePoints,
+  cursorX,
+  deltaY,
+  sigma,
+  radiusMultiplier = NUMERIC_BRUSH_RADIUS_MULTIPLIER,
+  smoothingWindow = NUMERIC_BRUSH_SMOOTHING_WINDOW,
+) => {
+  if (!curvePoints || curvePoints.length === 0 || !Number.isFinite(deltaY)) {
+    return curvePoints || [];
+  }
+  if (!Number.isFinite(sigma) || sigma <= 0) return curvePoints;
+
+  const radius = sigma * radiusMultiplier;
+
+  // Core brush logic:
+  // We do NOT move a single point. We deform a whole local neighborhood using
+  // a Gaussian falloff so influence is strongest at the cursor and fades smoothly.
+  const deformed = curvePoints.map((point) => {
+    const dx = point.x - cursorX;
+    if (Math.abs(dx) > radius) return { ...point };
+    const weight = Math.exp(-0.5 * (dx / sigma) ** 2);
+    return { ...point, y: point.y + deltaY * weight };
+  });
+
+  // Optional local smoothing pass inside the active brush radius to avoid any
+  // subtle jaggedness from repeated incremental updates.
+  const smoothed = deformed.map((point) => ({ ...point }));
+  for (let idx = 0; idx < deformed.length; idx += 1) {
+    if (Math.abs(deformed[idx].x - cursorX) > radius) continue;
+    const locallySmoothed = applyMovingAverageInWindow(
+      deformed,
+      idx,
+      smoothingWindow,
+    );
+    const blend = Math.exp(-0.5 * ((deformed[idx].x - cursorX) / sigma) ** 2);
+    smoothed[idx].y =
+      deformed[idx].y * (1 - blend) + locallySmoothed[idx].y * blend;
+  }
+
+  return smoothed;
+};
+
 const EditableShapeFunctionChart = ({
   shapeFunction,
   editedPoints,
@@ -33,6 +171,7 @@ const EditableShapeFunctionChart = ({
   // Numeric continuous drag state (coordinate-based)
   const [dragXValue, setDragXValue] = useState(null);
   const [dragYValue, setDragYValue] = useState(null);
+  const [dragCurvePoints, setDragCurvePoints] = useState([]);
 
   // Precise value entry modal state
   const [preciseEntry, setPreciseEntry] = useState(null);
@@ -51,8 +190,10 @@ const EditableShapeFunctionChart = ({
   });
   const hoveredPointRef = useRef(null);
   const dragStartYRef = useRef(null);
+  const lastDragYRef = useRef(null);
   const isDraggingRef = useRef(false);
-  const dragYValueRef = useRef(null);
+  const dragCurvePointsRef = useRef([]);
+  const dragModifiedRef = useRef(false);
   const lastMouseDownRef = useRef({ time: 0, pointIndex: null, xValue: null });
   const preciseEntryOpenRef = useRef(false);
 
@@ -67,7 +208,10 @@ const EditableShapeFunctionChart = ({
     setLocalYValues(null);
     setDragXValue(null);
     setDragYValue(null);
-    dragYValueRef.current = null;
+    setDragCurvePoints([]);
+    dragCurvePointsRef.current = [];
+    dragModifiedRef.current = false;
+    lastDragYRef.current = null;
     dragStartYRef.current = null;
   }, []);
 
@@ -98,55 +242,32 @@ const EditableShapeFunctionChart = ({
   // Merge original line data with edits + drag point for numeric display
   const mergedLineData = useMemo(() => {
     if (!isNumeric) return null;
-    const pointMap = new Map();
-    x_values.forEach((x, i) => pointMap.set(Number(x), y_values[i]));
-    (editedPoints || []).forEach((p) =>
-      pointMap.set(Number(p.x_value), p.y_value),
-    );
-    if (isDragging && dragXValue !== null && dragYValue !== null) {
-      pointMap.set(Number(dragXValue), dragYValue);
-    }
-    const sorted = Array.from(pointMap.entries()).sort((a, b) => a[0] - b[0]);
-    return { x: sorted.map(([x]) => x), y: sorted.map(([, y]) => y) };
+    const currentCurve =
+      isDragging && dragCurvePoints.length > 0
+        ? dragCurvePoints
+        : buildEditableNumericCurvePoints(shapeFunction, editedPoints || []);
+    return {
+      x: currentCurve.map((point) => point.x),
+      y: currentCurve.map((point) => point.y),
+    };
   }, [
     isNumeric,
-    x_values,
-    y_values,
-    editedPoints,
     isDragging,
-    dragXValue,
-    dragYValue,
+    dragCurvePoints,
+    shapeFunction,
+    editedPoints,
   ]);
 
   // Linear interpolation to get y at an arbitrary x from the current curve
   const getYAtX = useCallback(
     (targetX) => {
-      const pointMap = new Map();
-      x_values.forEach((x, i) => pointMap.set(Number(x), y_values[i]));
-      (editedPoints || []).forEach((p) =>
-        pointMap.set(Number(p.x_value), p.y_value),
+      const currentCurve = buildEditableNumericCurvePoints(
+        shapeFunction,
+        editedPoints || [],
       );
-      const entries = Array.from(pointMap.entries()).sort(
-        (a, b) => a[0] - b[0],
-      );
-      const exact = entries.find(([x]) => Math.abs(x - targetX) < 0.0001);
-      if (exact) return exact[1];
-      for (let i = 0; i < entries.length - 1; i++) {
-        const [x0, y0] = entries[i];
-        const [x1, y1] = entries[i + 1];
-        if (targetX >= x0 && targetX <= x1) {
-          const t = (targetX - x0) / (x1 - x0);
-          return y0 + t * (y1 - y0);
-        }
-      }
-      if (entries.length > 0) {
-        return targetX <= entries[0][0]
-          ? entries[0][1]
-          : entries[entries.length - 1][1];
-      }
-      return 0;
+      return interpolateYAtX(currentCurve, targetX);
     },
-    [x_values, y_values, editedPoints],
+    [shapeFunction, editedPoints],
   );
 
   // Check if any points have been edited
@@ -248,33 +369,43 @@ const EditableShapeFunctionChart = ({
     return min + clamped * (max - min);
   }, []);
 
-  // Snap/clamp x value for numeric edits
-  const snapX = useCallback(
-    (rawX) => {
-      const clamped = Math.max(xDataMin, Math.min(xDataMax, rawX));
-      // Snap to nearest original or edit x value if close enough
-      const allKnownX = [
-        ...x_values.map(Number),
-        ...(editedPoints || []).map((p) => Number(p.x_value)),
-      ];
-      const xSpan = xDataMax - xDataMin;
-      const snapThreshold = xSpan > 0 ? xSpan * 0.01 : 0.001;
+  // Clamp x for numeric edits (no snapping to existing points)
+  const clampX = useCallback(
+    (rawX) => Math.max(xDataMin, Math.min(xDataMax, rawX)),
+    [xDataMin, xDataMax],
+  );
 
-      let nearest = null;
-      let nearestDist = Infinity;
-      for (const x of allKnownX) {
-        const dist = Math.abs(x - clamped);
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearest = x;
-        }
-      }
-      if (nearest !== null && nearestDist <= snapThreshold) {
-        return nearest;
-      }
-      return Math.round(clamped * 1000) / 1000;
+  const getBrushSigma = useCallback(() => {
+    const xSpan = xDataMax - xDataMin;
+    return Math.max(xSpan * NUMERIC_BRUSH_SIGMA_RATIO, NUMERIC_BRUSH_MIN_SIGMA);
+  }, [xDataMax, xDataMin]);
+
+  const applyPreciseNumericEdit = useCallback(
+    (centerX, targetY) => {
+      const currentCurve = buildEditableNumericCurvePoints(
+        shapeFunction,
+        editedPoints || [],
+      );
+      if (currentCurve.length === 0) return;
+      const currentY = interpolateYAtX(currentCurve, centerX);
+      const deltaY = targetY - currentY;
+      if (Math.abs(deltaY) <= 1e-8) return;
+
+      const updatedCurve = applyGaussianBrushDeformation(
+        currentCurve,
+        centerX,
+        deltaY,
+        getBrushSigma(),
+      );
+
+      onPointEdit(
+        feature_name,
+        toEditedPointsFormat(updatedCurve),
+        null,
+        feature_type,
+      );
     },
-    [x_values, editedPoints, xDataMin, xDataMax],
+    [shapeFunction, editedPoints, getBrushSigma, onPointEdit, feature_name, feature_type],
   );
 
   // ---- Categorical drag effect (mousemove / mouseup on window) ----
@@ -342,9 +473,29 @@ const EditableShapeFunctionChart = ({
     const handleMouseMove = (e) => {
       if (!isDraggingRef.current || preciseEntryOpenRef.current) return;
       e.preventDefault();
+      const newX = clientXToDataX(e.clientX);
       const newY = clientYToDataY(e.clientY);
-      if (newY !== null) {
-        dragYValueRef.current = newY;
+      if (newX !== null && newY !== null) {
+        const clampedX = clampX(newX);
+        if (lastDragYRef.current === null) {
+          lastDragYRef.current = newY;
+        }
+        const deltaY = newY - lastDragYRef.current;
+        lastDragYRef.current = newY;
+
+        if (Math.abs(deltaY) > 1e-8 && dragCurvePointsRef.current.length > 0) {
+          const deformed = applyGaussianBrushDeformation(
+            dragCurvePointsRef.current,
+            clampedX,
+            deltaY,
+            getBrushSigma(),
+          );
+          dragCurvePointsRef.current = deformed;
+          setDragCurvePoints(deformed);
+          dragModifiedRef.current = true;
+        }
+
+        setDragXValue(clampedX);
         setDragYValue(newY);
       }
     };
@@ -355,19 +506,11 @@ const EditableShapeFunctionChart = ({
         return;
       }
       e.preventDefault();
-      const movedSignificantly =
-        dragStartYRef.current !== null &&
-        Math.abs(e.clientY - dragStartYRef.current) > 3;
-
-      if (
-        movedSignificantly &&
-        dragXValue !== null &&
-        dragYValueRef.current !== null
-      ) {
+      if (dragModifiedRef.current && dragCurvePointsRef.current.length > 0) {
         onPointEdit(
           feature_name,
-          dragXValue,
-          dragYValueRef.current,
+          toEditedPointsFormat(dragCurvePointsRef.current),
+          null,
           feature_type,
         );
       }
@@ -388,7 +531,10 @@ const EditableShapeFunctionChart = ({
     feature_name,
     feature_type,
     onPointEdit,
+    clientXToDataX,
     clientYToDataY,
+    clampX,
+    getBrushSigma,
     stopDragInteraction,
   ]);
 
@@ -510,7 +656,7 @@ const EditableShapeFunctionChart = ({
       const rawY = clientYToDataY(e.clientY);
       if (rawX === null || rawY === null) return;
 
-      const snappedX = snapX(rawX);
+      const clampedX = roundNumericX(clampX(rawX));
       const now = Date.now();
 
       // Double-click detection
@@ -518,7 +664,7 @@ const EditableShapeFunctionChart = ({
       const dblClickXThreshold = xSpan > 0 ? xSpan * 0.02 : 0.01;
       if (
         lastMouseDownRef.current.xValue !== null &&
-        Math.abs(lastMouseDownRef.current.xValue - snappedX) <
+        Math.abs(lastMouseDownRef.current.xValue - clampedX) <
           dblClickXThreshold &&
         now - lastMouseDownRef.current.time < 400
       ) {
@@ -526,12 +672,12 @@ const EditableShapeFunctionChart = ({
         // Cancel any drag
         stopDragInteraction();
 
-        const currentY = getYAtX(snappedX);
+        const currentY = getYAtX(clampedX);
         setPreciseValue(currentY.toFixed(3));
         setPreciseEntry({
-          xValue: snappedX,
+          xValue: clampedX,
           displayX:
-            typeof snappedX === "number" ? snappedX.toFixed(3) : snappedX,
+            typeof clampedX === "number" ? clampedX.toFixed(3) : clampedX,
           pointIndex: null,
         });
         return;
@@ -540,13 +686,20 @@ const EditableShapeFunctionChart = ({
       lastMouseDownRef.current = {
         time: now,
         pointIndex: null,
-        xValue: snappedX,
+        xValue: clampedX,
       };
 
       // Start drag
-      setDragXValue(snappedX);
+      const startingCurve = buildEditableNumericCurvePoints(
+        shapeFunction,
+        editedPoints || [],
+      );
+      dragCurvePointsRef.current = startingCurve;
+      setDragCurvePoints(startingCurve);
+      dragModifiedRef.current = false;
+      lastDragYRef.current = rawY;
+      setDragXValue(clampedX);
       setDragYValue(rawY);
-      dragYValueRef.current = rawY;
       setIsDragging(true);
       isDraggingRef.current = true;
       dragStartYRef.current = e.clientY;
@@ -564,12 +717,14 @@ const EditableShapeFunctionChart = ({
     isEditing,
     clientXToDataX,
     clientYToDataY,
-    snapX,
+    clampX,
     getYAtX,
     updatePlotBounds,
     xDataMax,
     xDataMin,
     stopDragInteraction,
+    shapeFunction,
+    editedPoints,
   ]);
 
   // Build traces
@@ -606,14 +761,19 @@ const EditableShapeFunctionChart = ({
     };
 
     // Small markers at edited positions only
-    const editMarkerPoints = (editedPoints || []).filter((p) => {
+    const showEditMarkers =
+      (editedPoints || []).length > 0 &&
+      (editedPoints || []).length < Math.max(20, Math.floor(x_values.length * 0.5));
+    const editMarkerPoints = showEditMarkers
+      ? (editedPoints || []).filter((p) => {
       const pxNum = Number(p.x_value);
       const idx = x_values.findIndex(
         (x) => Math.abs(Number(x) - pxNum) < 0.0001,
       );
       if (idx === -1) return true;
       return Math.abs(y_values[idx] - p.y_value) > 0.001;
-    });
+        })
+      : [];
 
     const editMarkersTrace =
       editMarkerPoints.length > 0
@@ -829,12 +989,19 @@ const EditableShapeFunctionChart = ({
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm mb-4"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !isNaN(parseFloat(preciseValue))) {
-                  onPointEdit(
-                    feature_name,
-                    preciseEntry.xValue,
-                    parseFloat(preciseValue),
-                    feature_type,
-                  );
+                  if (isNumeric) {
+                    applyPreciseNumericEdit(
+                      Number(preciseEntry.xValue),
+                      parseFloat(preciseValue),
+                    );
+                  } else {
+                    onPointEdit(
+                      feature_name,
+                      preciseEntry.xValue,
+                      parseFloat(preciseValue),
+                      feature_type,
+                    );
+                  }
                   setPreciseEntry(null);
                 } else if (e.key === "Escape") {
                   setPreciseEntry(null);
@@ -851,12 +1018,19 @@ const EditableShapeFunctionChart = ({
               <button
                 onClick={() => {
                   if (!isNaN(parseFloat(preciseValue))) {
-                    onPointEdit(
-                      feature_name,
-                      preciseEntry.xValue,
-                      parseFloat(preciseValue),
-                      feature_type,
-                    );
+                    if (isNumeric) {
+                      applyPreciseNumericEdit(
+                        Number(preciseEntry.xValue),
+                        parseFloat(preciseValue),
+                      );
+                    } else {
+                      onPointEdit(
+                        feature_name,
+                        preciseEntry.xValue,
+                        parseFloat(preciseValue),
+                        feature_type,
+                      );
+                    }
                     setPreciseEntry(null);
                   }
                 }}
@@ -881,12 +1055,12 @@ const EditableShapeFunctionChart = ({
             isNumeric ? (
               <>
                 <span className="font-bold animate-pulse">
-                  Dragging at x ={" "}
+                  Brushing at x ={" "}
                   {dragXValue != null ? Number(dragXValue).toFixed(3) : ""}
                 </span>
                 <span className="text-red-500">|</span>
                 <span>
-                  Release to set value:{" "}
+                  Release to apply smoothed stroke:{" "}
                   {dragYValue != null ? dragYValue.toFixed(3) : ""}
                 </span>
               </>
@@ -905,7 +1079,7 @@ const EditableShapeFunctionChart = ({
           ) : isNumeric ? (
             <>
               <span className="font-medium">
-                Click anywhere on the chart to edit
+                Click and drag to brush the line. Double-click for precise entry.
               </span>
             </>
           ) : hoveredPoint !== null ? (
@@ -1278,19 +1452,59 @@ const EditableShapeFunctionsGrid = ({
   );
 
   const handlePointEdit = useCallback(
-    (featureName, xValue, yValue, featureType) => {
+    (
+      featureName,
+      xValueOrPoints,
+      yValue,
+      featureType,
+    ) => {
       setEditedPoints((prev) => {
+        if (featureType === "numeric") {
+          if (Array.isArray(xValueOrPoints)) {
+            const normalized = normalizeNumericPoints(xValueOrPoints).map(
+              (point) => ({
+                x_value: point.x,
+                y_value: point.y,
+              }),
+            );
+            return { ...prev, [featureName]: normalized };
+          }
+
+          const featurePoints = prev[featureName] || [];
+          const existingIndex = featurePoints.findIndex(
+            (p) => String(p.x_value) === String(xValueOrPoints),
+          );
+          if (existingIndex >= 0) {
+            const next = [...featurePoints];
+            next[existingIndex] = { x_value: xValueOrPoints, y_value: yValue };
+            return { ...prev, [featureName]: next };
+          }
+          return {
+            ...prev,
+            [featureName]: [
+              ...featurePoints,
+              { x_value: xValueOrPoints, y_value: yValue },
+            ],
+          };
+        }
+
         const featurePoints = prev[featureName] || [];
         const existingIndex = featurePoints.findIndex(
-          (p) => String(p.x_value) === String(xValue),
+          (p) => String(p.x_value) === String(xValueOrPoints),
         );
 
         let newPoints;
         if (existingIndex >= 0) {
           newPoints = [...featurePoints];
-          newPoints[existingIndex] = { x_value: xValue, y_value: yValue };
+          newPoints[existingIndex] = {
+            x_value: xValueOrPoints,
+            y_value: yValue,
+          };
         } else {
-          newPoints = [...featurePoints, { x_value: xValue, y_value: yValue }];
+          newPoints = [
+            ...featurePoints,
+            { x_value: xValueOrPoints, y_value: yValue },
+          ];
         }
 
         return { ...prev, [featureName]: newPoints };
@@ -1494,10 +1708,12 @@ const EditableShapeFunctionsGrid = ({
       {isEditing && (
         <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-700">
-            <strong>How to edit:</strong> Hover over a point (it will
-            highlight), then click and drag up or down to change its value.
-            Double-click for precise value entry. When done editing a feature,
-            click its <strong>Submit</strong> button and rate your confidence.
+            <strong>How to edit:</strong> For numeric features, click and drag
+            to brush edits along the curve; smoothing and slope limits prevent
+            sharp spikes. For categorical features, hover a point, then drag it
+            up or down. Double-click for precise value entry. When done editing
+            a feature, click its <strong>Submit</strong> button and rate your
+            confidence.
           </p>
         </div>
       )}
