@@ -12,4 +12,4 @@ exec gunicorn app.main:app \
   -k uvicorn.workers.UvicornWorker \
   -b "0.0.0.0:${PORT}" \
   --workers "${GUNICORN_WORKERS:-1}" \
-  --timeout 120
+  --timeout "${GUNICORN_TIMEOUT:-300}"

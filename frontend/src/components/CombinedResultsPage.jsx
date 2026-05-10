@@ -158,6 +158,7 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [modelStatus, setModelStatus] = useState(null);
   const [users, setUsers] = useState([]);
   const [editLogs, setEditLogs] = useState(null);
+  const [editLogsError, setEditLogsError] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [expandedFeatures, setExpandedFeatures] = useState({});
@@ -197,19 +198,32 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const fetchData = async () => {
     setLoading(true);
     setError(null);
+    setEditLogsError(null);
     try {
-      const [weightedComparison, usersData, logsData, statusData] =
-        await Promise.all([
-        apiService.getCombinedPredictionsComparison(true),
-        apiService.getUsersWithEdits(),
-        apiService.getEditLogs(),
-        apiService.getModelStatus(),
-      ]);
-
-      setComparisonData(weightedComparison);
-      setUsers(usersData.users || []);
-      setEditLogs(logsData);
+      // Keep requests sequential to avoid overloading the single backend worker.
+      // The combined comparison endpoint can be CPU-heavy.
+      const statusData = await apiService.getModelStatus();
       setModelStatus(statusData);
+
+      const weightedComparison =
+        await apiService.getCombinedPredictionsComparison(true);
+      setComparisonData(weightedComparison);
+
+      const usersData = await apiService.getUsersWithEdits();
+      setUsers(usersData.users || []);
+
+      // Edit logs are useful but non-critical for page rendering.
+      try {
+        const logsData = await apiService.getEditLogs();
+        setEditLogs(logsData);
+      } catch (err) {
+        setEditLogs(null);
+        setEditLogsError(
+          err.response?.data?.detail ||
+            err.message ||
+            "Failed to load edit logs",
+        );
+      }
 
       if (unweightedComparisonData !== null) {
         const unweighted = await apiService.getCombinedPredictionsComparison(false);
@@ -807,6 +821,14 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   };
 
   const renderEditLogs = () => {
+    if (editLogsError) {
+      return (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 rounded-xl p-4 mb-6 text-sm">
+          Edit logs are temporarily unavailable: {editLogsError}
+        </div>
+      );
+    }
+
     if (!editLogs?.features?.length) {
       return null;
     }

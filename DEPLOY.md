@@ -83,6 +83,7 @@ Set these in GitHub (`Settings -> Secrets and variables -> Actions`):
    - `DEMO_ADMIN_SECRET=<strong-random-secret>` (optional)
    - `ADMIN_TOKEN_TTL_HOURS=8` (optional)
    - `INVITE_TOKEN_TTL_HOURS=168` (optional)
+   - `GUNICORN_TIMEOUT=300` (optional; helpful for heavier combined-results computations)
    - `SCM_DO_BUILD_DURING_DEPLOYMENT=true`
 5. In the backend App Service (`Configuration -> General settings`), set startup command to `bash backend/startup.sh`.
 6. Download the backend App Service publish profile and store it in `AZURE_BACKEND_WEBAPP_PUBLISH_PROFILE`.
