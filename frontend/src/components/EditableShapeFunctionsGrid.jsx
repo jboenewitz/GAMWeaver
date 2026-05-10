@@ -12,6 +12,9 @@ const NUMERIC_BRUSH_SIGMA_RATIO = 0.08;
 const NUMERIC_BRUSH_MIN_SIGMA = 0.25;
 const NUMERIC_BRUSH_RADIUS_MULTIPLIER = 3.0;
 const NUMERIC_BRUSH_SMOOTHING_WINDOW = 5;
+const UNSYNCED_Y_PADDING_RATIO = 0.15;
+const UNSYNCED_Y_MIN_PADDING = 0.2;
+const FLAT_Y_MIN_HALF_SPAN = 0.5;
 
 const roundNumericX = (x) =>
   Math.round(Number(x) * 10 ** NUMERIC_X_PRECISION) /
@@ -82,6 +85,29 @@ const toEditedPointsFormat = (curvePoints) =>
     x_value: roundNumericX(point.x),
     y_value: point.y,
   }));
+
+const computeDynamicYRange = (values) => {
+  const finiteValues = (values || []).filter((value) => Number.isFinite(value));
+  if (finiteValues.length === 0) {
+    return [-1, 1];
+  }
+
+  const yMin = Math.min(...finiteValues);
+  const yMax = Math.max(...finiteValues);
+  const span = yMax - yMin;
+
+  if (span < 1e-8) {
+    const center = yMin;
+    const halfSpan = Math.max(
+      Math.abs(center) * UNSYNCED_Y_PADDING_RATIO,
+      FLAT_Y_MIN_HALF_SPAN,
+    );
+    return [center - halfSpan, center + halfSpan];
+  }
+
+  const padding = Math.max(span * UNSYNCED_Y_PADDING_RATIO, UNSYNCED_Y_MIN_PADDING);
+  return [yMin - padding, yMax + padding];
+};
 
 const applyMovingAverageInWindow = (points, centerIndex, windowSize) => {
   if (windowSize <= 1 || points.length < 3) return points;
@@ -297,10 +323,7 @@ const EditableShapeFunctionChart = ({
         ...(dragYValue !== null ? [dragYValue] : []),
       ]
     : [...y_values, ...currentYValues];
-  const yMin = Math.min(...allYValues);
-  const yMax = Math.max(...allYValues);
-  const yPadding = Math.max((yMax - yMin) * 0.3, 5);
-  const yRange = sharedYRange || [yMin - yPadding, yMax + yPadding];
+  const yRange = sharedYRange || computeDynamicYRange(allYValues);
 
   // Calculate x-axis range (numeric only, explicit for coordinate conversion)
   const numXVals = isNumeric ? x_values.map(Number) : [];
