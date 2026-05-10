@@ -171,6 +171,46 @@ const applyGaussianBrushDeformation = (
   return smoothed;
 };
 
+const buildDragHighlightSegments = (
+  curvePoints,
+  cursorX,
+  sigma,
+  radiusMultiplier = NUMERIC_BRUSH_RADIUS_MULTIPLIER,
+) => {
+  if (!curvePoints || curvePoints.length < 2) return [];
+  if (!Number.isFinite(cursorX) || !Number.isFinite(sigma) || sigma <= 0) {
+    return [];
+  }
+
+  const radius = sigma * radiusMultiplier;
+  const segments = [];
+
+  for (let idx = 0; idx < curvePoints.length - 1; idx += 1) {
+    const left = curvePoints[idx];
+    const right = curvePoints[idx + 1];
+    const midX = (left.x + right.x) / 2;
+    const dist = Math.abs(midX - cursorX);
+    if (dist > radius) continue;
+
+    // Highest opacity at the cursor, smoothly fading to both sides.
+    const alpha = 0.1 + 0.85 * Math.exp(-0.5 * (dist / sigma) ** 2);
+    segments.push({
+      x: [left.x, right.x],
+      y: [left.y, right.y],
+      type: "scatter",
+      mode: "lines",
+      line: {
+        color: `rgba(239, 68, 68, ${alpha.toFixed(3)})`,
+        width: 4,
+      },
+      hoverinfo: "skip",
+      showlegend: false,
+    });
+  }
+
+  return segments;
+};
+
 const EditableShapeFunctionChart = ({
   shapeFunction,
   editedPoints,
@@ -783,6 +823,15 @@ const EditableShapeFunctionChart = ({
       hovertemplate: "<b>%{x:.3f}</b><br>Effect: %{y:.3f}<extra></extra>",
     };
 
+    const dragHighlightTraces =
+      isDragging && dragXValue !== null && dragCurvePoints.length > 1
+        ? buildDragHighlightSegments(
+            dragCurvePoints,
+            dragXValue,
+            getBrushSigma(),
+          )
+        : [];
+
     // Small markers at edited positions only
     const showEditMarkers =
       (editedPoints || []).length > 0 &&
@@ -818,31 +867,11 @@ const EditableShapeFunctionChart = ({
           }
         : null;
 
-    // Drag preview marker
-    const dragPreviewTrace =
-      isDragging && dragXValue !== null && dragYValue !== null
-        ? {
-            x: [Number(dragXValue)],
-            y: [dragYValue],
-            type: "scatter",
-            mode: "markers",
-            name: "Dragging",
-            marker: {
-              color: "#ef4444",
-              size: 14,
-              symbol: "circle",
-              line: { color: "#991b1b", width: 2 },
-            },
-            showlegend: false,
-            hoverinfo: "skip",
-          }
-        : null;
-
     data = [
       ...(hasEdits ? [originalTrace] : []),
       currentTrace,
+      ...dragHighlightTraces,
       ...(editMarkersTrace ? [editMarkersTrace] : []),
-      ...(dragPreviewTrace ? [dragPreviewTrace] : []),
     ];
   } else {
     // ---- Categorical bar chart traces (unchanged) ----
@@ -886,28 +915,8 @@ const EditableShapeFunctionChart = ({
     data = hasEdits ? [originalTrace, editableTrace] : [editableTrace];
   }
 
-  // Build layout shapes for drag crosshairs (numeric only)
+  // No drag crosshair shapes for numeric dragging; highlight is shown directly on the line.
   const layoutShapes = [];
-  if (isNumeric && isDragging && dragXValue !== null) {
-    layoutShapes.push({
-      type: "line",
-      x0: dragXValue,
-      x1: dragXValue,
-      y0: yRange[0],
-      y1: yRange[1],
-      line: { color: "#ef4444", width: 1, dash: "dot" },
-    });
-    if (dragYValue !== null) {
-      layoutShapes.push({
-        type: "line",
-        x0: xRange[0],
-        x1: xRange[1],
-        y0: dragYValue,
-        y1: dragYValue,
-        line: { color: "#ef4444", width: 1, dash: "dot" },
-      });
-    }
-  }
 
   const layout = {
     title: {
@@ -940,7 +949,7 @@ const EditableShapeFunctionChart = ({
       ? { l: 70, r: 40, t: 50, b: 60 }
       : { l: 50, r: 20, t: 40, b: 50 },
     paper_bgcolor: "white",
-    plot_bgcolor: isDragging ? "#fef2f2" : "white",
+    plot_bgcolor: "white",
     height: enlarged ? 520 : 280,
     dragmode: false,
     hovermode: "closest",
