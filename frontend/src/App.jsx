@@ -38,10 +38,14 @@ const formatApiError = (err, fallback = "Request failed") => {
       return fallback;
     }
   }
-  if (typeof responseData?.message === "string" && responseData.message.trim()) {
+  if (
+    typeof responseData?.message === "string" &&
+    responseData.message.trim()
+  ) {
     return responseData.message;
   }
-  if (typeof err?.message === "string" && err.message.trim()) return err.message;
+  if (typeof err?.message === "string" && err.message.trim())
+    return err.message;
   return fallback;
 };
 
@@ -503,9 +507,7 @@ function App() {
       await fetchModelStatus();
     } catch (err) {
       const message = formatApiError(err, "Failed to load data");
-      setError(
-        "Failed to load data: " + message,
-      );
+      setError("Failed to load data: " + message);
       throw new Error(message);
     } finally {
       setDataLoading(false);
@@ -646,34 +648,25 @@ function App() {
           </div>
         )}
 
-        {/* Main Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Controls */}
+        {/* Top Row: Training + Data Summary */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <TrainingPanel
+            onUploadDataset={handleUploadDataset}
+            onLoadData={handleLoadData}
+            onTrainModel={handleTrainModel}
+            loading={loading || dataLoading}
+            modelStatus={modelStatus}
+            isSuperadmin={Boolean(currentUser?.is_superadmin)}
+          />
+          <DataSummaryCard summary={dataSummary} loading={dataLoading} />
+        </div>
+
+        {/* Remaining Dashboard Cards/Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
           <div className="space-y-6">
-            <TrainingPanel
-              onUploadDataset={handleUploadDataset}
-              onLoadData={handleLoadData}
-              onTrainModel={handleTrainModel}
-              loading={loading || dataLoading}
-              modelStatus={modelStatus}
-              isSuperadmin={Boolean(currentUser?.is_superadmin)}
-            />
-
-            <DataSummaryCard summary={dataSummary} loading={dataLoading} />
-
             <MetricsCard metrics={metrics} loading={loading} />
           </div>
-
-          {/* Right Column - Visualizations */}
           <div className="lg:col-span-2 space-y-6">
-            <PredictionForm
-              onPredict={handlePredict}
-              loading={loading}
-              modelTrained={modelStatus?.is_trained}
-              featureSchema={modelStatus?.feature_schema || []}
-              targetColumn={modelStatus?.target_column}
-            />
-
             <HourlyPatternChart
               patternData={hourlyPattern}
               loading={dataLoading}
@@ -708,18 +701,31 @@ function App() {
           />
         </div>
 
+        {/* Full Width Prediction */}
+        <div className="mt-6">
+          <PredictionForm
+            onPredict={handlePredict}
+            loading={loading}
+            modelTrained={modelStatus?.is_trained}
+            featureSchema={modelStatus?.feature_schema || []}
+            targetColumn={modelStatus?.target_column}
+          />
+        </div>
+
         {/* Footer */}
         <footer className="mt-12 text-center text-gray-500 text-sm">
           <p>
-            Bike Rental Prediction using IGANN
+            GAMWeaver - Interactive GAM Editor for interactive modeling and
+            explainability. Developed by{" Johann Boenewitz"} as part of a
+            master's thesis.
             <span className="mx-2">•</span>
             <a
-              href="https://github.com/MathiasKraus/igann"
+              href="https://github.com/jboenewitz/GAMWeaver"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary-600 hover:underline"
             >
-              IGANN GitHub
+              GAMWeaver GitHub
             </a>
           </p>
         </footer>

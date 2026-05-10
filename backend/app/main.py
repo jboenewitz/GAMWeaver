@@ -151,6 +151,7 @@ async def load_data(http_request: Request, request: Optional[DataLoadRequest] = 
 
         result = ml_service.load_data(
             dataset_id=request.dataset_id,
+            dataset_name=request.dataset_name,
             target_column=request.target_column,
             feature_columns=request.feature_columns,
         )
@@ -334,7 +335,8 @@ async def get_model_status():
         "target_column": ml_service.target_column,
         "selected_feature_columns": ml_service.selected_feature_columns if ml_service.selected_feature_columns else [],
         "dataset_id": ml_service.active_dataset_id,
-        "dataset_name": Path(ml_service.active_dataset_path).name if ml_service.active_dataset_path else None,
+        "dataset_name": ml_service.active_dataset_name
+        or (Path(ml_service.active_dataset_path).name if ml_service.active_dataset_path else None),
         "train_size": len(ml_service.X_train) if ml_service.X_train is not None else 0,
         "test_size": len(ml_service.X_test) if ml_service.X_test is not None else 0,
     }

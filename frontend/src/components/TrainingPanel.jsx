@@ -74,6 +74,7 @@ const TrainingPanel = ({
       setTrainingProgress("Loading data...");
       await onLoadData({
         dataset_id: uploadPreview.dataset_id,
+        dataset_name: uploadPreview.original_filename,
         target_column: targetColumn,
         feature_columns: selectedFeatureColumns,
       });

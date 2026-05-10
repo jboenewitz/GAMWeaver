@@ -106,6 +106,7 @@ class MLService:
 
         self.active_dataset_id: Optional[str] = None
         self.active_dataset_path: Optional[str] = None
+        self.active_dataset_name: Optional[str] = None
 
         self._restore_active_dataset_metadata()
         self._auto_load_persisted_dataset()
@@ -124,6 +125,7 @@ class MLService:
         target_column = data.get("target_column")
         selected_feature_columns = data.get("selected_feature_columns")
         dataset_id = data.get("dataset_id")
+        dataset_name = data.get("dataset_name")
         if dataset_path:
             self.active_dataset_path = str(Path(dataset_path))
         if target_column:
@@ -132,11 +134,14 @@ class MLService:
             self.selected_feature_columns = [str(col) for col in selected_feature_columns]
         if dataset_id:
             self.active_dataset_id = str(dataset_id)
+        if dataset_name:
+            self.active_dataset_name = str(Path(str(dataset_name)).name)
 
     def _persist_active_dataset_metadata(self) -> None:
         payload = {
             "dataset_id": self.active_dataset_id,
             "dataset_path": self.active_dataset_path,
+            "dataset_name": self.active_dataset_name,
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns,
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -264,10 +269,12 @@ class MLService:
         self.feature_schema_map = {}
         self.original_shape_functions = {}
         self.shape_function_offsets = {}
+        self.active_dataset_name = None
 
     def load_data(
         self,
         dataset_id: Optional[str] = None,
+        dataset_name: Optional[str] = None,
         target_column: Optional[str] = None,
         feature_columns: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
@@ -318,6 +325,10 @@ class MLService:
 
         self.active_dataset_id = resolved_dataset_id
         self.active_dataset_path = str(resolved_path)
+        if dataset_name:
+            self.active_dataset_name = Path(str(dataset_name)).name
+        else:
+            self.active_dataset_name = Path(self.active_dataset_path).name if self.active_dataset_path else None
         self._persist_active_dataset_metadata()
 
         dataset_changed = (
@@ -335,7 +346,8 @@ class MLService:
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns,
             "dataset_id": self.active_dataset_id,
-            "dataset_name": Path(self.active_dataset_path).name if self.active_dataset_path else None,
+            "dataset_name": self.active_dataset_name
+            or (Path(self.active_dataset_path).name if self.active_dataset_path else None),
             "dataset_changed": dataset_changed,
         }
 

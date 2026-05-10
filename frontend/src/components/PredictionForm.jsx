@@ -77,7 +77,7 @@ const PredictionForm = ({
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {featureSchema.map((feature) => (
             <div key={feature.name}>
               <label className="label">{feature.name}</label>

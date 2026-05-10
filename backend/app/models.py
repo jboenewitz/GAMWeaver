@@ -53,6 +53,7 @@ class DataSummary(BaseModel):
 class DataLoadRequest(BaseModel):
     """Request to load a selected dataset and target column."""
     dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
     target_column: Optional[str] = None
     feature_columns: Optional[List[str]] = None
 
