@@ -634,26 +634,12 @@ async def load_user_edits_to_model(user_id: int):
         if not ml_service.is_trained:
             raise HTTPException(status_code=400, detail="Model not trained yet")
         
-        # Get stored edits (with indices and offsets)
-        storage_edits = db_service.get_user_edits_as_list(user_id)
+        # Get stored edits (legacy index format and/or new encoded x format)
+        storage_edits = db_service.get_user_edits_storage_as_list(user_id)
         
         if storage_edits:
             # Apply to ML service for predictions
-            ml_service.shape_function_offsets = {}
-            for sf in storage_edits:
-                feature_name = sf["feature_name"]
-                feature_type = sf["feature_type"]
-                ml_service.shape_function_offsets[feature_name] = {}
-                for point in sf["edited_points"]:
-                    x_val = point["x_value"]
-                    offset = point["y_value"]
-                    if feature_type == "categorical":
-                        ml_service.shape_function_offsets[feature_name][str(x_val)] = offset
-                    else:
-                        try:
-                            ml_service.shape_function_offsets[feature_name][int(x_val)] = offset
-                        except ValueError:
-                            pass
+            ml_service.load_shape_function_offsets_from_storage(storage_edits)
             
             # Convert to display format for frontend
             display_edits = ml_service.convert_storage_to_display_format(storage_edits)
@@ -745,13 +731,15 @@ async def get_combined_predictions_comparison(weighted: bool = True):
             
             # Apply combined offsets
             modified_y = []
-            for i, (x, y) in enumerate(zip(x_values, original_y)):
+            feature_offsets = combined_edits.get(feature_name, {})
+            for x, y in zip(x_values, original_y):
                 offset = 0.0
-                if feature_name in combined_edits:
-                    if feature_type == "categorical":
-                        offset = combined_edits[feature_name].get(str(x), 0.0)
-                    else:
-                        offset = combined_edits[feature_name].get(i, 0.0)
+                if feature_offsets:
+                    offset = ml_service.get_offset_for_feature_value(
+                        feature_name=feature_name,
+                        value=x,
+                        offsets=feature_offsets,
+                    )
                 modified_y.append(y + offset)
             
             combined_shape_functions_display.append({
@@ -803,19 +791,21 @@ async def get_per_user_shape_functions(weighted: bool = True):
                 feature_type = sf["feature_type"]
 
                 modified_y = []
-                for i, (x, y) in enumerate(zip(x_values, original_y)):
-                    offset = 0.0
-                    if feature_name in user_edits_raw:
-                        feat_edits = user_edits_raw[feature_name]
-                        if feature_type == "categorical":
-                            point = feat_edits.get(str(x))
-                        else:
-                            # For numeric features, x_value in DB is the index stored as string
-                            point = feat_edits.get(str(i))
-                        if point:
-                            raw_offset = point["offset"]
-                            weight_val = point["weight"]
-                            offset = raw_offset * weight_val if weighted else raw_offset
+                feature_offsets: Dict[Any, float] = {}
+                if feature_name in user_edits_raw:
+                    for raw_x, point in user_edits_raw[feature_name].items():
+                        raw_offset = point["offset"]
+                        weight_val = point["weight"]
+                        feature_offsets[raw_x] = (
+                            raw_offset * weight_val if weighted else raw_offset
+                        )
+
+                for x, y in zip(x_values, original_y):
+                    offset = ml_service.get_offset_for_feature_value(
+                        feature_name=feature_name,
+                        value=x,
+                        offsets=feature_offsets,
+                    )
                     modified_y.append(float(y) + offset)
 
                 user_shape_functions.append({
