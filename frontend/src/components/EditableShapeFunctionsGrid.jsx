@@ -946,8 +946,8 @@ const EditableShapeFunctionChart = ({
       range: yRange,
     },
     margin: enlarged
-      ? { l: 70, r: 40, t: 50, b: 60 }
-      : { l: 50, r: 20, t: 40, b: 50 },
+      ? { l: 70, r: 40, t: 50, b: hasEdits ? 90 : 60 }
+      : { l: 50, r: 20, t: 40, b: hasEdits ? 78 : 50 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
     height: enlarged ? 520 : 280,
@@ -955,8 +955,11 @@ const EditableShapeFunctionChart = ({
     hovermode: "closest",
     showlegend: hasEdits,
     legend: {
-      x: 0.02,
-      y: 0.98,
+      orientation: "h",
+      x: 0,
+      xanchor: "left",
+      y: -0.24,
+      yanchor: "top",
       font: { size: 10 },
       bgcolor: "rgba(255,255,255,0.8)",
     },
