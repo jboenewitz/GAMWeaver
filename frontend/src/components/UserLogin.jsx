@@ -70,12 +70,16 @@ function UserLogin({ onLogin, onRegister }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-100 rounded-full mb-4">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-slate-900 via-primary-900 to-primary-700 flex items-center justify-center p-4 sm:p-6">
+      <div className="pointer-events-none absolute -top-24 -left-24 h-72 w-72 rounded-full bg-cyan-300/30 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/2 -right-24 h-80 w-80 -translate-y-1/2 rounded-full bg-primary-300/25 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-24 left-1/3 h-64 w-64 rounded-full bg-sky-200/20 blur-3xl" />
+
+      <div className="relative w-full max-w-md rounded-3xl border border-white/30 bg-white/15 p-7 shadow-2xl shadow-slate-900/40 backdrop-blur-2xl sm:p-8">
+        <div className="mb-8 text-center">
+          <div className="mx-auto mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl border border-white/40 bg-white/20 shadow-lg shadow-slate-900/20 backdrop-blur-md">
             <svg
-              className="w-8 h-8 text-primary-600"
+              className="h-8 w-8 text-white"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -88,24 +92,24 @@ function UserLogin({ onLogin, onRegister }) {
               />
             </svg>
           </div>
-          <h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-100/90">
             GAMWeaver
-          </h1>
-          <h2 className="text-2xl font-bold text-gray-800">
+          </p>
+          <h1 className="mt-2 text-3xl font-bold text-white">
             The Interactive GAM Editor
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
+          </h1>
+          <p className="mt-2 text-sm text-slate-100/85">
             {mode === "login"
               ? "Sign in with your credentials"
               : "Register with an invite link"}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label
               htmlFor="username"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="mb-2 block text-sm font-medium text-slate-100"
             >
               Username
             </label>
@@ -115,7 +119,7 @@ function UserLogin({ onLogin, onRegister }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Your username"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              className="w-full rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-white placeholder:text-slate-200/75 transition-all duration-200 focus:border-primary-200 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-primary-300/60"
               disabled={loading}
               autoFocus
             />
@@ -124,7 +128,7 @@ function UserLogin({ onLogin, onRegister }) {
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-gray-700 mb-2"
+              className="mb-2 block text-sm font-medium text-slate-100"
             >
               Password
             </label>
@@ -134,19 +138,19 @@ function UserLogin({ onLogin, onRegister }) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Your password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+              className="w-full rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-white placeholder:text-slate-200/75 transition-all duration-200 focus:border-primary-200 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-primary-300/60"
               disabled={loading}
             />
           </div>
 
           {mode === "register" && !inviteToken && (
-            <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg text-sm">
+            <div className="rounded-xl border border-amber-200/40 bg-amber-100/20 p-3 text-sm text-amber-100 backdrop-blur-sm">
               Registration is only possible via an invite link.
             </div>
           )}
 
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+            <div className="rounded-xl border border-rose-200/45 bg-rose-200/20 p-3 text-sm text-rose-100 backdrop-blur-sm">
               {error}
             </div>
           )}
@@ -154,12 +158,12 @@ function UserLogin({ onLogin, onRegister }) {
           <button
             type="submit"
             disabled={loading || !username.trim() || !password}
-            className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+            className="flex w-full items-center justify-center rounded-xl border border-white/30 bg-gradient-to-r from-primary-500 to-cyan-500 px-4 py-3 font-semibold text-white shadow-lg shadow-primary-900/30 transition-all duration-200 hover:from-primary-400 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
               <>
                 <svg
-                  className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                  className="-ml-1 mr-3 h-5 w-5 animate-spin text-white"
                   fill="none"
                   viewBox="0 0 24 24"
                 >
@@ -177,7 +181,7 @@ function UserLogin({ onLogin, onRegister }) {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                Logging in...
+                {mode === "login" ? "Signing in..." : "Registering..."}
               </>
             ) : mode === "login" ? (
               "Sign In"
@@ -186,34 +190,6 @@ function UserLogin({ onLogin, onRegister }) {
             )}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          {mode === "login" ? (
-            <p>
-              Have an invite?{" "}
-              <button
-                type="button"
-                onClick={() => setMode("register")}
-                className="text-primary-600 hover:underline"
-              >
-                Register here
-              </button>
-              .
-            </p>
-          ) : (
-            <p>
-              Already have an account?{" "}
-              <button
-                type="button"
-                onClick={() => setMode("login")}
-                className="text-primary-600 hover:underline"
-              >
-                Sign in
-              </button>
-              .
-            </p>
-          )}
-        </div>
       </div>
     </div>
   );
