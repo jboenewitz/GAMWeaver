@@ -88,9 +88,12 @@ function UserLogin({ onLogin, onRegister }) {
               />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            Interactive GAM Editor
+          <h1>
+            GAMWeaver
           </h1>
+          <h2 className="text-2xl font-bold text-gray-800">
+            The Interactive GAM Editor
+          </h2>
           <p className="text-sm text-gray-500 mt-1">
             {mode === "login"
               ? "Sign in with your credentials"
