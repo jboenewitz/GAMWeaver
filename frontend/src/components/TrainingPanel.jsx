@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 
 const TrainingPanel = ({
   onUploadDataset,
@@ -256,147 +257,149 @@ const TrainingPanel = ({
         )}
       </div>
 
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-              <h4 className="text-lg font-semibold text-gray-800">Upload Dataset</h4>
-              <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
-                ✕
-              </button>
-            </div>
-
-            <div className="px-6 py-5 space-y-4">
-              {modalError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {modalError}
-                </div>
-              )}
-
-              <div>
-                <label className="label">CSV File</label>
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] || null;
-                    setSelectedFile(file);
-                    setUploadPreview(null);
-                    setTargetColumn("");
-                    setModalError(null);
-                  }}
-                  className="block w-full text-sm text-gray-700 file:mr-4 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                />
+      {showUploadModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-xl rounded-xl bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <h4 className="text-lg font-semibold text-gray-800">Upload Dataset</h4>
+                <button onClick={closeModal} className="text-gray-500 hover:text-gray-700">
+                  ✕
+                </button>
               </div>
 
-              <button
-                onClick={handleInspectUpload}
-                disabled={!selectedFile || uploading}
-                className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? "Uploading..." : "Upload & Inspect Columns"}
-              </button>
+              <div className="space-y-4 px-6 py-5">
+                {modalError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {modalError}
+                  </div>
+                )}
 
-              {uploadPreview && (
-                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-                  <div className="text-sm text-gray-700">
-                    <span className="font-medium">Columns detected:</span> {uploadPreview.columns.length}
-                  </div>
-                  <div>
-                    <label className="label">Target Column</label>
-                    <select
-                      value={targetColumn}
-                      onChange={(event) => handleTargetColumnChange(event.target.value)}
-                      className="select-field"
-                    >
-                      {uploadPreview.columns.map((column) => (
-                        <option key={column} value={column}>
-                          {column}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="label mb-0">Feature Columns</label>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={selectAllFeatureColumns}
-                          className="text-xs text-primary-700 hover:underline"
-                        >
-                          Select all
-                        </button>
-                        <button
-                          type="button"
-                          onClick={clearAllFeatureColumns}
-                          className="text-xs text-gray-600 hover:underline"
-                        >
-                          Clear all
-                        </button>
-                      </div>
-                    </div>
-                    <div className="max-h-40 overflow-y-auto rounded border border-gray-200 bg-white p-2 space-y-1">
-                      {uploadPreview.columns.map((column) => {
-                        const isTarget = column === targetColumn;
-                        const checked =
-                          !isTarget && selectedFeatureColumns.includes(column);
-                        return (
-                          <label
-                            key={column}
-                            className={`flex items-center justify-between gap-2 px-2 py-1 rounded ${
-                              isTarget ? "bg-amber-50 text-amber-700" : "hover:bg-gray-50"
-                            }`}
-                          >
-                            <span className="text-sm">{column}</span>
-                            {isTarget ? (
-                              <span className="text-xs font-medium">Target</span>
-                            ) : (
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleFeatureColumn(column)}
-                              />
-                            )}
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Selected features: {selectedFeatureColumns.length}
-                    </p>
-                  </div>
-                  <div className="max-h-28 overflow-y-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-600">
-                    {uploadPreview.columns.join(", ")}
-                  </div>
+                <div>
+                  <label className="label">CSV File</label>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setSelectedFile(file);
+                      setUploadPreview(null);
+                      setTargetColumn("");
+                      setModalError(null);
+                    }}
+                    className="block w-full text-sm text-gray-700 file:mr-4 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                  />
                 </div>
-              )}
-            </div>
 
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
-              <button
-                onClick={closeModal}
-                disabled={uploading}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleLoadUploadedDataset}
-                disabled={
-                  !uploadPreview ||
-                  !targetColumn ||
-                  !selectedFeatureColumns.length ||
-                  uploading
-                }
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {uploading ? "Loading..." : "Load Dataset"}
-              </button>
+                <button
+                  onClick={handleInspectUpload}
+                  disabled={!selectedFile || uploading}
+                  className="btn-secondary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {uploading ? "Uploading..." : "Upload & Inspect Columns"}
+                </button>
+
+                {uploadPreview && (
+                  <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="text-sm text-gray-700">
+                      <span className="font-medium">Columns detected:</span> {uploadPreview.columns.length}
+                    </div>
+                    <div>
+                      <label className="label">Target Column</label>
+                      <select
+                        value={targetColumn}
+                        onChange={(event) => handleTargetColumnChange(event.target.value)}
+                        className="select-field"
+                      >
+                        {uploadPreview.columns.map((column) => (
+                          <option key={column} value={column}>
+                            {column}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <label className="label mb-0">Feature Columns</label>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={selectAllFeatureColumns}
+                            className="text-xs text-primary-700 hover:underline"
+                          >
+                            Select all
+                          </button>
+                          <button
+                            type="button"
+                            onClick={clearAllFeatureColumns}
+                            className="text-xs text-gray-600 hover:underline"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                      </div>
+                      <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-gray-200 bg-white p-2">
+                        {uploadPreview.columns.map((column) => {
+                          const isTarget = column === targetColumn;
+                          const checked =
+                            !isTarget && selectedFeatureColumns.includes(column);
+                          return (
+                            <label
+                              key={column}
+                              className={`flex items-center justify-between gap-2 rounded px-2 py-1 ${
+                                isTarget ? "bg-amber-50 text-amber-700" : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <span className="text-sm">{column}</span>
+                              {isTarget ? (
+                                <span className="text-xs font-medium">Target</span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleFeatureColumn(column)}
+                                />
+                              )}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">
+                        Selected features: {selectedFeatureColumns.length}
+                      </p>
+                    </div>
+                    <div className="max-h-28 overflow-y-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-600">
+                      {uploadPreview.columns.join(", ")}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button
+                  onClick={closeModal}
+                  disabled={uploading}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleLoadUploadedDataset}
+                  disabled={
+                    !uploadPreview ||
+                    !targetColumn ||
+                    !selectedFeatureColumns.length ||
+                    uploading
+                  }
+                  className="rounded-lg bg-primary-600 px-4 py-2 text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {uploading ? "Loading..." : "Load Dataset"}
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
