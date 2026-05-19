@@ -954,14 +954,18 @@ async def combined_predict(input_data: Dict[str, Any] = Body(...)):
 
 @app.post("/api/database/reset", response_model=ResetDatabaseResponse)
 async def reset_database(http_request: Request):
-    """Reset the entire database (users and edits)."""
+    """Reset DB data and persisted uploaded-dataset artifacts."""
     try:
         _require_destructive_access(http_request)
         db_service.reset_all_data()
-        ml_service.shape_function_offsets = {}
+        cleanup_result = ml_service.reset_all_data()
         return ResetDatabaseResponse(
             success=True,
-            message="Database reset successfully. All users and edits have been deleted."
+            message=(
+                "Database reset successfully. All users, edits, uploaded CSV files, "
+                "and extracted feature state were deleted."
+                f" Removed {cleanup_result['deleted_dataset_files']} uploaded dataset file(s)."
+            ),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

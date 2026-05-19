@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import apiService from "../api/apiService";
 
-const SuperadminPage = ({ onBack, onOpenCombined }) => {
+const SuperadminPage = ({ onBack, onOpenCombined, onResetDatabase }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -11,6 +11,8 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
   const [creating, setCreating] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
   const [inviteExpires, setInviteExpires] = useState("");
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const appBaseUrl = useMemo(() => {
     const configured = import.meta.env.VITE_PUBLIC_APP_URL;
@@ -77,6 +79,20 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
       setError(
         err.response?.data?.detail || err.message || "Failed to create invite",
       );
+    }
+  };
+
+  const handleResetDatabase = async () => {
+    if (!onResetDatabase) return;
+    setResetting(true);
+    setError(null);
+    try {
+      await onResetDatabase();
+    } catch (err) {
+      setError(
+        err.response?.data?.detail || err.message || "Failed to reset database",
+      );
+      setResetting(false);
     }
   };
 
@@ -163,6 +179,22 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
           )}
         </section>
 
+        <section className="bg-white rounded-xl shadow-md p-6 border border-red-100">
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">
+            System Reset
+          </h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Permanently removes all users, all saved edits, uploaded CSV files,
+            and extracted feature state for the current backend environment.
+          </p>
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Reset Database
+          </button>
+        </section>
+
         {showCreateForm && (
           <section className="bg-white rounded-xl shadow-md p-6">
             <h2 className="text-lg font-semibold text-gray-800 mb-4">
@@ -243,6 +275,61 @@ const SuperadminPage = ({ onBack, onOpenCombined }) => {
           )}
         </section>
       </main>
+
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl mx-4 w-full max-w-md p-6">
+            <h3 className="mb-3 text-lg font-bold text-slate-800">
+              Reset Database?
+            </h3>
+            <p className="mb-6 text-sm text-slate-600">
+              This permanently deletes users, edits, uploaded CSV files, and
+              extracted feature state. This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowResetConfirm(false)}
+                disabled={resetting}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleResetDatabase}
+                disabled={resetting}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
+              >
+                {resetting ? (
+                  <>
+                    <svg
+                      className="animate-spin -ml-1 mr-2 h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Resetting...
+                  </>
+                ) : (
+                  "Yes, Reset Everything"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

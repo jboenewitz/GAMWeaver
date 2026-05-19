@@ -557,7 +557,6 @@ function App() {
     return (
       <CombinedResultsPage
         onBack={() => setCurrentPage("main")}
-        onResetDatabase={handleResetDatabase}
         currentUser={currentUser}
       />
     );
@@ -568,6 +567,7 @@ function App() {
       <SuperadminPage
         onBack={() => setCurrentPage("main")}
         onOpenCombined={() => setCurrentPage("combined")}
+        onResetDatabase={handleResetDatabase}
       />
     );
   }

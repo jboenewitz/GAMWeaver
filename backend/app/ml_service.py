@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -269,7 +270,44 @@ class MLService:
         self.feature_schema_map = {}
         self.original_shape_functions = {}
         self.shape_function_offsets = {}
+        self.target_column = None
+        self.active_dataset_id = None
+        self.active_dataset_path = None
         self.active_dataset_name = None
+
+    def reset_all_data(self) -> Dict[str, int]:
+        """
+        Reset ML runtime state and remove persisted uploaded dataset artifacts.
+
+        This keeps the built-in fallback dataset (bike.csv) untouched, but clears
+        uploaded CSV files, active dataset metadata, and extracted feature state.
+        """
+        deleted_dataset_files = 0
+        deleted_dataset_dirs = 0
+        deleted_metadata_files = 0
+
+        if self.datasets_dir.exists():
+            for entry in self.datasets_dir.iterdir():
+                if entry.is_file() or entry.is_symlink():
+                    entry.unlink(missing_ok=True)
+                    deleted_dataset_files += 1
+                elif entry.is_dir():
+                    shutil.rmtree(entry)
+                    deleted_dataset_dirs += 1
+
+        if self.active_dataset_file.exists():
+            self.active_dataset_file.unlink(missing_ok=True)
+            deleted_metadata_files += 1
+
+        self._reset_runtime_state()
+        self.data_store_dir.mkdir(parents=True, exist_ok=True)
+        self.datasets_dir.mkdir(parents=True, exist_ok=True)
+
+        return {
+            "deleted_dataset_files": deleted_dataset_files,
+            "deleted_dataset_dirs": deleted_dataset_dirs,
+            "deleted_metadata_files": deleted_metadata_files,
+        }
 
     def load_data(
         self,

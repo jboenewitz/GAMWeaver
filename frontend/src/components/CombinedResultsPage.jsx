@@ -151,7 +151,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
   );
 };
 
-function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
+function CombinedResultsPage({ onBack, currentUser }) {
   const allowDestructiveActions =
     import.meta.env.VITE_ALLOW_DESTRUCTIVE_ACTIONS === "true" ||
     currentUser?.is_superadmin;
@@ -162,8 +162,6 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
   const [users, setUsers] = useState([]);
   const [editLogs, setEditLogs] = useState(null);
   const [editLogsError, setEditLogsError] = useState(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const [expandedFeatures, setExpandedFeatures] = useState({});
 
   // Per-user shape function overlay state
@@ -296,23 +294,6 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
       // silently fail
     } finally {
       setLoadingOverlay(false);
-    }
-  };
-
-  const handleResetDatabase = async () => {
-    if (!allowDestructiveActions) {
-      setError("Destructive actions are disabled in this demo.");
-      return;
-    }
-    setResetting(true);
-    try {
-      await onResetDatabase();
-      setShowResetConfirm(false);
-      await fetchData();
-    } catch (err) {
-      setError(err.message || "Failed to reset database");
-    } finally {
-      setResetting(false);
     }
   };
 
@@ -1078,14 +1059,6 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
               >
                 Refresh
               </button>
-              {allowDestructiveActions && (
-                <button
-                  onClick={() => setShowResetConfirm(true)}
-                  className="rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700"
-                >
-                  Reset Database
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -1168,62 +1141,6 @@ function CombinedResultsPage({ onBack, onResetDatabase, currentUser }) {
           </>
         )}
       </main>
-
-      {/* Reset Confirmation Modal */}
-      {showResetConfirm && allowDestructiveActions && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-          <div className="glass-surface-strong mx-4 w-full max-w-md p-6">
-            <h3 className="mb-4 text-lg font-bold text-slate-800">
-              Reset Database?
-            </h3>
-            <p className="mb-6 text-slate-600">
-              This will permanently delete all users and their edits. This
-              action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowResetConfirm(false)}
-                disabled={resetting}
-                className="rounded-lg border border-slate-300 px-4 py-2 transition-colors hover:bg-slate-100"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleResetDatabase}
-                disabled={resetting}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center"
-              >
-                {resetting ? (
-                  <>
-                    <svg
-                      className="animate-spin -ml-1 mr-2 h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    Resetting...
-                  </>
-                ) : (
-                  "Yes, Reset"
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Delete Edit Modal */}
       {showDeleteModal && editToDelete && allowDestructiveActions && (
