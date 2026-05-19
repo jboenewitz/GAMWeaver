@@ -218,3 +218,25 @@ class UserPreferencesRequest(BaseModel):
 class UserPreferencesResponse(BaseModel):
     """Response with user preferences."""
     preferences: Dict[str, Any]
+
+
+class FeatureChartSettingsRequest(BaseModel):
+    """Superadmin chart-display settings for one feature."""
+    treat_as_categorical: bool = False
+    treat_as_numeric: bool = False
+    value_labels: Optional[Dict[str, str]] = None
+
+
+class FeatureChartSettingsResponse(BaseModel):
+    """Response with effective chart-display settings for one feature."""
+    feature_name: str
+    base_feature_type: str
+    chart_feature_type: str
+    is_numeric: bool
+    is_categorical: bool
+    can_be_categorical: bool
+    can_be_numeric: bool
+    treat_as_categorical: bool
+    treat_as_numeric: bool
+    value_labels: Dict[str, str]
+    available_values: List[str] = []

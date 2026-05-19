@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 from sklearn.compose import ColumnTransformer
@@ -13,6 +14,44 @@ from sklearn.pipeline import Pipeline
 # Determine the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DATA_FILE = PROJECT_ROOT / "bike.csv"
+
+# Numeric columns with these names are commonly integer-encoded categories.
+_CATEGORICAL_NAME_HINTS = {
+    "season",
+    "mnth",
+    "month",
+    "weekday",
+    "workingday",
+    "holiday",
+    "weathersit",
+    "weather",
+}
+
+
+def _looks_like_integer_categorical(series: pd.Series, column_name: str) -> bool:
+    """Return True when a numeric series likely represents categories."""
+    non_null = series.dropna()
+    if non_null.empty:
+        return False
+
+    values = pd.to_numeric(non_null, errors="coerce").dropna()
+    if values.empty:
+        return False
+
+    # Categorical integer-like values should be very close to whole numbers.
+    is_integer_like = np.all(np.isclose(values.to_numpy(dtype=float), np.round(values.to_numpy(dtype=float))))
+    if not is_integer_like:
+        return False
+
+    unique_count = int(values.nunique(dropna=True))
+    unique_ratio = unique_count / max(len(values), 1)
+    normalized_name = str(column_name).strip().lower()
+
+    if normalized_name in _CATEGORICAL_NAME_HINTS:
+        return True
+
+    # General heuristic for low-cardinality integer columns.
+    return unique_count <= 12 or (unique_count <= 24 and unique_ratio <= 0.05)
 
 
 def _resolve_target_column(df: pd.DataFrame, target_column: Optional[str]) -> str:
@@ -61,13 +100,13 @@ def _resolve_feature_columns(
 
 
 def _infer_feature_types(X: pd.DataFrame) -> Tuple[List[str], List[str]]:
-    """Infer categorical and numeric features from dtypes."""
+    """Infer categorical and numeric features from semantic column patterns."""
     numeric_features: List[str] = []
     categorical_features: List[str] = []
 
     for column in X.columns:
         series = X[column]
-        if is_numeric_dtype(series):
+        if is_numeric_dtype(series) and not _looks_like_integer_categorical(series, column):
             numeric_features.append(column)
         else:
             categorical_features.append(column)

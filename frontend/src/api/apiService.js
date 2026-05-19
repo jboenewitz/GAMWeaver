@@ -81,6 +81,22 @@ export const apiService = {
     return response.data;
   },
 
+  getFeatureChartSettings: async (featureName) => {
+    const response = await api.get(
+      `/model/feature-chart-settings/${encodeURIComponent(featureName)}`,
+    );
+    return response.data;
+  },
+
+  updateFeatureChartSettings: async (featureName, settings) => {
+    const response = await api.put(
+      `/model/feature-chart-settings/${encodeURIComponent(featureName)}`,
+      settings,
+      { headers: adminHeaders() },
+    );
+    return response.data;
+  },
+
   getPredictionsVsActual: async () => {
     const response = await api.get("/model/predictions-vs-actual");
     return response.data;

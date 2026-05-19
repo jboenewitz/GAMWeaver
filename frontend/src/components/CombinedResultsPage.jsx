@@ -628,6 +628,11 @@ function CombinedResultsPage({ onBack, currentUser }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {activeData.combined_shape_functions_display.map((sf, idx) => {
             const isNumeric = sf.feature_type === "numeric";
+            const xTickLabels =
+              Array.isArray(sf.x_tick_labels) &&
+              sf.x_tick_labels.length === sf.x_values.length
+                ? sf.x_tick_labels
+                : null;
             const hasChanges = sf.y_values.some(
               (y, i) => Math.abs(y - sf.original_y_values[i]) > 0.0001,
             );
@@ -776,6 +781,13 @@ function CombinedResultsPage({ onBack, currentUser }) {
                         title: { text: sf.feature_name, font: { size: 10 } },
                         tickangle: isNumeric ? 0 : -45,
                         tickfont: { size: 9 },
+                        ...(!isNumeric && xTickLabels
+                          ? {
+                              tickmode: "array",
+                              tickvals: sf.x_values,
+                              ticktext: xTickLabels,
+                            }
+                          : {}),
                       },
                       yaxis: {
                         title: { text: "Effect", font: { size: 10 } },

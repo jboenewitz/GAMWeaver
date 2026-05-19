@@ -108,6 +108,7 @@ class MLService:
         self.active_dataset_id: Optional[str] = None
         self.active_dataset_path: Optional[str] = None
         self.active_dataset_name: Optional[str] = None
+        self.feature_chart_settings: Dict[str, Dict[str, Any]] = {}
 
         self._restore_active_dataset_metadata()
         self._auto_load_persisted_dataset()
@@ -127,6 +128,7 @@ class MLService:
         selected_feature_columns = data.get("selected_feature_columns")
         dataset_id = data.get("dataset_id")
         dataset_name = data.get("dataset_name")
+        feature_chart_settings = data.get("feature_chart_settings")
         if dataset_path:
             self.active_dataset_path = str(Path(dataset_path))
         if target_column:
@@ -137,6 +139,25 @@ class MLService:
             self.active_dataset_id = str(dataset_id)
         if dataset_name:
             self.active_dataset_name = str(Path(str(dataset_name)).name)
+        if isinstance(feature_chart_settings, dict):
+            sanitized: Dict[str, Dict[str, Any]] = {}
+            for feature_name, raw_setting in feature_chart_settings.items():
+                if not isinstance(raw_setting, dict):
+                    continue
+                raw_labels = raw_setting.get("value_labels")
+                labels: Dict[str, str] = {}
+                if isinstance(raw_labels, dict):
+                    for raw_key, raw_label in raw_labels.items():
+                        label_str = str(raw_label).strip()
+                        if not label_str:
+                            continue
+                        labels[str(raw_key)] = label_str
+                sanitized[str(feature_name)] = {
+                    "treat_as_categorical": bool(raw_setting.get("treat_as_categorical")),
+                    "treat_as_numeric": bool(raw_setting.get("treat_as_numeric")),
+                    "value_labels": labels,
+                }
+            self.feature_chart_settings = sanitized
 
     def _persist_active_dataset_metadata(self) -> None:
         payload = {
@@ -145,6 +166,7 @@ class MLService:
             "dataset_name": self.active_dataset_name,
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns,
+            "feature_chart_settings": self.feature_chart_settings,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.active_dataset_file.write_text(
@@ -215,6 +237,298 @@ class MLService:
             "default_target_column": default_target,
         }
 
+    @staticmethod
+    def _stringify_chart_value(value: Any) -> str:
+        """Convert raw values into stable, human-readable chart keys."""
+        if value is None:
+            return "Unknown"
+        if isinstance(value, (int, np.integer)):
+            return str(int(value))
+        if isinstance(value, (float, np.floating)):
+            numeric = float(value)
+            if not np.isfinite(numeric):
+                return str(numeric)
+            rounded = round(numeric)
+            if abs(numeric - rounded) < 1e-9:
+                return str(int(rounded))
+            return format(numeric, ".12g")
+        return str(value)
+
+    @staticmethod
+    def _is_integer_like_numeric(values: pd.Series) -> bool:
+        if values.empty:
+            return False
+        numeric = pd.to_numeric(values, errors="coerce").dropna()
+        if numeric.empty:
+            return False
+        arr = numeric.to_numpy(dtype=float)
+        return bool(np.all(np.isclose(arr, np.round(arr))))
+
+    def _feature_can_be_categorical(self, feature_name: str) -> bool:
+        """Whether a feature can safely be treated as categorical for charts."""
+        if feature_name in self.cat_features:
+            return True
+        if self.X_train is None or feature_name not in self.X_train.columns:
+            return False
+
+        series = pd.to_numeric(self.X_train[feature_name], errors="coerce").dropna()
+        if series.empty or not self._is_integer_like_numeric(series):
+            return False
+
+        unique_count = int(series.nunique(dropna=True))
+        unique_ratio = unique_count / max(len(series), 1)
+        return unique_count <= 12 or (unique_count <= 24 and unique_ratio <= 0.05)
+
+    def _feature_can_be_numeric(self, feature_name: str) -> bool:
+        """Whether a feature can safely be treated as numeric for charts."""
+        if feature_name in self.num_features:
+            return True
+        if self.X_train is None or feature_name not in self.X_train.columns:
+            return False
+
+        series = self.X_train[feature_name]
+        non_null = series.dropna()
+        if non_null.empty:
+            return False
+
+        numeric = pd.to_numeric(non_null, errors="coerce")
+        return bool(numeric.notna().all())
+
+    def _get_feature_chart_setting(self, feature_name: str) -> Dict[str, Any]:
+        raw = self.feature_chart_settings.get(feature_name, {})
+        labels = raw.get("value_labels", {}) if isinstance(raw, dict) else {}
+        sanitized_labels = {
+            str(k): str(v).strip()
+            for k, v in labels.items()
+            if str(v).strip()
+        } if isinstance(labels, dict) else {}
+        return {
+            "treat_as_categorical": bool(raw.get("treat_as_categorical")) if isinstance(raw, dict) else False,
+            "treat_as_numeric": bool(raw.get("treat_as_numeric")) if isinstance(raw, dict) else False,
+            "value_labels": sanitized_labels,
+        }
+
+    def _get_feature_chart_mode(self, feature_name: str) -> str:
+        """Return effective chart display mode ('numeric' or 'categorical')."""
+        setting = self._get_feature_chart_setting(feature_name)
+        base_feature_type = "categorical" if feature_name in self.cat_features else "numeric"
+
+        if base_feature_type == "numeric":
+            if bool(setting.get("treat_as_categorical")) and self._feature_can_be_categorical(feature_name):
+                return "categorical"
+            return "numeric"
+
+        if bool(setting.get("treat_as_numeric")) and self._feature_can_be_numeric(feature_name):
+            return "numeric"
+        return "categorical"
+
+    def _is_feature_categorical_for_chart(self, feature_name: str) -> bool:
+        return self._get_feature_chart_mode(feature_name) == "categorical"
+
+    def _get_chart_x_values(
+        self,
+        feature_name: str,
+        *,
+        treat_as_categorical: Optional[bool] = None,
+    ) -> List[str]:
+        """Get raw x-axis values that should be used for a categorical chart."""
+        if self.X_train is None or feature_name not in self.X_train.columns:
+            return []
+
+        if treat_as_categorical is None:
+            treat_as_categorical = self._is_feature_categorical_for_chart(feature_name)
+
+        if not treat_as_categorical:
+            return []
+
+        if feature_name in self.cat_features:
+            options = self.feature_schema_map.get(feature_name, {}).get("categorical_options", [])
+            base_values = [self._stringify_chart_value(v) for v in options]
+        else:
+            numeric_series = pd.to_numeric(self.X_train[feature_name], errors="coerce").dropna()
+            uniques = sorted(numeric_series.unique().tolist())
+            base_values = [self._stringify_chart_value(v) for v in uniques]
+
+        deduped: List[str] = []
+        seen = set()
+        for raw in base_values:
+            if raw in seen:
+                continue
+            seen.add(raw)
+            deduped.append(raw)
+
+        # Keep intuitive ordering for integer-coded categories like month (1..12).
+        numeric_pairs: List[Tuple[float, str]] = []
+        for raw in deduped:
+            try:
+                numeric_pairs.append((float(raw), raw))
+            except (TypeError, ValueError):
+                numeric_pairs = []
+                break
+        if numeric_pairs:
+            numeric_pairs.sort(key=lambda item: item[0])
+            deduped = [raw for _, raw in numeric_pairs]
+        return deduped
+
+    def _get_numeric_chart_values_for_categorical_feature(
+        self,
+        feature_name: str,
+    ) -> List[Tuple[str, float]]:
+        """Return (raw_value, numeric_x) pairs for categorical-as-numeric display."""
+        raw_values = self._get_chart_x_values(
+            feature_name,
+            treat_as_categorical=True,
+        )
+
+        pairs: List[Tuple[str, float]] = []
+        for raw in raw_values:
+            try:
+                numeric_val = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(numeric_val):
+                continue
+            pairs.append((str(raw), float(numeric_val)))
+
+        pairs.sort(key=lambda item: item[1])
+        return pairs
+
+    def get_feature_chart_setting(self, feature_name: str) -> Dict[str, Any]:
+        """Return effective chart settings for one feature."""
+        if feature_name not in self.feature_names:
+            raise ValueError(f"Unknown feature: {feature_name}")
+
+        base_feature_type = "categorical" if feature_name in self.cat_features else "numeric"
+        can_be_categorical = self._feature_can_be_categorical(feature_name)
+        can_be_numeric = self._feature_can_be_numeric(feature_name)
+        stored = self._get_feature_chart_setting(feature_name)
+        treat_as_categorical = bool(stored.get("treat_as_categorical")) if base_feature_type == "numeric" else False
+        treat_as_numeric = bool(stored.get("treat_as_numeric")) if base_feature_type == "categorical" else False
+
+        if treat_as_categorical and not can_be_categorical:
+            treat_as_categorical = False
+        if treat_as_numeric and not can_be_numeric:
+            treat_as_numeric = False
+
+        chart_feature_type = "categorical"
+        if base_feature_type == "numeric":
+            chart_feature_type = "categorical" if treat_as_categorical else "numeric"
+        else:
+            chart_feature_type = "numeric" if treat_as_numeric else "categorical"
+
+        is_categorical = chart_feature_type == "categorical"
+        is_numeric = chart_feature_type == "numeric"
+        allowed_values = set(
+            self._get_chart_x_values(
+                feature_name,
+                treat_as_categorical=is_categorical,
+            )
+        )
+        available_values = self._get_chart_x_values(
+            feature_name,
+            treat_as_categorical=bool(
+                is_categorical
+                or can_be_categorical
+                or base_feature_type == "categorical"
+            ),
+        )
+        value_labels = {
+            str(raw): str(label).strip()
+            for raw, label in (stored.get("value_labels", {}) or {}).items()
+            if str(label).strip() and (not allowed_values or str(raw) in allowed_values)
+        }
+
+        return {
+            "feature_name": feature_name,
+            "base_feature_type": base_feature_type,
+            "chart_feature_type": chart_feature_type,
+            "is_numeric": is_numeric,
+            "is_categorical": is_categorical,
+            "can_be_categorical": can_be_categorical,
+            "can_be_numeric": can_be_numeric,
+            "treat_as_categorical": treat_as_categorical,
+            "treat_as_numeric": treat_as_numeric,
+            "value_labels": value_labels,
+            "available_values": available_values,
+        }
+
+    def update_feature_chart_setting(
+        self,
+        feature_name: str,
+        treat_as_categorical: bool,
+        treat_as_numeric: bool = False,
+        value_labels: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Persist superadmin chart settings for one feature."""
+        if self.X_train is None:
+            raise ValueError("Data not loaded yet")
+        if feature_name not in self.feature_names:
+            raise ValueError(f"Unknown feature: {feature_name}")
+
+        base_feature_type = "categorical" if feature_name in self.cat_features else "numeric"
+        can_be_categorical = self._feature_can_be_categorical(feature_name)
+        can_be_numeric = self._feature_can_be_numeric(feature_name)
+        current = self._get_feature_chart_setting(feature_name)
+
+        normalized_treat_as_categorical = False
+        normalized_treat_as_numeric = False
+        if base_feature_type == "numeric":
+            normalized_treat_as_categorical = bool(treat_as_categorical)
+            if normalized_treat_as_categorical and not can_be_categorical:
+                raise ValueError(
+                    f"Feature '{feature_name}' cannot be treated as categorical (too many distinct values)"
+                )
+        else:
+            normalized_treat_as_numeric = bool(treat_as_numeric)
+            if normalized_treat_as_numeric and not can_be_numeric:
+                raise ValueError(
+                    f"Feature '{feature_name}' cannot be treated as numeric (values are not numeric)"
+                )
+
+        effective_categorical = (
+            base_feature_type == "categorical" and not normalized_treat_as_numeric
+        ) or (
+            base_feature_type == "numeric" and normalized_treat_as_categorical
+        )
+        allowed_values = set(
+            self._get_chart_x_values(
+                feature_name,
+                treat_as_categorical=effective_categorical,
+            )
+        )
+
+        source_labels = current.get("value_labels", {}) if value_labels is None else (value_labels or {})
+        sanitized_labels: Dict[str, str] = {}
+        for raw_key, raw_label in source_labels.items():
+            key = self._stringify_chart_value(raw_key)
+            label = str(raw_label).strip()
+            if not label:
+                continue
+            if allowed_values and key not in allowed_values:
+                continue
+            sanitized_labels[key] = label
+
+        normalized_setting = {
+            "treat_as_categorical": normalized_treat_as_categorical,
+            "treat_as_numeric": normalized_treat_as_numeric,
+            "value_labels": sanitized_labels,
+        }
+
+        if (
+            not normalized_setting["treat_as_categorical"]
+            and not normalized_setting["treat_as_numeric"]
+            and not normalized_setting["value_labels"]
+        ):
+            self.feature_chart_settings.pop(feature_name, None)
+        else:
+            self.feature_chart_settings[feature_name] = normalized_setting
+
+        # Clear runtime chart snapshots/offsets so the next fetch reflects the new mode.
+        self.original_shape_functions = {}
+        self.shape_function_offsets = {}
+        self._persist_active_dataset_metadata()
+        return self.get_feature_chart_setting(feature_name)
+
     def _build_feature_schema(self, X_all: pd.DataFrame) -> List[Dict[str, Any]]:
         schema: List[Dict[str, Any]] = []
         for feature_name in self.feature_names:
@@ -274,6 +588,7 @@ class MLService:
         self.active_dataset_id = None
         self.active_dataset_path = None
         self.active_dataset_name = None
+        self.feature_chart_settings = {}
 
     def reset_all_data(self) -> Dict[str, int]:
         """
@@ -322,6 +637,11 @@ class MLService:
         previous_selected_features = list(self.selected_feature_columns)
 
         resolved_path, resolved_dataset_id = self._resolve_dataset_path(dataset_id)
+        resolved_path_str = str(resolved_path)
+
+        # Switch to a different dataset file: discard previous chart settings.
+        if previous_dataset_path and previous_dataset_path != resolved_path_str:
+            self.feature_chart_settings = {}
         (
             X_train,
             X_test,
@@ -357,12 +677,19 @@ class MLService:
         self.num_features = list(num_features)
         self.target_column = resolved_target
 
+        # Keep only settings for currently selected features.
+        self.feature_chart_settings = {
+            feature: setting
+            for feature, setting in self.feature_chart_settings.items()
+            if feature in self.feature_names
+        }
+
         X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
         self.feature_schema = self._build_feature_schema(X_all)
         self.feature_schema_map = {item["name"]: item for item in self.feature_schema}
 
         self.active_dataset_id = resolved_dataset_id
-        self.active_dataset_path = str(resolved_path)
+        self.active_dataset_path = resolved_path_str
         if dataset_name:
             self.active_dataset_name = Path(str(dataset_name)).name
         else:
@@ -555,19 +882,27 @@ class MLService:
 
     def _extract_shape_function(self, feature_name: str, feature_idx: int) -> Dict[str, Any]:
         """Extract shape function data for a single feature."""
-        is_categorical = feature_name in self.cat_features
+        chart_setting = self.get_feature_chart_setting(feature_name)
+        is_categorical = chart_setting.get("chart_feature_type") == "categorical"
+        value_labels = chart_setting.get("value_labels", {}) or {}
         baseline = self._build_shape_baseline()
 
         if is_categorical:
-            options = self.feature_schema_map.get(feature_name, {}).get("categorical_options", [])
-            unique_values = [str(v) for v in options] or [
-                str(v) for v in self.X_train[feature_name].astype(str).unique().tolist()
-            ]
-
+            raw_x_values = self._get_chart_x_values(
+                feature_name,
+                treat_as_categorical=True,
+            )
             shape_values = []
-            for value in unique_values:
+            effective_x_values: List[str] = []
+            for raw_value in raw_x_values:
                 sample_data = baseline.copy()
-                sample_data[feature_name] = value
+                if feature_name in self.num_features:
+                    try:
+                        sample_data[feature_name] = float(raw_value)
+                    except (TypeError, ValueError):
+                        continue
+                else:
+                    sample_data[feature_name] = raw_value
                 sample = pd.DataFrame([sample_data])[self.feature_names]
 
                 for cat_feat in self.cat_features:
@@ -578,16 +913,60 @@ class MLService:
                 pred = self.model.predict(sample)
                 pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
                 shape_values.append(pred_val)
+                effective_x_values.append(raw_value)
 
-            mean_val = np.mean(shape_values)
-            shape_values = [value - mean_val for value in shape_values]
+            if not effective_x_values:
+                is_categorical = False
 
-            return {
-                "feature_name": feature_name,
-                "x_values": unique_values,
-                "y_values": shape_values,
-                "feature_type": "categorical",
-            }
+            if is_categorical:
+                mean_val = np.mean(shape_values)
+                shape_values = [value - mean_val for value in shape_values]
+                x_tick_labels = [
+                    str(value_labels.get(raw_value, raw_value))
+                    for raw_value in effective_x_values
+                ]
+
+                return {
+                    "feature_name": feature_name,
+                    "x_values": effective_x_values,
+                    "x_tick_labels": x_tick_labels,
+                    "y_values": shape_values,
+                    "feature_type": "categorical",
+                    "chart_config": chart_setting,
+                }
+
+        if feature_name in self.cat_features:
+            numeric_pairs = self._get_numeric_chart_values_for_categorical_feature(
+                feature_name,
+            )
+            if numeric_pairs:
+                x_values_numeric: List[float] = []
+                shape_values = []
+                for raw_value, numeric_x in numeric_pairs:
+                    sample_data = baseline.copy()
+                    sample_data[feature_name] = raw_value
+                    sample = pd.DataFrame([sample_data])[self.feature_names]
+
+                    for cat_feat in self.cat_features:
+                        sample[cat_feat] = sample[cat_feat].astype(str)
+                    for num_feat in self.num_features:
+                        sample[num_feat] = sample[num_feat].astype(float)
+
+                    pred = self.model.predict(sample)
+                    pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
+                    shape_values.append(pred_val)
+                    x_values_numeric.append(float(numeric_x))
+
+                mean_val = np.mean(shape_values)
+                shape_values = [value - mean_val for value in shape_values]
+
+                return {
+                    "feature_name": feature_name,
+                    "x_values": x_values_numeric,
+                    "y_values": shape_values,
+                    "feature_type": "numeric",
+                    "chart_config": chart_setting,
+                }
 
         min_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").min())
         max_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").max())
@@ -619,6 +998,7 @@ class MLService:
             "x_values": x_range.tolist(),
             "y_values": shape_values,
             "feature_type": "numeric",
+            "chart_config": chart_setting,
         }
 
     # ==================== Dataset analytics ====================
@@ -1015,11 +1395,45 @@ class MLService:
         if not offsets:
             return 0.0
 
+        is_categorical_chart = self._is_feature_categorical_for_chart(feature_name)
+        if is_categorical_chart:
+            candidate_keys = [
+                self._stringify_chart_value(value),
+                str(value),
+            ]
+            for raw_key in candidate_keys:
+                if raw_key in offsets:
+                    try:
+                        return float(offsets.get(raw_key, 0.0))
+                    except (TypeError, ValueError):
+                        return 0.0
+
+            # Backward compatibility: if old numeric-style keys exist, use exact numeric match.
+            points = self._decode_numeric_offsets_for_feature(feature_name, offsets)
+            if points:
+                try:
+                    value_float = float(value)
+                except (TypeError, ValueError):
+                    return 0.0
+                for x_val, x_offset in points:
+                    if abs(x_val - value_float) < 1e-9:
+                        return float(x_offset)
+            return 0.0
+
+        # Numeric chart mode on originally categorical features:
+        # allow exact string key lookup (from previously stored categorical edits)
+        # before attempting numeric interpolation.
         if feature_name in self.cat_features:
-            try:
-                return float(offsets.get(str(value), 0.0))
-            except (TypeError, ValueError):
-                return 0.0
+            candidate_keys = [
+                self._stringify_chart_value(value),
+                str(value),
+            ]
+            for raw_key in candidate_keys:
+                if raw_key in offsets:
+                    try:
+                        return float(offsets.get(raw_key, 0.0))
+                    except (TypeError, ValueError):
+                        return 0.0
 
         points = self._decode_numeric_offsets_for_feature(feature_name, offsets)
         if not points:

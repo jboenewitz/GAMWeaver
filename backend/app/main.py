@@ -25,6 +25,8 @@ from .models import (
     DeleteEditResponse,
     UserPreferencesRequest,
     UserPreferencesResponse,
+    FeatureChartSettingsRequest,
+    FeatureChartSettingsResponse,
 )
 from .ml_service import ml_service
 from .db_service import db_service
@@ -400,6 +402,48 @@ async def reset_shape_functions():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get(
+    "/api/model/feature-chart-settings/{feature_name}",
+    response_model=FeatureChartSettingsResponse,
+)
+async def get_feature_chart_settings(feature_name: str):
+    """Get effective chart display settings for one feature."""
+    try:
+        settings_payload = ml_service.get_feature_chart_setting(feature_name)
+        return FeatureChartSettingsResponse(**settings_payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put(
+    "/api/model/feature-chart-settings/{feature_name}",
+    response_model=FeatureChartSettingsResponse,
+)
+async def update_feature_chart_settings(
+    feature_name: str,
+    request: FeatureChartSettingsRequest,
+    http_request: Request,
+):
+    """Update superadmin chart display settings for one feature."""
+    try:
+        _require_superadmin(http_request)
+        settings_payload = ml_service.update_feature_chart_setting(
+            feature_name=feature_name,
+            treat_as_categorical=request.treat_as_categorical,
+            treat_as_numeric=request.treat_as_numeric,
+            value_labels=request.value_labels,
+        )
+        return FeatureChartSettingsResponse(**settings_payload)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== User Endpoints ====================
 
 @app.post("/api/users/login", response_model=UserResponse)
@@ -748,8 +792,10 @@ async def get_combined_predictions_comparison(weighted: bool = True):
                 "feature_name": feature_name,
                 "feature_type": feature_type,
                 "x_values": x_values,
+                "x_tick_labels": sf.get("x_tick_labels"),
                 "y_values": modified_y,
-                "original_y_values": original_y
+                "original_y_values": original_y,
+                "chart_config": sf.get("chart_config"),
             })
         
         comparison["combined_shape_functions_display"] = combined_shape_functions_display
@@ -815,6 +861,8 @@ async def get_per_user_shape_functions(weighted: bool = True):
                     "feature_type": feature_type,
                     "x_values": x_values,
                     "y_values": modified_y,
+                    "x_tick_labels": sf.get("x_tick_labels"),
+                    "chart_config": sf.get("chart_config"),
                 })
 
             result.append({

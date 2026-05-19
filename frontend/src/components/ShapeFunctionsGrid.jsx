@@ -4,9 +4,14 @@ import Plot from "react-plotly.js";
 const ShapeFunctionChart = ({ shapeFunction }) => {
   if (!shapeFunction) return null;
 
-  const { feature_name, x_values, y_values, feature_type } = shapeFunction;
+  const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
+    shapeFunction;
 
   const isNumeric = feature_type === "numeric";
+  const xTickLabels =
+    Array.isArray(x_tick_labels) && x_tick_labels.length === x_values.length
+      ? x_tick_labels
+      : null;
 
   const data = [
     {
@@ -14,6 +19,7 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
       y: y_values,
       type: isNumeric ? "scatter" : "bar",
       mode: isNumeric ? "lines+markers" : undefined,
+      customdata: !isNumeric ? xTickLabels || x_values : undefined,
       marker: {
         color: "#3b82f6",
         size: isNumeric ? 4 : undefined,
@@ -26,6 +32,9 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
         : undefined,
       fill: isNumeric ? "tozeroy" : undefined,
       fillcolor: "rgba(59, 130, 246, 0.1)",
+      hovertemplate: !isNumeric
+        ? "<b>%{customdata}</b><br>Effect: %{y:.3f}<extra></extra>"
+        : undefined,
     },
   ];
 
@@ -38,6 +47,14 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
       title: feature_name,
       gridcolor: "#e5e7eb",
       tickfont: { size: 10 },
+      ...(!isNumeric && xTickLabels
+        ? {
+            tickmode: "array",
+            tickvals: x_values,
+            ticktext: xTickLabels,
+            tickangle: -20,
+          }
+        : {}),
     },
     yaxis: {
       title: "Effect on Prediction",

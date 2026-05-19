@@ -221,8 +221,13 @@ const EditableShapeFunctionChart = ({
 }) => {
   if (!shapeFunction) return null;
 
-  const { feature_name, x_values, y_values, feature_type } = shapeFunction;
+  const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
+    shapeFunction;
   const isNumeric = feature_type === "numeric";
+  const xTickLabels =
+    Array.isArray(x_tick_labels) && x_tick_labels.length === x_values.length
+      ? x_tick_labels
+      : null;
   const containerRef = useRef(null);
   const plotRef = useRef(null);
 
@@ -903,13 +908,14 @@ const EditableShapeFunctionChart = ({
       y: currentYValues,
       type: "bar",
       name: hasEdits ? "Edited" : "Current",
+      customdata: xTickLabels || x_values,
       marker: {
         color: markerColors,
         size: markerSizes,
         symbol: "circle",
         line: { color: "#1e40af", width: isEditing ? 2 : 0 },
       },
-      hovertemplate: `<b>%{x}</b><br>Effect: %{y:.3f}<extra></extra>`,
+      hovertemplate: `<b>%{customdata}</b><br>Effect: %{y:.3f}<extra></extra>`,
     };
 
     data = hasEdits ? [originalTrace, editableTrace] : [editableTrace];
@@ -933,6 +939,14 @@ const EditableShapeFunctionChart = ({
       gridcolor: "#e5e7eb",
       tickfont: { size: enlarged ? 12 : 10 },
       fixedrange: true,
+      ...(!isNumeric && xTickLabels
+        ? {
+            tickmode: "array",
+            tickvals: x_values,
+            ticktext: xTickLabels,
+            tickangle: -20,
+          }
+        : {}),
       ...(isNumeric ? { range: xRange } : {}),
     },
     yaxis: {
@@ -1259,6 +1273,212 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
   );
 };
 
+const FeatureChartSettingsModal = ({
+  isOpen,
+  shapeFunction,
+  onClose,
+  onSave,
+}) => {
+  const [treatAsCategorical, setTreatAsCategorical] = useState(false);
+  const [valueLabels, setValueLabels] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const chartConfig = shapeFunction?.chart_config || {};
+  const featureName = shapeFunction?.feature_name || "";
+  const baseFeatureType =
+    chartConfig.base_feature_type ||
+    (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
+  const canBeCategorical =
+    Boolean(chartConfig.can_be_categorical) || baseFeatureType === "categorical";
+
+  const availableValues = useMemo(() => {
+    const configured = Array.isArray(chartConfig.available_values)
+      ? chartConfig.available_values.map((v) => String(v))
+      : [];
+    if (configured.length > 0) return configured;
+    const fallback = Array.isArray(shapeFunction?.x_values)
+      ? shapeFunction.x_values.map((v) => String(v))
+      : [];
+    return fallback;
+  }, [chartConfig.available_values, shapeFunction]);
+
+  useEffect(() => {
+    if (!isOpen || !shapeFunction) return;
+    setTreatAsCategorical(
+      baseFeatureType === "numeric" ? Boolean(chartConfig.treat_as_categorical) : false,
+    );
+    setValueLabels({ ...(chartConfig.value_labels || {}) });
+    setSaving(false);
+    setError(null);
+  }, [
+    isOpen,
+    shapeFunction,
+    chartConfig.treat_as_categorical,
+    chartConfig.value_labels,
+    baseFeatureType,
+  ]);
+
+  if (!isOpen || !shapeFunction) return null;
+
+  const effectiveCategorical =
+    baseFeatureType === "categorical" || treatAsCategorical;
+
+  const handleSubmit = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      const normalizedLabels = {};
+      if (effectiveCategorical) {
+        availableValues.forEach((rawValue) => {
+          const rawKey = String(rawValue);
+          const nextLabel = String(valueLabels[rawKey] ?? "").trim();
+          if (nextLabel && nextLabel !== rawKey) {
+            normalizedLabels[rawKey] = nextLabel;
+          }
+        });
+      }
+
+      await onSave(featureName, {
+        treat_as_categorical:
+          baseFeatureType === "numeric" ? Boolean(treatAsCategorical) : false,
+        value_labels: normalizedLabels,
+      });
+      onClose();
+    } catch (err) {
+      setError(err?.message || "Failed to save chart settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-5 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800">
+            Chart Mapping: {featureName}
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Configure how categorical x-axis values are displayed for all users.
+          </p>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {baseFeatureType === "numeric" && (
+            <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={treatAsCategorical}
+                disabled={!canBeCategorical || saving}
+                onChange={(e) => setTreatAsCategorical(e.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <div>
+                <div className="text-sm font-medium text-slate-700">
+                  Treat this chart as categorical
+                </div>
+                <div className="text-xs text-slate-500">
+                  Use bars with discrete category labels instead of a continuous
+                  line.
+                </div>
+              </div>
+            </label>
+          )}
+
+          {!canBeCategorical && baseFeatureType === "numeric" && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              This feature has too many or non-discrete values and cannot be
+              converted to a categorical chart.
+            </div>
+          )}
+
+          {effectiveCategorical && (
+            <div className="rounded-lg border border-gray-200">
+              <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium text-gray-700">
+                X-Axis Value Labels
+              </div>
+              <div className="max-h-72 overflow-auto">
+                {availableValues.length === 0 ? (
+                  <div className="px-3 py-3 text-sm text-gray-500">
+                    No categorical values available for mapping.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-100">
+                    {availableValues.map((rawValue) => {
+                      const key = String(rawValue);
+                      return (
+                        <div
+                          key={key}
+                          className="grid grid-cols-2 gap-3 px-3 py-2 items-center"
+                        >
+                          <div className="text-sm text-slate-700 font-mono">
+                            {key}
+                          </div>
+                          <input
+                            type="text"
+                            value={valueLabels[key] ?? ""}
+                            onChange={(e) =>
+                              setValueLabels((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }))
+                            }
+                            placeholder={`Display label for ${key}`}
+                            disabled={saving}
+                            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {!effectiveCategorical && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+              Label mapping is available once this feature is displayed as a
+              categorical chart.
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Mapping"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Individual Feature Card with its own submit button
 const FeatureEditCard = ({
   shapeFunction,
@@ -1267,17 +1487,116 @@ const FeatureEditCard = ({
   onPointEdit,
   onFeatureSubmit,
   onFeatureReset,
+  onOpenChartSettings,
+  onCycleChartType,
   isEditing,
   hasSavedEdits,
+  isSuperadmin = false,
   sharedYRange = null,
 }) => {
   const [isEnlarged, setIsEnlarged] = useState(false);
+  const [isCyclingChartType, setIsCyclingChartType] = useState(false);
 
   // Show Submit only when there are genuinely new unsaved edits
   const hasUnsavedEdits = unsavedEditedPoints && unsavedEditedPoints.length > 0;
+  const chartConfig = shapeFunction?.chart_config || {};
+  const baseFeatureType =
+    chartConfig.base_feature_type ||
+    (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
+  const currentChartType =
+    chartConfig.chart_feature_type ||
+    (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
+  const canToggleToCategorical =
+    currentChartType === "numeric" && Boolean(chartConfig.can_be_categorical);
+  const canToggleToNumeric =
+    currentChartType === "categorical" && Boolean(chartConfig.can_be_numeric);
+  const canCycleChartType = canToggleToCategorical || canToggleToNumeric;
+  const canConfigureCategoricalChart = currentChartType === "categorical";
+
+  const handleCycleChartType = useCallback(async () => {
+    if (!onCycleChartType || !canCycleChartType || isCyclingChartType) return;
+    setIsCyclingChartType(true);
+    try {
+      let payload;
+      if (currentChartType === "categorical") {
+        payload =
+          baseFeatureType === "categorical"
+            ? {
+                treat_as_numeric: true,
+              }
+            : {
+                treat_as_categorical: false,
+              };
+      } else {
+        payload =
+          baseFeatureType === "numeric"
+            ? {
+                treat_as_categorical: true,
+              }
+            : {
+                treat_as_numeric: false,
+              };
+      }
+      await onCycleChartType(shapeFunction.feature_name, payload);
+    } finally {
+      setIsCyclingChartType(false);
+    }
+  }, [
+    onCycleChartType,
+    canCycleChartType,
+    isCyclingChartType,
+    currentChartType,
+    baseFeatureType,
+    shapeFunction?.feature_name,
+  ]);
 
   return (
     <div className="relative">
+      {isSuperadmin && (
+        <button
+          onClick={handleCycleChartType}
+          title={
+            canCycleChartType
+              ? currentChartType === "categorical"
+                ? "Switch chart to numeric"
+                : "Switch chart to categorical"
+              : "This feature cannot be switched to the other chart type"
+          }
+          disabled={!canCycleChartType || isCyclingChartType}
+          className={`absolute top-2 left-2 z-10 p-1.5 border rounded-md shadow-sm transition-colors ${
+            canCycleChartType
+              ? "bg-white/90 hover:bg-gray-100 border-gray-300 text-gray-700"
+              : "bg-gray-100/90 border-gray-200 text-gray-400 cursor-not-allowed"
+          }`}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={isCyclingChartType ? "animate-spin" : ""}
+          >
+            <path d="M3 2v6h6" />
+            <path d="M21 22v-6h-6" />
+            <path d="M21 11A8 8 0 0 0 7.5 5.5L3 8" />
+            <path d="M3 13a8 8 0 0 0 13.5 5.5L21 16" />
+          </svg>
+        </button>
+      )}
+      {isSuperadmin && canConfigureCategoricalChart && (
+        <button
+          onClick={() => onOpenChartSettings(shapeFunction)}
+          title="Edit categorical mapping"
+          className="absolute top-2 left-10 z-10 h-7 px-2 bg-white/90 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-xs text-gray-700 font-medium"
+        >
+          Chart Mapping
+        </button>
+      )}
       {/* Enlarge button */}
       <button
         onClick={() => setIsEnlarged(true)}
@@ -1430,6 +1749,8 @@ const EditableShapeFunctionsGrid = ({
   onFeatureReset,
   initialEditedPoints = {},
   onUnsavedEditsChange,
+  isSuperadmin = false,
+  onUpdateFeatureChartSettings,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedPoints, setEditedPoints] = useState({});
@@ -1437,6 +1758,7 @@ const EditableShapeFunctionsGrid = ({
   const [showSurenessModal, setShowSurenessModal] = useState(false);
   const [pendingFeatureSubmit, setPendingFeatureSubmit] = useState(null);
   const [syncAxes, setSyncAxes] = useState(false);
+  const [chartSettingsFeature, setChartSettingsFeature] = useState(null);
 
   // Compute global y-range across all features when syncAxes is enabled
   const globalYRange = useMemo(() => {
@@ -1633,6 +1955,30 @@ const EditableShapeFunctionsGrid = ({
     [onFeatureReset],
   );
 
+  const handleOpenChartSettings = useCallback((shapeFunction) => {
+    setChartSettingsFeature(shapeFunction);
+  }, []);
+
+  const handleCloseChartSettings = useCallback(() => {
+    setChartSettingsFeature(null);
+  }, []);
+
+  const handleSaveChartSettings = useCallback(
+    async (featureName, payload) => {
+      if (!onUpdateFeatureChartSettings) return;
+      await onUpdateFeatureChartSettings(featureName, payload);
+    },
+    [onUpdateFeatureChartSettings],
+  );
+
+  const handleCycleChartType = useCallback(
+    async (featureName, payload) => {
+      if (!onUpdateFeatureChartSettings) return;
+      await onUpdateFeatureChartSettings(featureName, payload);
+    },
+    [onUpdateFeatureChartSettings],
+  );
+
   if (loading) {
     return (
       <div className="card">
@@ -1675,6 +2021,12 @@ const EditableShapeFunctionsGrid = ({
         onClose={handleSurenessModalClose}
         onConfirm={handleSurenessConfirm}
         featureName={pendingFeatureSubmit || ""}
+      />
+      <FeatureChartSettingsModal
+        isOpen={Boolean(chartSettingsFeature)}
+        shapeFunction={chartSettingsFeature}
+        onClose={handleCloseChartSettings}
+        onSave={handleSaveChartSettings}
       />
 
       <div className="flex items-center justify-between mb-4">
@@ -1763,11 +2115,14 @@ const EditableShapeFunctionsGrid = ({
             onPointEdit={handlePointEdit}
             onFeatureSubmit={handleFeatureSubmit}
             onFeatureReset={handleFeatureReset}
+            onOpenChartSettings={handleOpenChartSettings}
+            onCycleChartType={handleCycleChartType}
             isEditing={isEditing}
             hasSavedEdits={
               initialEditedPoints[sf.feature_name] &&
               initialEditedPoints[sf.feature_name].length > 0
             }
+            isSuperadmin={isSuperadmin}
             sharedYRange={globalYRange}
           />
         ))}

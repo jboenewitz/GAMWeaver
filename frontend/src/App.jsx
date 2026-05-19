@@ -488,6 +488,21 @@ function App() {
     }
   };
 
+  const handleUpdateFeatureChartSettings = async (featureName, settings) => {
+    try {
+      setError(null);
+      await apiService.updateFeatureChartSettings(featureName, settings);
+      await fetchShapeFunctions({ refreshComparison: true });
+    } catch (err) {
+      const message = formatApiError(
+        err,
+        "Failed to update feature chart settings",
+      );
+      setError("Failed to update feature chart settings: " + message);
+      throw new Error(message);
+    }
+  };
+
   const handleUploadDataset = async (file) => {
     try {
       setError(null);
@@ -692,6 +707,8 @@ function App() {
             onFeatureReset={handleResetFeature}
             initialEditedPoints={userSavedEdits}
             onUnsavedEditsChange={handleUnsavedEditsChange}
+            isSuperadmin={Boolean(currentUser?.is_superadmin)}
+            onUpdateFeatureChartSettings={handleUpdateFeatureChartSettings}
           />
         </div>
 
