@@ -10,6 +10,8 @@ import Plot from "react-plotly.js";
 const NUMERIC_X_PRECISION = 6;
 const NUMERIC_BRUSH_SIGMA_RATIO = 0.08;
 const NUMERIC_BRUSH_MIN_SIGMA = 0.25;
+const NUMERIC_BRUSH_SOFT_MULTIPLIER = 1.8;
+const NUMERIC_BRUSH_HARD_MULTIPLIER = 0.1;
 const NUMERIC_BRUSH_RADIUS_MULTIPLIER = 3.0;
 const NUMERIC_BRUSH_SMOOTHING_WINDOW = 5;
 const UNSYNCED_Y_PADDING_RATIO = 0.15;
@@ -17,8 +19,7 @@ const UNSYNCED_Y_MIN_PADDING = 0.2;
 const FLAT_Y_MIN_HALF_SPAN = 0.5;
 
 const roundNumericX = (x) =>
-  Math.round(Number(x) * 10 ** NUMERIC_X_PRECISION) /
-  10 ** NUMERIC_X_PRECISION;
+  Math.round(Number(x) * 10 ** NUMERIC_X_PRECISION) / 10 ** NUMERIC_X_PRECISION;
 
 const interpolateYAtX = (sortedPoints, targetX) => {
   if (!sortedPoints || sortedPoints.length === 0) return 0;
@@ -105,7 +106,10 @@ const computeDynamicYRange = (values) => {
     return [center - halfSpan, center + halfSpan];
   }
 
-  const padding = Math.max(span * UNSYNCED_Y_PADDING_RATIO, UNSYNCED_Y_MIN_PADDING);
+  const padding = Math.max(
+    span * UNSYNCED_Y_PADDING_RATIO,
+    UNSYNCED_Y_MIN_PADDING,
+  );
   return [yMin - padding, yMax + padding];
 };
 
@@ -114,10 +118,18 @@ const applyMovingAverageInWindow = (points, centerIndex, windowSize) => {
   const half = Math.floor(windowSize / 2);
   const result = points.map((point) => ({ ...point }));
 
-  for (let idx = Math.max(1, centerIndex - half); idx <= Math.min(points.length - 2, centerIndex + half); idx += 1) {
+  for (
+    let idx = Math.max(1, centerIndex - half);
+    idx <= Math.min(points.length - 2, centerIndex + half);
+    idx += 1
+  ) {
     let weightedSum = 0;
     let weightTotal = 0;
-    for (let j = Math.max(0, idx - half); j <= Math.min(points.length - 1, idx + half); j += 1) {
+    for (
+      let j = Math.max(0, idx - half);
+      j <= Math.min(points.length - 1, idx + half);
+      j += 1
+    ) {
       const dist = Math.abs(j - idx);
       const weight = Math.exp(-(dist * dist) / (2 * Math.max(1, half) ** 2));
       weightedSum += points[j].y * weight;
@@ -216,6 +228,7 @@ const EditableShapeFunctionChart = ({
   editedPoints,
   onPointEdit,
   isEditing,
+  brushHardness = 50,
   enlarged = false,
   sharedYRange = null,
 }) => {
@@ -321,13 +334,7 @@ const EditableShapeFunctionChart = ({
       x: currentCurve.map((point) => point.x),
       y: currentCurve.map((point) => point.y),
     };
-  }, [
-    isNumeric,
-    isDragging,
-    dragCurvePoints,
-    shapeFunction,
-    editedPoints,
-  ]);
+  }, [isNumeric, isDragging, dragCurvePoints, shapeFunction, editedPoints]);
 
   // Linear interpolation to get y at an arbitrary x from the current curve
   const getYAtX = useCallback(
@@ -445,8 +452,20 @@ const EditableShapeFunctionChart = ({
 
   const getBrushSigma = useCallback(() => {
     const xSpan = xDataMax - xDataMin;
-    return Math.max(xSpan * NUMERIC_BRUSH_SIGMA_RATIO, NUMERIC_BRUSH_MIN_SIGMA);
-  }, [xDataMax, xDataMin]);
+    const baseSigma = Math.max(
+      xSpan * NUMERIC_BRUSH_SIGMA_RATIO,
+      NUMERIC_BRUSH_MIN_SIGMA,
+    );
+    const normalizedHardness = Math.max(
+      0,
+      Math.min(1, Number(brushHardness) / 100),
+    );
+    const hardnessMultiplier =
+      NUMERIC_BRUSH_SOFT_MULTIPLIER +
+      (NUMERIC_BRUSH_HARD_MULTIPLIER - NUMERIC_BRUSH_SOFT_MULTIPLIER) *
+        normalizedHardness;
+    return baseSigma * hardnessMultiplier;
+  }, [xDataMax, xDataMin, brushHardness]);
 
   const applyPreciseNumericEdit = useCallback(
     (centerX, targetY) => {
@@ -473,7 +492,14 @@ const EditableShapeFunctionChart = ({
         feature_type,
       );
     },
-    [shapeFunction, editedPoints, getBrushSigma, onPointEdit, feature_name, feature_type],
+    [
+      shapeFunction,
+      editedPoints,
+      getBrushSigma,
+      onPointEdit,
+      feature_name,
+      feature_type,
+    ],
   );
 
   // ---- Categorical drag effect (mousemove / mouseup on window) ----
@@ -840,15 +866,16 @@ const EditableShapeFunctionChart = ({
     // Small markers at edited positions only
     const showEditMarkers =
       (editedPoints || []).length > 0 &&
-      (editedPoints || []).length < Math.max(20, Math.floor(x_values.length * 0.5));
+      (editedPoints || []).length <
+        Math.max(20, Math.floor(x_values.length * 0.5));
     const editMarkerPoints = showEditMarkers
       ? (editedPoints || []).filter((p) => {
-      const pxNum = Number(p.x_value);
-      const idx = x_values.findIndex(
-        (x) => Math.abs(Number(x) - pxNum) < 0.0001,
-      );
-      if (idx === -1) return true;
-      return Math.abs(y_values[idx] - p.y_value) > 0.001;
+          const pxNum = Number(p.x_value);
+          const idx = x_values.findIndex(
+            (x) => Math.abs(Number(x) - pxNum) < 0.0001,
+          );
+          if (idx === -1) return true;
+          return Math.abs(y_values[idx] - p.y_value) > 0.001;
         })
       : [];
 
@@ -1128,7 +1155,8 @@ const EditableShapeFunctionChart = ({
           ) : isNumeric ? (
             <>
               <span className="font-medium">
-                Click and drag to brush the line. Double-click for precise entry.
+                Click and drag to brush the line. Double-click for precise
+                entry.
               </span>
             </>
           ) : hoveredPoint !== null ? (
@@ -1290,7 +1318,8 @@ const FeatureChartSettingsModal = ({
     chartConfig.base_feature_type ||
     (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
   const canBeCategorical =
-    Boolean(chartConfig.can_be_categorical) || baseFeatureType === "categorical";
+    Boolean(chartConfig.can_be_categorical) ||
+    baseFeatureType === "categorical";
 
   const availableValues = useMemo(() => {
     const configured = Array.isArray(chartConfig.available_values)
@@ -1306,7 +1335,9 @@ const FeatureChartSettingsModal = ({
   useEffect(() => {
     if (!isOpen || !shapeFunction) return;
     setTreatAsCategorical(
-      baseFeatureType === "numeric" ? Boolean(chartConfig.treat_as_categorical) : false,
+      baseFeatureType === "numeric"
+        ? Boolean(chartConfig.treat_as_categorical)
+        : false,
     );
     setValueLabels({ ...(chartConfig.value_labels || {}) });
     setSaving(false);
@@ -1490,6 +1521,7 @@ const FeatureEditCard = ({
   onOpenChartSettings,
   onCycleChartType,
   isEditing,
+  brushHardness = 50,
   hasSavedEdits,
   isSuperadmin = false,
   sharedYRange = null,
@@ -1626,6 +1658,7 @@ const FeatureEditCard = ({
         editedPoints={editedPoints}
         onPointEdit={onPointEdit}
         isEditing={isEditing}
+        brushHardness={brushHardness}
         sharedYRange={sharedYRange}
       />
       <div className="mt-2 flex justify-between items-center">
@@ -1696,6 +1729,7 @@ const FeatureEditCard = ({
                 editedPoints={editedPoints}
                 onPointEdit={onPointEdit}
                 isEditing={isEditing}
+                brushHardness={brushHardness}
                 enlarged
                 sharedYRange={sharedYRange}
               />
@@ -1758,7 +1792,14 @@ const EditableShapeFunctionsGrid = ({
   const [showSurenessModal, setShowSurenessModal] = useState(false);
   const [pendingFeatureSubmit, setPendingFeatureSubmit] = useState(null);
   const [syncAxes, setSyncAxes] = useState(false);
+  const [brushHardness, setBrushHardness] = useState(50);
   const [chartSettingsFeature, setChartSettingsFeature] = useState(null);
+  const hasNumericCharts = useMemo(
+    () =>
+      Array.isArray(shapeFunctions) &&
+      shapeFunctions.some((sf) => sf?.feature_type === "numeric"),
+    [shapeFunctions],
+  );
 
   // Compute global y-range across all features when syncAxes is enabled
   const globalYRange = useMemo(() => {
@@ -1809,12 +1850,7 @@ const EditableShapeFunctionsGrid = ({
   );
 
   const handlePointEdit = useCallback(
-    (
-      featureName,
-      xValueOrPoints,
-      yValue,
-      featureType,
-    ) => {
+    (featureName, xValueOrPoints, yValue, featureType) => {
       setEditedPoints((prev) => {
         if (featureType === "numeric") {
           if (Array.isArray(xValueOrPoints)) {
@@ -2096,12 +2132,45 @@ const EditableShapeFunctionsGrid = ({
         <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
           <p className="text-sm text-blue-700">
             <strong>How to edit:</strong> For numeric features, click and drag
-            to brush edits along the curve; smoothing and slope limits prevent
-            sharp spikes. For categorical features, hover a point, then drag it
-            up or down. Double-click for precise value entry. When done editing
-            a feature, click its <strong>Submit</strong> button and rate your
-            confidence.
+            to brush edits along the curve. Use the <strong>Soft↔Hard</strong>{" "}
+            slider to control how much of the curve is affected (Soft = wider,
+            Hard = more local for sharper spikes). For categorical features,
+            hover a point, then drag it up or down. Double-click for precise
+            value entry. When done editing a feature, click its{" "}
+            <strong>Submit</strong> button and rate your confidence.
           </p>
+        </div>
+      )}
+
+      {isEditing && hasNumericCharts && (
+        <div className="mb-4 p-3 bg-white border border-slate-200 rounded-lg">
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <span className="text-sm font-medium text-slate-700">
+              Line Brush Hardness
+            </span>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+              {brushHardness}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 w-9">Soft</span>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={brushHardness}
+              onChange={(e) =>
+                setBrushHardness(
+                  Math.max(0, Math.min(100, Number(e.target.value))),
+                )
+              }
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+              style={{
+                background: `linear-gradient(to right, #10b981 0%, #10b981 ${brushHardness}%, #e5e7eb ${brushHardness}%, #e5e7eb 100%)`,
+              }}
+            />
+            <span className="text-xs text-slate-500 w-9 text-right">Hard</span>
+          </div>
         </div>
       )}
 
@@ -2118,6 +2187,7 @@ const EditableShapeFunctionsGrid = ({
             onOpenChartSettings={handleOpenChartSettings}
             onCycleChartType={handleCycleChartType}
             isEditing={isEditing}
+            brushHardness={brushHardness}
             hasSavedEdits={
               initialEditedPoints[sf.feature_name] &&
               initialEditedPoints[sf.feature_name].length > 0
