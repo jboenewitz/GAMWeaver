@@ -483,6 +483,8 @@ const EditableShapeFunctionChart = ({
         centerX,
         deltaY,
         getBrushSigma(),
+        NUMERIC_BRUSH_RADIUS_MULTIPLIER,
+        1,
       );
 
       onPointEdit(
