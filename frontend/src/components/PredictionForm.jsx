@@ -1,15 +1,40 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createTranslator } from "../i18n";
+
+const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
+
+const getValidNumericValue = (feature) => {
+  const min = Number.isFinite(feature.min_value) ? feature.min_value : undefined;
+  const max = Number.isFinite(feature.max_value) ? feature.max_value : undefined;
+  let value = Number.isFinite(feature.default_value) ? feature.default_value : 0;
+
+  if (min !== undefined && value < min) {
+    value = min;
+  }
+  if (max !== undefined && value > max) {
+    value = max;
+  }
+
+  return roundToTwoDecimals(value);
+};
+
+const getValidCategoricalValue = (feature) => {
+  const options = feature.categorical_options || [];
+  if (!options.length) {
+    return "";
+  }
+  return options.includes(feature.default_value)
+    ? feature.default_value
+    : options[0];
+};
 
 const buildInitialFormData = (featureSchema = []) => {
   const initial = {};
   for (const feature of featureSchema) {
     if (feature.feature_type === "numeric") {
-      initial[feature.name] = Number.isFinite(feature.default_value)
-        ? feature.default_value
-        : 0;
+      initial[feature.name] = getValidNumericValue(feature);
     } else {
-      const options = feature.categorical_options || [];
-      initial[feature.name] = feature.default_value || options[0] || "";
+      initial[feature.name] = getValidCategoricalValue(feature);
     }
   }
   return initial;
@@ -21,14 +46,19 @@ const PredictionForm = ({
   modelTrained,
   featureSchema = [],
   targetColumn,
+  language = "en",
 }) => {
   const [formData, setFormData] = useState({});
   const [prediction, setPrediction] = useState(null);
   const hasFeatures = featureSchema && featureSchema.length > 0;
+  const t = createTranslator(language);
 
   const title = useMemo(
-    () => `Predict ${targetColumn || "Target"}`,
-    [targetColumn],
+    () =>
+      t("prediction.predictTarget", {
+        target: targetColumn || "Target",
+      }),
+    [t, targetColumn],
   );
 
   useEffect(() => {
@@ -58,21 +88,22 @@ const PredictionForm = ({
 
   return (
     <div className="card">
-      <h3 className="text-lg font-semibold text-gray-700 mb-2">Make Prediction</h3>
+      <h3 className="text-lg font-semibold text-gray-700 mb-2">
+        {t("prediction.title")}
+      </h3>
       <p className="text-sm text-gray-500 mb-4">
-        Set dataset feature values and run a prediction. Inputs are generated
-        from the active dataset schema.
+        {t("prediction.description")}
       </p>
 
       {!modelTrained && (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-sm">
-          Please train the model first before making predictions.
+          {t("prediction.trainFirst")}
         </div>
       )}
 
       {!hasFeatures && (
         <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-600 text-sm">
-          No feature schema available. Ask the superadmin to load a dataset.
+          {t("prediction.noSchema")}
         </div>
       )}
 
@@ -105,7 +136,7 @@ const PredictionForm = ({
                   max={
                     Number.isFinite(feature.max_value) ? feature.max_value : undefined
                   }
-                  step="0.01"
+                  step="any"
                 />
               )}
             </div>
@@ -117,14 +148,18 @@ const PredictionForm = ({
           disabled={!modelTrained || loading || !hasFeatures}
           className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? "Predicting..." : title}
+          {loading ? t("prediction.predicting") : title}
         </button>
       </form>
 
       {prediction !== null && (
         <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
           <div className="text-center">
-            <div className="text-sm text-gray-600">Predicted {targetColumn || "Target"}</div>
+            <div className="text-sm text-gray-600">
+              {t("prediction.predictedTarget", {
+                target: targetColumn || "Target",
+              })}
+            </div>
             <div className="text-4xl font-bold text-primary-600 mt-1">
               {Math.round(prediction)}
             </div>

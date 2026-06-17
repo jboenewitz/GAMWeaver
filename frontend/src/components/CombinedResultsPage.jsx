@@ -2,16 +2,40 @@ import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
 
+const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
+
+const getValidNumericValue = (feature) => {
+  const min = Number.isFinite(feature.min_value) ? feature.min_value : undefined;
+  const max = Number.isFinite(feature.max_value) ? feature.max_value : undefined;
+  let value = Number.isFinite(feature.default_value) ? feature.default_value : 0;
+
+  if (min !== undefined && value < min) {
+    value = min;
+  }
+  if (max !== undefined && value > max) {
+    value = max;
+  }
+
+  return roundToTwoDecimals(value);
+};
+
+const getValidCategoricalValue = (feature) => {
+  const options = feature.categorical_options || [];
+  if (!options.length) {
+    return "";
+  }
+  return options.includes(feature.default_value)
+    ? feature.default_value
+    : options[0];
+};
+
 const buildInitialFormData = (featureSchema = []) => {
   const initial = {};
   featureSchema.forEach((feature) => {
     if (feature.feature_type === "numeric") {
-      initial[feature.name] = Number.isFinite(feature.default_value)
-        ? feature.default_value
-        : 0;
+      initial[feature.name] = getValidNumericValue(feature);
     } else {
-      const options = feature.categorical_options || [];
-      initial[feature.name] = feature.default_value || options[0] || "";
+      initial[feature.name] = getValidCategoricalValue(feature);
     }
   });
   return initial;
@@ -117,7 +141,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
                   className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
                   min={Number.isFinite(feature.min_value) ? feature.min_value : undefined}
                   max={Number.isFinite(feature.max_value) ? feature.max_value : undefined}
-                  step="0.01"
+                  step="any"
                 />
               )}
             </div>

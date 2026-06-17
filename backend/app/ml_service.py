@@ -534,9 +534,23 @@ class MLService:
         for feature_name in self.feature_names:
             if feature_name in self.num_features:
                 numeric_series = pd.to_numeric(X_all[feature_name], errors="coerce")
-                min_val = float(numeric_series.min())
-                max_val = float(numeric_series.max())
-                default_val = float(numeric_series.median())
+                valid_numeric_series = numeric_series.dropna()
+
+                if valid_numeric_series.empty:
+                    min_val = 0.0
+                    max_val = 0.0
+                    default_val = 0.0
+                else:
+                    min_val = float(valid_numeric_series.min())
+                    max_val = float(valid_numeric_series.max())
+                    default_val = float(valid_numeric_series.median())
+
+                    if default_val < min_val:
+                        default_val = min_val
+                    elif default_val > max_val:
+                        default_val = max_val
+
+                default_val = round(default_val, 2)
 
                 schema.append(
                     {
@@ -555,6 +569,8 @@ class MLService:
                     unique_values = ["Unknown"]
                 value_counts = cat_series.value_counts()
                 default_val = str(value_counts.index[0]) if not value_counts.empty else unique_values[0]
+                if default_val not in unique_values:
+                    default_val = unique_values[0]
 
                 schema.append(
                     {
