@@ -38,6 +38,64 @@ def _decode_numeric_x_for_display(raw_value: Any) -> Any:
         return raw_value
 
 
+def _format_numeric_display(value: Any) -> str:
+    """Format a numeric x-value for compact human-readable summaries."""
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _build_x_summary_from_rows(rows: List[ShapeFunctionEdit]) -> str:
+    """Build a concise summary of x-values for a submission batch."""
+    if not rows:
+        return ""
+
+    if rows[0].feature_type == "categorical":
+        labels = [str(_decode_numeric_x_for_display(row.x_value)) for row in rows]
+        unique_labels = list(dict.fromkeys(labels))
+        if len(unique_labels) <= 3:
+            return ", ".join(unique_labels)
+        preview = ", ".join(unique_labels[:3])
+        return f"{preview}, +{len(unique_labels) - 3} more"
+
+    numeric_values = [
+        _decode_numeric_x_for_display(row.x_value)
+        for row in rows
+    ]
+    numeric_values = [
+        float(value)
+        for value in numeric_values
+        if isinstance(value, (int, float))
+    ]
+    if not numeric_values:
+        return str(rows[0].x_value)
+
+    numeric_values.sort()
+    if len(numeric_values) == 1:
+        return _format_numeric_display(numeric_values[0])
+    if len(numeric_values) == 2:
+        return ", ".join(_format_numeric_display(value) for value in numeric_values)
+    return (
+        f"{_format_numeric_display(numeric_values[0])}"
+        f" to {_format_numeric_display(numeric_values[-1])}"
+    )
+
+
+def _point_sort_key(feature_type: str, raw_x_value: Any) -> Any:
+    """Sort categorical points lexically and numeric points by decoded value."""
+    decoded = (
+        raw_x_value
+        if feature_type == "categorical"
+        else _decode_numeric_x_for_display(raw_x_value)
+    )
+    if feature_type == "categorical":
+        return (0, str(decoded))
+    if isinstance(decoded, (int, float)):
+        return (0, float(decoded))
+    return (1, str(decoded))
+
+
 class DatabaseService:
     """Service for managing users and their shape function edits."""
 
@@ -306,6 +364,7 @@ class DatabaseService:
             for sf in edited_shape_functions:
                 feature_name = sf["feature_name"]
                 feature_type = sf["feature_type"]
+                submission_id = sf.get("submission_id")
                 
                 for point in sf.get("edited_points", []):
                     x_value = str(point["x_value"])
@@ -320,7 +379,8 @@ class DatabaseService:
                         x_value=x_value,
                         y_offset=y_offset,
                         weight=weight,
-                        message=message
+                        message=message,
+                        submission_id=submission_id,
                     )
                     db.add(edit)
             
@@ -578,7 +638,7 @@ class DatabaseService:
     def get_edit_logs(self) -> Dict[str, Any]:
         """
         Get detailed edit logs for all users, grouped by feature.
-        Returns individual edits with user name, sureness (1-10), raw input, and weighted result.
+        Returns submissions grouped by feature, with nested point details.
         """
         db = self.get_db()
         try:
@@ -587,41 +647,84 @@ class DatabaseService:
                 User, ShapeFunctionEdit.user_id == User.id
             ).order_by(
                 ShapeFunctionEdit.feature_name,
-                User.name,
+                ShapeFunctionEdit.created_at,
                 ShapeFunctionEdit.x_value
             ).all()
-            
-            # Organize by feature name
-            features = {}
+
+            grouped_features: Dict[str, Dict[str, Any]] = {}
+            submissions_by_group: Dict[str, Dict[str, Any]] = {}
+
             for edit, user_name in edits:
-                if edit.feature_name not in features:
-                    features[edit.feature_name] = {
+                if edit.feature_name not in grouped_features:
+                    grouped_features[edit.feature_name] = {
                         "feature_name": edit.feature_name,
                         "feature_type": edit.feature_type,
-                        "edits": []
+                        "submissions": [],
                     }
-                
-                # Calculate sureness (1-10) from weight (0.1-1.0)
-                sureness = round(edit.weight * 10)
-                # Raw input is the y_offset before weight is applied
-                raw_input = edit.y_offset
-                # Weighted result is the value after applying the weight
-                weighted_result = edit.y_offset * edit.weight
-                
-                features[edit.feature_name]["edits"].append({
-                    "edit_id": edit.id,
-                    "user_id": edit.user_id,
-                    "user_name": user_name,
-                    "x_value": edit.x_value if edit.feature_type == "categorical" else _decode_numeric_x_for_display(edit.x_value),
-                    "sureness": sureness,
-                    "raw_input": raw_input,
-                    "weighted_result": weighted_result,
-                    "message": edit.message or ""
-                })
-            
-            return {
-                "features": list(features.values())
-            }
+
+                group_id = edit.submission_id or f"legacy:{edit.id}"
+                submission = submissions_by_group.get(group_id)
+                if submission is None:
+                    submission = {
+                        "submission_id": edit.submission_id or f"legacy-{edit.id}",
+                        "persisted_submission_id": edit.submission_id,
+                        "legacy_edit_id": None if edit.submission_id else edit.id,
+                        "feature_name": edit.feature_name,
+                        "feature_type": edit.feature_type,
+                        "user_id": edit.user_id,
+                        "user_name": user_name,
+                        "created_at": edit.created_at.isoformat(),
+                        "sureness": round(edit.weight * 10),
+                        "message": edit.message or "",
+                        "point_count": 0,
+                        "raw_input_total": 0.0,
+                        "weighted_total": 0.0,
+                        "points": [],
+                        "_rows": [],
+                    }
+                    submissions_by_group[group_id] = submission
+                    grouped_features[edit.feature_name]["submissions"].append(submission)
+
+                raw_input = float(edit.y_offset)
+                weighted_result = float(edit.y_offset) * float(edit.weight)
+                submission["point_count"] += 1
+                submission["raw_input_total"] += raw_input
+                submission["weighted_total"] += weighted_result
+                submission["_rows"].append(edit)
+                submission["points"].append(
+                    {
+                        "edit_id": edit.id,
+                        "x_value": (
+                            edit.x_value
+                            if edit.feature_type == "categorical"
+                            else _decode_numeric_x_for_display(edit.x_value)
+                        ),
+                        "raw_input": raw_input,
+                        "weighted_result": weighted_result,
+                    }
+                )
+
+            feature_list = list(grouped_features.values())
+            for feature in feature_list:
+                feature["submissions"].sort(
+                    key=lambda submission: submission["created_at"],
+                    reverse=True,
+                )
+                for submission in feature["submissions"]:
+                    submission["points"].sort(
+                        key=lambda point: _point_sort_key(
+                            feature["feature_type"],
+                            point["x_value"],
+                        )
+                    )
+                    submission["x_summary"] = _build_x_summary_from_rows(
+                        submission["_rows"]
+                    )
+                    del submission["_rows"]
+
+            feature_list.sort(key=lambda feature: feature["feature_name"])
+
+            return {"features": feature_list}
         finally:
             db.close()
 
@@ -655,6 +758,50 @@ class DatabaseService:
         finally:
             db.close()
 
+    def delete_submission(
+        self,
+        submission_id: str,
+        deleted_by_user_id: int,
+        reason: str,
+    ) -> bool:
+        """Delete all point rows belonging to a single submitted curve edit."""
+        db = self.get_db()
+        try:
+            edits = (
+                db.query(ShapeFunctionEdit)
+                .filter(ShapeFunctionEdit.submission_id == submission_id)
+                .order_by(ShapeFunctionEdit.created_at, ShapeFunctionEdit.x_value)
+                .all()
+            )
+            if not edits:
+                return False
+
+            first_edit = edits[0]
+            x_summary = _build_x_summary_from_rows(edits)
+
+            if first_edit.user_id != deleted_by_user_id:
+                notification = DeletedEditNotification(
+                    target_user_id=first_edit.user_id,
+                    deleted_by_user_id=deleted_by_user_id,
+                    feature_name=first_edit.feature_name,
+                    x_value=x_summary or str(first_edit.x_value),
+                    submission_id=submission_id,
+                    point_count=len(edits),
+                    x_summary=x_summary or None,
+                    reason=reason,
+                )
+                db.add(notification)
+
+            for edit in edits:
+                db.delete(edit)
+            db.commit()
+            return True
+        except Exception as e:
+            db.rollback()
+            raise e
+        finally:
+            db.close()
+
     # ==================== Notification Operations ====================
 
     def get_unseen_notifications(self, user_id: int) -> List[Dict[str, Any]]:
@@ -673,6 +820,9 @@ class DatabaseService:
                     "id": n.id,
                     "feature_name": n.feature_name,
                     "x_value": n.x_value,
+                    "submission_id": n.submission_id,
+                    "point_count": n.point_count,
+                    "x_summary": n.x_summary,
                     "reason": n.reason,
                     "deleted_by": deleted_by_user.name if deleted_by_user else "Unknown",
                     "created_at": n.created_at.isoformat()

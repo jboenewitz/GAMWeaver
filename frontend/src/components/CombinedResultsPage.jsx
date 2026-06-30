@@ -44,6 +44,19 @@ const buildInitialFormData = (featureSchema = []) => {
 const GLASS_CARD_CLASS = "glass-surface-strong p-6 mb-6";
 const GLASS_INSET_CLASS = "rounded-xl border border-slate-200/80 bg-white/85";
 
+const formatSignedNumber = (value, digits = 3) =>
+  `${value >= 0 ? "+" : ""}${Number(value).toFixed(digits)}`;
+
+const formatXValue = (value) =>
+  typeof value === "number" ? value.toFixed(2) : value;
+
+const formatSubmissionDate = (value) => {
+  if (!value) return "Unknown";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Unknown";
+  return parsed.toLocaleString();
+};
+
 const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) => {
   const [formData, setFormData] = useState({});
   const [prediction, setPrediction] = useState(null);
@@ -187,6 +200,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
   const [editLogs, setEditLogs] = useState(null);
   const [editLogsError, setEditLogsError] = useState(null);
   const [expandedFeatures, setExpandedFeatures] = useState({});
+  const [expandedSubmissions, setExpandedSubmissions] = useState({});
 
   // Per-user shape function overlay state
   const [showUserOverlay, setShowUserOverlay] = useState(false);
@@ -341,18 +355,30 @@ function CombinedResultsPage({ onBack, currentUser }) {
     setDeleting(true);
     setDeleteError("");
     try {
-      await apiService.deleteEdit(
-        editToDelete.edit_id,
-        currentUser?.id,
-        deleteReason.trim(),
-      );
+      if (editToDelete.persisted_submission_id) {
+        await apiService.deleteSubmission(
+          editToDelete.persisted_submission_id,
+          currentUser?.id,
+          deleteReason.trim(),
+        );
+      } else if (editToDelete.legacy_edit_id) {
+        await apiService.deleteEdit(
+          editToDelete.legacy_edit_id,
+          currentUser?.id,
+          deleteReason.trim(),
+        );
+      } else {
+        throw new Error("No deletion target available for this submission");
+      }
       setShowDeleteModal(false);
       setEditToDelete(null);
       setDeleteReason("");
       await fetchData();
     } catch (err) {
       setDeleteError(
-        err.response?.data?.detail || err.message || "Failed to delete edit",
+        err.response?.data?.detail ||
+          err.message ||
+          "Failed to delete submission",
       );
     } finally {
       setDeleting(false);
@@ -364,6 +390,13 @@ function CombinedResultsPage({ onBack, currentUser }) {
     setEditToDelete(null);
     setDeleteReason("");
     setDeleteError("");
+  };
+
+  const toggleSubmission = (submissionId) => {
+    setExpandedSubmissions((prev) => ({
+      ...prev,
+      [submissionId]: !prev[submissionId],
+    }));
   };
 
   const renderMetricsComparison = () => {
@@ -872,8 +905,9 @@ function CombinedResultsPage({ onBack, currentUser }) {
           {editLogs.features.map((feature, idx) => {
             const isExpanded = expandedFeatures[feature.feature_name] ?? false;
             const uniqueUsers = [
-              ...new Set(feature.edits.map((e) => e.user_name)),
+              ...new Set((feature.submissions || []).map((s) => s.user_name)),
             ];
+            const submissionCount = (feature.submissions || []).length;
 
             return (
               <div key={idx} className={`${GLASS_INSET_CLASS} overflow-hidden`}>
@@ -887,8 +921,8 @@ function CombinedResultsPage({ onBack, currentUser }) {
                       {feature.feature_name}
                     </h4>
                     <span className="text-sm text-slate-500">
-                      {feature.edits.length} edit
-                      {feature.edits.length !== 1 ? "s" : ""} by{" "}
+                      {submissionCount} submission
+                      {submissionCount !== 1 ? "s" : ""} by{" "}
                       {uniqueUsers.length} user
                       {uniqueUsers.length !== 1 ? "s" : ""}
                     </span>
@@ -912,115 +946,214 @@ function CombinedResultsPage({ onBack, currentUser }) {
 
                 {/* Expanded Content */}
                 {isExpanded && (
-                  <div className="border-t border-slate-200/70 p-4">
-                    {/* Table Header */}
-                    <div
-                      className="mb-2 grid gap-2 px-2 text-xs font-medium uppercase text-slate-500"
-                      style={{
-                        gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr 28px",
-                      }}
-                    >
-                      <span>User</span>
-                      <span>X Value</span>
-                      <span className="text-center">Confidence</span>
-                      <span className="text-right">Raw Input</span>
-                      <span className="text-right">Weighted</span>
-                      <span>Edit Message</span>
-                      <span></span>
-                    </div>
+                  <div className="space-y-3 border-t border-slate-200/70 p-4">
+                    {(feature.submissions || []).map((submission, submissionIdx) => {
+                      const submissionKey =
+                        submission.submission_id || `${feature.feature_name}-${submissionIdx}`;
+                      const isSubmissionExpanded =
+                        expandedSubmissions[submissionKey] ?? false;
 
-                    {/* Edit Rows */}
-                    <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {feature.edits.map((edit, editIdx) => (
+                      return (
                         <div
-                          key={editIdx}
-                          className="group grid rounded bg-slate-50/90 px-2 py-2 text-sm hover:bg-slate-100"
-                          style={{
-                            gridTemplateColumns: "1fr 1fr 1fr 1fr 1fr 3fr 28px",
-                          }}
+                          key={submissionKey}
+                          className="overflow-hidden rounded-lg border border-slate-200 bg-slate-50/60"
                         >
-                          <span className="truncate font-medium text-slate-700">
-                            {edit.user_name}
-                          </span>
-                          <span className="font-mono text-slate-600">
-                            {typeof edit.x_value === "number"
-                              ? edit.x_value.toFixed(2)
-                              : edit.x_value}
-                          </span>
-                          <span className="text-center">
-                            <span
-                              className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                                edit.sureness >= 7
-                                  ? "bg-green-100 text-green-700"
-                                  : edit.sureness >= 4
-                                    ? "bg-yellow-100 text-yellow-700"
-                                    : "bg-red-100 text-red-700"
-                              }`}
+                          <div className="flex items-start gap-3 p-4 transition-colors hover:bg-slate-100/90">
+                            <button
+                              onClick={() => toggleSubmission(submissionKey)}
+                              className="min-w-0 flex-1 text-left"
                             >
-                              {edit.sureness}/10
-                            </span>
-                          </span>
-                          <span
-                            className={`text-right font-mono ${
-                              edit.raw_input >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {edit.raw_input >= 0 ? "+" : ""}
-                            {edit.raw_input.toFixed(3)}
-                          </span>
-                          <span
-                            className={`text-right font-mono font-semibold ${
-                              edit.weighted_result >= 0
-                                ? "text-green-600"
-                                : "text-red-600"
-                            }`}
-                          >
-                            {edit.weighted_result >= 0 ? "+" : ""}
-                            {edit.weighted_result.toFixed(3)}
-                          </span>
-                          <span
-                            className="break-words text-xs text-slate-600"
-                            title={edit.message}
-                          >
-                            {edit.message || "-"}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (allowDestructiveActions) {
-                                handleOpenDeleteModal({
-                                  ...edit,
-                                  feature_name: feature.feature_name,
-                                });
-                              }
-                            }}
-                            className={`opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded ${
-                              allowDestructiveActions
-                                ? "text-slate-400 hover:bg-red-50 hover:text-red-600"
-                                : "cursor-not-allowed text-slate-300"
-                            }`}
-                            title="Delete this edit"
-                            disabled={!allowDestructiveActions}
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
+                              <div className="grid gap-3 md:grid-cols-6">
+                                <div>
+                                  <div className="text-xs font-medium uppercase text-slate-500">
+                                    User
+                                  </div>
+                                  <div className="truncate font-medium text-slate-700">
+                                    {submission.user_name}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-medium uppercase text-slate-500">
+                                    Submitted
+                                  </div>
+                                  <div className="text-sm text-slate-700">
+                                    {formatSubmissionDate(submission.created_at)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-medium uppercase text-slate-500">
+                                    Confidence
+                                  </div>
+                                  <div>
+                                    <span
+                                      className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                                        submission.sureness >= 7
+                                          ? "bg-green-100 text-green-700"
+                                          : submission.sureness >= 4
+                                            ? "bg-yellow-100 text-yellow-700"
+                                            : "bg-red-100 text-red-700"
+                                      }`}
+                                    >
+                                      {submission.sureness}/10
+                                    </span>
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-medium uppercase text-slate-500">
+                                    Points
+                                  </div>
+                                  <div className="text-sm text-slate-700">
+                                    {submission.point_count}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-medium uppercase text-slate-500">
+                                    Raw Total
+                                  </div>
+                                  <div
+                                    className={`font-mono text-sm ${
+                                      submission.raw_input_total >= 0
+                                        ? "text-green-600"
+                                        : "text-red-600"
+                                    }`}
+                                  >
+                                    {formatSignedNumber(submission.raw_input_total)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-medium uppercase text-slate-500">
+                                    Weighted Total
+                                  </div>
+                                  <div
+                                    className={`font-mono text-sm font-semibold ${
+                                      submission.weighted_total >= 0
+                                        ? "text-green-600"
+                                        : "text-red-600"
+                                    }`}
+                                  >
+                                    {formatSignedNumber(submission.weighted_total)}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                                <span>
+                                  Message: {submission.message || "-"}
+                                </span>
+                                <span>
+                                  X Summary: {submission.x_summary || submission.point_count}
+                                </span>
+                              </div>
+                            </button>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  if (allowDestructiveActions) {
+                                    handleOpenDeleteModal({
+                                      ...submission,
+                                      feature_name: feature.feature_name,
+                                    });
+                                  }
+                                }}
+                                className={`rounded p-1 transition-colors ${
+                                  allowDestructiveActions
+                                    ? "text-slate-400 hover:bg-red-50 hover:text-red-600"
+                                    : "cursor-not-allowed text-slate-300"
+                                }`}
+                                title="Delete this submission"
+                                disabled={!allowDestructiveActions}
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                  />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => toggleSubmission(submissionKey)}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-200/70 hover:text-slate-600"
+                              >
+                                <svg
+                                  className={`h-5 w-5 shrink-0 transform transition-transform ${
+                                    isSubmissionExpanded ? "rotate-180" : ""
+                                  }`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M19 9l-7 7-7-7"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+
+                          {isSubmissionExpanded && (
+                            <div className="border-t border-slate-200/70 bg-white/90 p-4">
+                              <div
+                                className="mb-2 grid gap-2 px-2 text-xs font-medium uppercase text-slate-500"
+                                style={{
+                                  gridTemplateColumns: "1fr 1fr 1fr",
+                                }}
+                              >
+                                <span>X Value</span>
+                                <span className="text-right">Raw Input</span>
+                                <span className="text-right">Weighted</span>
+                              </div>
+                              <div className="space-y-1 max-h-64 overflow-y-auto">
+                                {submission.points.map((point, pointIdx) => (
+                                  <div
+                                    key={`${submissionKey}-${point.edit_id || pointIdx}`}
+                                    className="grid rounded bg-slate-50/90 px-2 py-2 text-sm"
+                                    style={{
+                                      gridTemplateColumns: "1fr 1fr 1fr",
+                                    }}
+                                  >
+                                    <span className="font-mono text-slate-600">
+                                      {formatXValue(point.x_value)}
+                                    </span>
+                                    <span
+                                      className={`text-right font-mono ${
+                                        point.raw_input >= 0
+                                          ? "text-green-600"
+                                          : "text-red-600"
+                                      }`}
+                                    >
+                                      {formatSignedNumber(point.raw_input)}
+                                    </span>
+                                    <span
+                                      className={`text-right font-mono font-semibold ${
+                                        point.weighted_result >= 0
+                                          ? "text-green-600"
+                                          : "text-red-600"
+                                      }`}
+                                    >
+                                      {formatSignedNumber(point.weighted_result)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
+                    {submissionCount === 0 && (
+                      <div className="rounded-lg border border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
+                        No submissions available for this feature.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1183,10 +1316,10 @@ function CombinedResultsPage({ onBack, currentUser }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
           <div className="glass-surface-strong mx-4 w-full max-w-md p-6">
             <h3 className="mb-2 text-lg font-bold text-slate-800">
-              Delete Edit
+              Delete Submission
             </h3>
             <p className="mb-1 text-sm text-slate-600">
-              You are about to delete an edit by{" "}
+              You are about to delete a submitted curve edit by{" "}
               <span className="font-semibold">{editToDelete.user_name}</span>.
             </p>
             <p className="mb-4 text-xs text-slate-500">
@@ -1194,15 +1327,17 @@ function CombinedResultsPage({ onBack, currentUser }) {
               <span className="font-mono">
                 {editToDelete.feature_name || "—"}
               </span>{" "}
-              • X Value:{" "}
+              • Points:{" "}
               <span className="font-mono">
-                {typeof editToDelete.x_value === "number"
-                  ? editToDelete.x_value.toFixed(2)
-                  : editToDelete.x_value}
+                {editToDelete.point_count || 0}
+              </span>
+              {" • X Summary: "}
+              <span className="font-mono">
+                {editToDelete.x_summary || "—"}
               </span>
             </p>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Why is this edit being removed?{" "}
+              Why is this submission being removed?{" "}
               <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -1211,7 +1346,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                 setDeleteReason(e.target.value);
                 if (deleteError) setDeleteError("");
               }}
-              placeholder="Provide a reason for removing this edit..."
+              placeholder="Provide a reason for removing this submission..."
               rows={3}
               className="w-full resize-none rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 focus:border-red-500 focus:ring-2 focus:ring-red-500"
             />
@@ -1269,7 +1404,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                       />
                     </svg>
-                    Delete Edit
+                    Delete Submission
                   </>
                 )}
               </button>

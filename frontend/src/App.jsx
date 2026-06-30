@@ -842,10 +842,28 @@ function App() {
                       {t("app.notification.by")} {notification.deleted_by}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 mb-1">
-                    {t("app.notification.xValue")}:{" "}
-                    <span className="font-mono">{notification.x_value}</span>
-                  </div>
+                  {notification.point_count ? (
+                    <>
+                      <div className="text-xs text-gray-500 mb-1">
+                        {t("app.notification.curveEdit")}:{" "}
+                        <span className="font-medium">
+                          {notification.point_count}{" "}
+                          {t("app.notification.pointCount").toLowerCase()}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mb-1">
+                        {t("app.notification.xSummary")}:{" "}
+                        <span className="font-mono">
+                          {notification.x_summary || notification.x_value}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-gray-500 mb-1">
+                      {t("app.notification.xValue")}:{" "}
+                      <span className="font-mono">{notification.x_value}</span>
+                    </div>
+                  )}
                   <div className="text-sm text-gray-700 mt-1">
                     <span className="font-medium">
                       {t("app.notification.reason")}:

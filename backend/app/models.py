@@ -189,6 +189,13 @@ class DeleteEditRequest(BaseModel):
     reason: str
 
 
+class DeleteSubmissionRequest(BaseModel):
+    """Request to delete a full curve-edit submission."""
+    submission_id: str
+    deleted_by_user_id: int
+    reason: str
+
+
 class DeleteEditResponse(BaseModel):
     """Response after deleting an edit."""
     success: bool
@@ -200,6 +207,9 @@ class EditDeletionNotification(BaseModel):
     id: int
     feature_name: str
     x_value: str
+    submission_id: Optional[str] = None
+    point_count: Optional[int] = None
+    x_summary: Optional[str] = None
     reason: str
     deleted_by: str
     created_at: str
