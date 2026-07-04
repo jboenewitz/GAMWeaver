@@ -808,16 +808,27 @@ async def get_combined_predictions_comparison(weighted: bool = True):
         # Get combined edits (weighted or unweighted)
         combined_edits = db_service.get_combined_edits(weighted=weighted)
         
+        analytics_available = bool(
+            ml_service.get_model_status().get("analytics_available")
+        )
+
         # Temporarily apply combined edits
         original_offsets = ml_service.shape_function_offsets.copy()
         ml_service.shape_function_offsets = combined_edits
-        
-        # Get comparison
-        comparison = ml_service.get_predictions_comparison()
-        
-        # Restore original offsets
-        ml_service.shape_function_offsets = original_offsets
-        
+        try:
+            comparison = {
+                "analytics_available": analytics_available,
+                "model_source": ml_service.model_source,
+                "original_predictions": [],
+                "interactive_predictions": [],
+                "actual_values": [],
+            }
+            if analytics_available:
+                comparison.update(ml_service.get_predictions_comparison())
+        finally:
+            # Restore original offsets even if comparison generation fails
+            ml_service.shape_function_offsets = original_offsets
+
         # Add combined edit info
         combined_details = db_service.get_combined_edits_detailed()
         comparison["total_users_with_edits"] = combined_details["total_users_with_edits"]

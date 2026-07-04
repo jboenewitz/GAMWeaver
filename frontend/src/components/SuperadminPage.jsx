@@ -11,6 +11,7 @@ const SuperadminPage = ({
   language = "en",
 }) => {
   const t = createTranslator(language);
+  const dateLocale = getDateLocale(language);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

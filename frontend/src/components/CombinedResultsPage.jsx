@@ -413,12 +413,22 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
     }));
   };
 
+  const analyticsAvailable = Boolean(modelStatus?.analytics_available);
+
   const renderMetricsComparison = () => {
-    if (!comparisonData?.metrics) return null;
+    if (!analyticsAvailable || !comparisonData?.metrics) return null;
 
     const activeData =
       (useWeighting ? comparisonData : unweightedComparisonData) ??
       comparisonData;
+    if (
+      !Number.isFinite(activeData?.metrics?.original_rmse) ||
+      !Number.isFinite(activeData?.metrics?.original_mae) ||
+      !Number.isFinite(activeData?.metrics?.interactive_rmse) ||
+      !Number.isFinite(activeData?.metrics?.interactive_mae)
+    ) {
+      return null;
+    }
     const { metrics } = activeData;
     const rmseImprovement = (
       ((metrics.original_rmse - metrics.interactive_rmse) /
@@ -495,13 +505,23 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   };
 
   const renderScatterPlot = () => {
-    if (!comparisonData) return null;
+    if (!analyticsAvailable || !comparisonData) return null;
 
     const activeData =
       (useWeighting ? comparisonData : unweightedComparisonData) ??
       comparisonData;
     const { original_predictions, interactive_predictions, actual_values } =
       activeData;
+    if (
+      !Array.isArray(original_predictions) ||
+      !Array.isArray(interactive_predictions) ||
+      !Array.isArray(actual_values) ||
+      !original_predictions.length ||
+      !interactive_predictions.length ||
+      !actual_values.length
+    ) {
+      return null;
+    }
 
     // Calculate min/max for the diagonal line
     const allValues = [
@@ -1414,6 +1434,13 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
 
             {/* Users List */}
             {renderUsersList()}
+
+            {modelStatus?.model_source === "imported" &&
+              !modelStatus?.analytics_available && (
+                <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50/95 p-4 text-amber-800">
+                  {t("training.importedAnalyticsUnavailable")}
+                </div>
+              )}
 
             {/* Metrics Comparison */}
             {renderMetricsComparison()}
