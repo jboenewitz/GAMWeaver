@@ -885,6 +885,106 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
     );
   };
 
+  const renderNumericLogPreview = (submission) => {
+    const preview = submission.line_preview;
+    if (!preview?.x_values?.length) {
+      return null;
+    }
+
+    const xValues = preview.x_values.map((value) => Number(value));
+    const originalYValues = (preview.original_y_values || []).map((value) =>
+      Number(value),
+    );
+    const weightedYValues = (preview.weighted_y_values || []).map((value) =>
+      Number(value),
+    );
+    const finiteYValues = [...originalYValues, ...weightedYValues].filter(
+      Number.isFinite,
+    );
+    const finiteXValues = xValues.filter(Number.isFinite);
+
+    const xMin = finiteXValues.length ? Math.min(...finiteXValues) : undefined;
+    const xMax = finiteXValues.length ? Math.max(...finiteXValues) : undefined;
+    const yMin = finiteYValues.length ? Math.min(...finiteYValues) : undefined;
+    const yMax = finiteYValues.length ? Math.max(...finiteYValues) : undefined;
+    const yPadding =
+      yMin !== undefined && yMax !== undefined
+        ? Math.max((yMax - yMin) * 0.15, 0.5)
+        : undefined;
+
+    const sharedLayout = {
+      autosize: true,
+      height: 240,
+      margin: { l: 50, r: 20, t: 10, b: 40 },
+      xaxis: {
+        tickfont: { size: 9 },
+        ...(xMin !== undefined && xMax !== undefined
+          ? { range: [xMin, xMax] }
+          : {}),
+      },
+      yaxis: {
+        title: { text: t("combined.effect"), font: { size: 10 } },
+        tickfont: { size: 9 },
+        ...(yMin !== undefined && yMax !== undefined && yPadding !== undefined
+          ? { range: [yMin - yPadding, yMax + yPadding] }
+          : {}),
+      },
+      showlegend: false,
+      paper_bgcolor: "rgba(0,0,0,0)",
+      plot_bgcolor: "rgba(255,255,255,0.9)",
+    };
+
+    return (
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">
+            {t("combined.originalLinePreview")}
+          </div>
+          <Plot
+            data={[
+              {
+                x: xValues,
+                y: originalYValues,
+                type: "scatter",
+                mode: "lines",
+                line: { color: "#94a3b8", width: 2.5 },
+              },
+            ]}
+            layout={sharedLayout}
+            config={{ responsive: true, displayModeBar: false }}
+            style={{ width: "100%" }}
+          />
+        </div>
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-emerald-700">
+            {t("combined.weightedLinePreview")}
+          </div>
+          <Plot
+            data={[
+              {
+                x: xValues,
+                y: originalYValues,
+                type: "scatter",
+                mode: "lines",
+                line: { color: "#94a3b8", width: 2, dash: "dot" },
+              },
+              {
+                x: xValues,
+                y: weightedYValues,
+                type: "scatter",
+                mode: "lines",
+                line: { color: "#10b981", width: 3 },
+              },
+            ]}
+            layout={sharedLayout}
+            config={{ responsive: true, displayModeBar: false }}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </div>
+    );
+  };
+
   const renderEditLogs = () => {
     if (editLogsError) {
       return (
@@ -968,6 +1068,9 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                         submission.submission_id || `${feature.feature_name}-${submissionIdx}`;
                       const isSubmissionExpanded =
                         expandedSubmissions[submissionKey] ?? false;
+                      const showNumericPreview =
+                        submission.feature_type === "numeric" &&
+                        Boolean(submission.line_preview);
 
                       return (
                         <div
@@ -1121,49 +1224,55 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
 
                           {isSubmissionExpanded && (
                             <div className="border-t border-slate-200/70 bg-white/90 p-4">
-                              <div
-                                className="mb-2 grid gap-2 px-2 text-xs font-medium uppercase text-slate-500"
-                                style={{
-                                  gridTemplateColumns: "1fr 1fr 1fr",
-                                }}
-                              >
-                                <span>{t("combined.xValue")}</span>
-                                <span className="text-right">{t("combined.rawInput")}</span>
-                                <span className="text-right">{t("combined.weighted")}</span>
-                              </div>
-                              <div className="space-y-1 max-h-64 overflow-y-auto">
-                                {submission.points.map((point, pointIdx) => (
+                              {showNumericPreview ? (
+                                renderNumericLogPreview(submission)
+                              ) : (
+                                <>
                                   <div
-                                    key={`${submissionKey}-${point.edit_id || pointIdx}`}
-                                    className="grid rounded bg-slate-50/90 px-2 py-2 text-sm"
+                                    className="mb-2 grid gap-2 px-2 text-xs font-medium uppercase text-slate-500"
                                     style={{
                                       gridTemplateColumns: "1fr 1fr 1fr",
                                     }}
                                   >
-                                    <span className="font-mono text-slate-600">
-                                      {formatXValue(point.x_value)}
-                                    </span>
-                                    <span
-                                      className={`text-right font-mono ${
-                                        point.raw_input >= 0
-                                          ? "text-green-600"
-                                          : "text-red-600"
-                                      }`}
-                                    >
-                                      {formatSignedNumber(point.raw_input)}
-                                    </span>
-                                    <span
-                                      className={`text-right font-mono font-semibold ${
-                                        point.weighted_result >= 0
-                                          ? "text-green-600"
-                                          : "text-red-600"
-                                      }`}
-                                    >
-                                      {formatSignedNumber(point.weighted_result)}
-                                    </span>
+                                    <span>{t("combined.xValue")}</span>
+                                    <span className="text-right">{t("combined.rawInput")}</span>
+                                    <span className="text-right">{t("combined.weighted")}</span>
                                   </div>
-                                ))}
-                              </div>
+                                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                                    {submission.points.map((point, pointIdx) => (
+                                      <div
+                                        key={`${submissionKey}-${point.edit_id || pointIdx}`}
+                                        className="grid rounded bg-slate-50/90 px-2 py-2 text-sm"
+                                        style={{
+                                          gridTemplateColumns: "1fr 1fr 1fr",
+                                        }}
+                                      >
+                                        <span className="font-mono text-slate-600">
+                                          {formatXValue(point.x_value)}
+                                        </span>
+                                        <span
+                                          className={`text-right font-mono ${
+                                            point.raw_input >= 0
+                                              ? "text-green-600"
+                                              : "text-red-600"
+                                          }`}
+                                        >
+                                          {formatSignedNumber(point.raw_input)}
+                                        </span>
+                                        <span
+                                          className={`text-right font-mono font-semibold ${
+                                            point.weighted_result >= 0
+                                              ? "text-green-600"
+                                              : "text-red-600"
+                                          }`}
+                                        >
+                                          {formatSignedNumber(point.weighted_result)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>

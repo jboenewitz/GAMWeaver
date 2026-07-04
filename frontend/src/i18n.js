@@ -326,6 +326,8 @@ const translations = {
     "combined.xValue": "X Value",
     "combined.rawInput": "Raw Input",
     "combined.weighted": "Weighted",
+    "combined.originalLinePreview": "Original Line",
+    "combined.weightedLinePreview": "Weighted Edited Line",
     "combined.noSubmissions":
       "No submissions available for this feature.",
     "combined.deleteDisabled":
@@ -743,6 +745,8 @@ const translations = {
     "combined.xValue": "X-Wert",
     "combined.rawInput": "Roheingabe",
     "combined.weighted": "Gewichtet",
+    "combined.originalLinePreview": "Originale Linie",
+    "combined.weightedLinePreview": "Gewichtete bearbeitete Linie",
     "combined.noSubmissions":
       "Keine Einreichungen fuer dieses Feature verfuegbar.",
     "combined.deleteDisabled":

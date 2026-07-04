@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import make_url
 from datetime import datetime
+from uuid import uuid4
 
 from .config import settings
 
@@ -101,6 +102,88 @@ class InviteToken(Base):
     created_by = relationship("User", foreign_keys=[created_by_user_id])
 
 
+def _assign_submission_ids_to_legacy_edits() -> None:
+    """
+    Backfill missing submission IDs for legacy edit rows.
+
+    Legacy numeric line edits were historically stored as one row per point
+    without a shared submission id. We rebuild submission batches using
+    metadata, temporal proximity, and repeated x-values as a split signal.
+    """
+    session = SessionLocal()
+    try:
+        legacy_rows = (
+            session.query(ShapeFunctionEdit)
+            .filter(ShapeFunctionEdit.submission_id.is_(None))
+            .order_by(
+                ShapeFunctionEdit.user_id,
+                ShapeFunctionEdit.feature_name,
+                ShapeFunctionEdit.feature_type,
+                ShapeFunctionEdit.weight,
+                ShapeFunctionEdit.message,
+                ShapeFunctionEdit.created_at,
+                ShapeFunctionEdit.id,
+            )
+            .all()
+        )
+
+        if not legacy_rows:
+            return
+
+        cluster = []
+        seen_x_values = set()
+        previous_metadata = None
+        previous_created_at = None
+
+        def flush_cluster() -> None:
+            nonlocal cluster, seen_x_values
+            if not cluster:
+                return
+
+            submission_id = uuid4().hex
+            for row in cluster:
+                row.submission_id = submission_id
+            cluster = []
+            seen_x_values = set()
+
+        for row in legacy_rows:
+            row_created_at = row.created_at or datetime.utcnow()
+            row_metadata = (
+                row.user_id,
+                row.feature_name,
+                row.feature_type,
+                float(row.weight or 0.0),
+                row.message or "",
+            )
+            x_key = str(row.x_value)
+
+            starts_new_cluster = False
+            if previous_metadata is not None and row_metadata != previous_metadata:
+                starts_new_cluster = True
+            elif previous_created_at is not None:
+                gap_seconds = (row_created_at - previous_created_at).total_seconds()
+                if gap_seconds > 1.0:
+                    starts_new_cluster = True
+            if x_key in seen_x_values:
+                starts_new_cluster = True
+
+            if starts_new_cluster:
+                flush_cluster()
+
+            cluster.append(row)
+            seen_x_values.add(x_key)
+            previous_metadata = row_metadata
+            previous_created_at = row_created_at
+
+        flush_cluster()
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def init_db():
     """Initialize the database, creating all tables."""
     Base.metadata.create_all(bind=engine)
@@ -164,6 +247,8 @@ def init_db():
                     )
                 )
                 conn.commit()
+
+        _assign_submission_ids_to_legacy_edits()
     except Exception:
         pass  # Table may not exist yet on fresh installs — create_all handles it
 

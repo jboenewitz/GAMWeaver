@@ -1,8 +1,7 @@
 """Database service layer for user and edit management."""
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import secrets
 
@@ -16,6 +15,7 @@ from .database import (
 )
 from .config import settings
 from .security import hash_password, verify_password
+from .ml_service import ml_service
 
 
 def _decode_numeric_x_for_display(raw_value: Any) -> Any:
@@ -102,6 +102,149 @@ class DatabaseService:
     def get_db(self) -> Session:
         """Get a new database session."""
         return SessionLocal()
+
+    @staticmethod
+    def _submission_sort_key(submission: Dict[str, Any]) -> Tuple[datetime, int]:
+        """Use the newest row in a submission as its ordering key."""
+        return (
+            submission.get("_latest_created_at") or datetime.min,
+            submission.get("_latest_row_id") or 0,
+        )
+
+    def _get_effective_submissions(
+        self,
+        db: Session,
+        *,
+        user_id: Optional[int] = None,
+        include_user_names: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Group rows by submission and keep only the newest one per user/feature."""
+        query = db.query(ShapeFunctionEdit)
+        if user_id is not None:
+            query = query.filter(ShapeFunctionEdit.user_id == user_id)
+
+        rows = (
+            query.order_by(
+                ShapeFunctionEdit.user_id,
+                ShapeFunctionEdit.feature_name,
+                ShapeFunctionEdit.created_at,
+                ShapeFunctionEdit.id,
+                ShapeFunctionEdit.x_value,
+            ).all()
+        )
+        if not rows:
+            return []
+
+        user_names: Dict[int, str] = {}
+        if include_user_names:
+            user_ids = sorted({row.user_id for row in rows})
+            users = db.query(User).filter(User.id.in_(user_ids)).all()
+            user_names = {user.id: user.name for user in users}
+
+        submissions_by_group: Dict[str, Dict[str, Any]] = {}
+        ordered_submissions: List[Dict[str, Any]] = []
+
+        for row in rows:
+            group_id = row.submission_id or f"legacy:{row.id}"
+            created_at = row.created_at or datetime.min
+
+            submission = submissions_by_group.get(group_id)
+            if submission is None:
+                submission = {
+                    "submission_id": row.submission_id or f"legacy-{row.id}",
+                    "persisted_submission_id": row.submission_id,
+                    "legacy_edit_id": None if row.submission_id else row.id,
+                    "feature_name": row.feature_name,
+                    "feature_type": row.feature_type,
+                    "user_id": row.user_id,
+                    "user_name": user_names.get(row.user_id, "Unknown"),
+                    "message": row.message or "",
+                    "sureness": round(float(row.weight) * 10),
+                    "rows": [],
+                    "_latest_created_at": created_at,
+                    "_latest_row_id": row.id,
+                }
+                submissions_by_group[group_id] = submission
+                ordered_submissions.append(submission)
+
+            submission["rows"].append(row)
+            row_sort_key = (created_at, row.id)
+            if row_sort_key > self._submission_sort_key(submission):
+                submission["_latest_created_at"] = created_at
+                submission["_latest_row_id"] = row.id
+
+        latest_by_user_feature: Dict[Tuple[int, str], Dict[str, Any]] = {}
+        for submission in ordered_submissions:
+            latest_key = (submission["user_id"], submission["feature_name"])
+            current = latest_by_user_feature.get(latest_key)
+            if current is None or self._submission_sort_key(submission) > self._submission_sort_key(current):
+                latest_by_user_feature[latest_key] = submission
+
+        return list(latest_by_user_feature.values())
+
+    @staticmethod
+    def _rows_to_storage_feature(rows: List[ShapeFunctionEdit]) -> Dict[str, Any]:
+        """Convert grouped rows into the raw storage shape expected by the ML service."""
+        first_row = rows[0]
+        sorted_rows = sorted(
+            rows,
+            key=lambda row: _point_sort_key(first_row.feature_type, row.x_value),
+        )
+        return {
+            "feature_name": first_row.feature_name,
+            "feature_type": first_row.feature_type,
+            "edited_points": [
+                {
+                    "x_value": row.x_value,
+                    "y_value": row.y_offset,
+                    "weight": row.weight,
+                }
+                for row in sorted_rows
+            ],
+        }
+
+    def _build_numeric_line_preview(
+        self,
+        feature_name: str,
+        rows: List[ShapeFunctionEdit],
+    ) -> Optional[Dict[str, Any]]:
+        """Build original vs weighted-edited line data for numeric edit-log previews."""
+        if not rows or rows[0].feature_type != "numeric" or not ml_service.is_trained:
+            return None
+
+        if not ml_service.original_shape_functions:
+            try:
+                ml_service.get_shape_functions()
+            except Exception:
+                return None
+
+        original = ml_service.original_shape_functions.get(feature_name)
+        if not original:
+            return None
+
+        x_values = list(original.get("x_values", []))
+        original_y_values = [float(y) for y in original.get("y_values", [])]
+        if len(x_values) != len(original_y_values):
+            return None
+
+        weighted_offsets = {
+            row.x_value: float(row.y_offset) * float(row.weight)
+            for row in rows
+        }
+        weighted_y_values = []
+        for x_value, original_y in zip(x_values, original_y_values):
+            offset = ml_service.get_offset_for_feature_value(
+                feature_name=feature_name,
+                value=x_value,
+                offsets=weighted_offsets,
+            )
+            weighted_y_values.append(float(original_y) + float(offset))
+
+        return {
+            "x_values": [float(x) for x in x_values],
+            "original_y_values": original_y_values,
+            "weighted_y_values": weighted_y_values,
+        }
 
     # ==================== User Operations ====================
 
@@ -396,17 +539,13 @@ class DatabaseService:
         """Get all edits for a specific user as a dictionary."""
         db = self.get_db()
         try:
-            edits = db.query(ShapeFunctionEdit).filter(
-                ShapeFunctionEdit.user_id == user_id
-            ).all()
-            
-            # Organize by feature name
-            result = {}
-            for edit in edits:
-                if edit.feature_name not in result:
-                    result[edit.feature_name] = {}
-                result[edit.feature_name][edit.x_value] = edit.y_offset
-            
+            submissions = self._get_effective_submissions(db, user_id=user_id)
+            result: Dict[str, Dict[str, float]] = {}
+            for submission in submissions:
+                feature_points = {}
+                for edit in submission["rows"]:
+                    feature_points[edit.x_value] = edit.y_offset
+                result[submission["feature_name"]] = feature_points
             return result
         finally:
             db.close()
@@ -415,17 +554,16 @@ class DatabaseService:
         """Get all edits for a user as {feature_name: {x_value_str: {offset, weight}}}."""
         db = self.get_db()
         try:
-            edits = db.query(ShapeFunctionEdit).filter(
-                ShapeFunctionEdit.user_id == user_id
-            ).all()
             result: Dict[str, Dict[str, Dict[str, float]]] = {}
-            for edit in edits:
-                if edit.feature_name not in result:
-                    result[edit.feature_name] = {}
-                result[edit.feature_name][edit.x_value] = {
-                    "offset": edit.y_offset,
-                    "weight": edit.weight,
-                }
+            submissions = self._get_effective_submissions(db, user_id=user_id)
+            for submission in submissions:
+                feature_name = submission["feature_name"]
+                result[feature_name] = {}
+                for edit in submission["rows"]:
+                    result[feature_name][edit.x_value] = {
+                        "offset": edit.y_offset,
+                        "weight": edit.weight,
+                    }
             return result
         finally:
             db.close()
@@ -434,26 +572,31 @@ class DatabaseService:
         """Get all edits for a specific user as a list of shape functions (display-oriented)."""
         db = self.get_db()
         try:
-            edits = db.query(ShapeFunctionEdit).filter(
-                ShapeFunctionEdit.user_id == user_id
-            ).all()
-            
-            # Organize by feature name
-            features = {}
-            for edit in edits:
-                if edit.feature_name not in features:
-                    features[edit.feature_name] = {
-                        "feature_name": edit.feature_name,
-                        "feature_type": edit.feature_type,
-                        "edited_points": []
+            submissions = self._get_effective_submissions(db, user_id=user_id)
+            features = []
+            for submission in sorted(submissions, key=lambda item: item["feature_name"]):
+                storage_feature = self._rows_to_storage_feature(submission["rows"])
+                display_points = []
+                for point in storage_feature["edited_points"]:
+                    display_points.append(
+                        {
+                            "x_value": (
+                                point["x_value"]
+                                if storage_feature["feature_type"] == "categorical"
+                                else _decode_numeric_x_for_display(point["x_value"])
+                            ),
+                            "y_value": point["y_value"],
+                            "weight": point["weight"],
+                        }
+                    )
+                features.append(
+                    {
+                        "feature_name": storage_feature["feature_name"],
+                        "feature_type": storage_feature["feature_type"],
+                        "edited_points": display_points,
                     }
-                features[edit.feature_name]["edited_points"].append({
-                    "x_value": edit.x_value if edit.feature_type == "categorical" else _decode_numeric_x_for_display(edit.x_value),
-                    "y_value": edit.y_offset,
-                    "weight": edit.weight
-                })
-            
-            return list(features.values())
+                )
+            return features
         finally:
             db.close()
 
@@ -461,27 +604,11 @@ class DatabaseService:
         """Get all edits for a user preserving raw storage keys (for model loading)."""
         db = self.get_db()
         try:
-            edits = db.query(ShapeFunctionEdit).filter(
-                ShapeFunctionEdit.user_id == user_id
-            ).all()
-
-            features: Dict[str, Dict[str, Any]] = {}
-            for edit in edits:
-                if edit.feature_name not in features:
-                    features[edit.feature_name] = {
-                        "feature_name": edit.feature_name,
-                        "feature_type": edit.feature_type,
-                        "edited_points": [],
-                    }
-                features[edit.feature_name]["edited_points"].append(
-                    {
-                        "x_value": edit.x_value,
-                        "y_value": edit.y_offset,
-                        "weight": edit.weight,
-                    }
-                )
-
-            return list(features.values())
+            submissions = self._get_effective_submissions(db, user_id=user_id)
+            return [
+                self._rows_to_storage_feature(submission["rows"])
+                for submission in sorted(submissions, key=lambda item: item["feature_name"])
+            ]
         finally:
             db.close()
 
@@ -542,38 +669,32 @@ class DatabaseService:
         """
         db = self.get_db()
         try:
-            if weighted:
-                results = db.query(
-                    ShapeFunctionEdit.feature_name,
-                    ShapeFunctionEdit.feature_type,
-                    ShapeFunctionEdit.x_value,
-                    func.sum(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("offset_sum"),
-                    func.count(ShapeFunctionEdit.user_id).label("user_count")
-                ).group_by(
-                    ShapeFunctionEdit.feature_name,
-                    ShapeFunctionEdit.x_value
-                ).all()
-            else:
-                results = db.query(
-                    ShapeFunctionEdit.feature_name,
-                    ShapeFunctionEdit.feature_type,
-                    ShapeFunctionEdit.x_value,
-                    func.sum(ShapeFunctionEdit.y_offset).label("offset_sum"),
-                    func.count(ShapeFunctionEdit.user_id).label("user_count")
-                ).group_by(
-                    ShapeFunctionEdit.feature_name,
-                    ShapeFunctionEdit.x_value
-                ).all()
+            submissions = self._get_effective_submissions(db)
+            aggregate: Dict[str, Dict[Any, Dict[str, float]]] = {}
 
-            combined = {}
-            for row in results:
-                if row.feature_name not in combined:
-                    combined[row.feature_name] = {}
+            for submission in submissions:
+                feature_name = submission["feature_name"]
+                feature_bucket = aggregate.setdefault(feature_name, {})
+                for edit in submission["rows"]:
+                    point_bucket = feature_bucket.setdefault(
+                        edit.x_value,
+                        {"offset_sum": 0.0, "user_count": 0.0},
+                    )
+                    contribution = (
+                        float(edit.y_offset) * float(edit.weight)
+                        if weighted
+                        else float(edit.y_offset)
+                    )
+                    point_bucket["offset_sum"] += contribution
+                    point_bucket["user_count"] += 1.0
 
-                avg_offset = float(row.offset_sum) / float(row.user_count) if row.user_count > 0 else 0.0
-
-                combined[row.feature_name][row.x_value] = avg_offset
-
+            combined: Dict[str, Dict[Any, float]] = {}
+            for feature_name, points in aggregate.items():
+                combined[feature_name] = {}
+                for x_value, stats in points.items():
+                    user_count = stats["user_count"]
+                    avg_offset = stats["offset_sum"] / user_count if user_count > 0 else 0.0
+                    combined[feature_name][x_value] = avg_offset
             return combined
         finally:
             db.close()
@@ -585,52 +706,83 @@ class DatabaseService:
         """
         db = self.get_db()
         try:
-            # Query to get statistics per feature/x_value
-            # Each edit is multiplied by its weight, then we average by user count
-            results = db.query(
-                ShapeFunctionEdit.feature_name,
-                ShapeFunctionEdit.feature_type,
-                ShapeFunctionEdit.x_value,
-                func.sum(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("weighted_sum"),
-                func.min(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("min_weighted"),
-                func.max(ShapeFunctionEdit.y_offset * ShapeFunctionEdit.weight).label("max_weighted"),
-                func.avg(ShapeFunctionEdit.weight).label("avg_weight"),
-                func.count(ShapeFunctionEdit.user_id.distinct()).label("user_count")
-            ).group_by(
-                ShapeFunctionEdit.feature_name,
-                ShapeFunctionEdit.x_value
-            ).all()
-            
-            # Get total number of users who made edits
-            total_users = db.query(
-                func.count(ShapeFunctionEdit.user_id.distinct())
-            ).scalar() or 0
-            
-            # Organize by feature name
-            features = {}
-            for row in results:
-                if row.feature_name not in features:
-                    features[row.feature_name] = {
-                        "feature_name": row.feature_name,
-                        "feature_type": row.feature_type,
-                        "edited_points": []
+            submissions = self._get_effective_submissions(db)
+            total_users = len({submission["user_id"] for submission in submissions})
+
+            features: Dict[str, Dict[str, Any]] = {}
+            point_stats: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+
+            for submission in submissions:
+                feature_name = submission["feature_name"]
+                feature_type = submission["feature_type"]
+                features.setdefault(
+                    feature_name,
+                    {
+                        "feature_name": feature_name,
+                        "feature_type": feature_type,
+                        "edited_points": [],
+                    },
+                )
+
+                for edit in submission["rows"]:
+                    point_key = (feature_name, edit.x_value)
+                    weighted_value = float(edit.y_offset) * float(edit.weight)
+                    stats = point_stats.setdefault(
+                        point_key,
+                        {
+                            "feature_name": feature_name,
+                            "feature_type": feature_type,
+                            "x_value": edit.x_value,
+                            "weighted_sum": 0.0,
+                            "min_weighted": weighted_value,
+                            "max_weighted": weighted_value,
+                            "weight_sum": 0.0,
+                            "user_count": 0,
+                        },
+                    )
+                    stats["weighted_sum"] += weighted_value
+                    stats["min_weighted"] = min(stats["min_weighted"], weighted_value)
+                    stats["max_weighted"] = max(stats["max_weighted"], weighted_value)
+                    stats["weight_sum"] += float(edit.weight)
+                    stats["user_count"] += 1
+
+            for stats in point_stats.values():
+                feature = features[stats["feature_name"]]
+                user_count = stats["user_count"]
+                feature["edited_points"].append(
+                    {
+                        "x_value": (
+                            stats["x_value"]
+                            if stats["feature_type"] == "categorical"
+                            else _decode_numeric_x_for_display(stats["x_value"])
+                        ),
+                        "y_value": (
+                            stats["weighted_sum"] / user_count if user_count > 0 else 0.0
+                        ),
+                        "min_weighted": stats["min_weighted"],
+                        "max_weighted": stats["max_weighted"],
+                        "avg_weight": (
+                            stats["weight_sum"] / user_count if user_count > 0 else 0.0
+                        ),
+                        "user_count": user_count,
                     }
-                
-                # Calculate: sum of (offset * weight) / number of users
-                avg_weighted_offset = float(row.weighted_sum) / float(row.user_count) if row.user_count > 0 else 0.0
-                
-                features[row.feature_name]["edited_points"].append({
-                    "x_value": row.x_value if row.feature_type == "categorical" else _decode_numeric_x_for_display(row.x_value),
-                    "y_value": avg_weighted_offset,
-                    "min_weighted": row.min_weighted,
-                    "max_weighted": row.max_weighted,
-                    "avg_weight": row.avg_weight,
-                    "user_count": row.user_count
-                })
-            
+                )
+
+            feature_list = list(features.values())
+            for feature in feature_list:
+                feature["edited_points"].sort(
+                    key=lambda point: _point_sort_key(
+                        feature["feature_type"],
+                        point["x_value"],
+                    )
+                )
+
             return {
                 "total_users_with_edits": total_users,
-                "shape_functions": list(features.values())
+                "shape_functions": sorted(
+                    feature_list,
+                    key=lambda feature: feature["feature_name"],
+                ),
             }
         finally:
             db.close()
@@ -642,88 +794,84 @@ class DatabaseService:
         """
         db = self.get_db()
         try:
-            # Query all edits with user info
-            edits = db.query(ShapeFunctionEdit, User.name).join(
-                User, ShapeFunctionEdit.user_id == User.id
-            ).order_by(
-                ShapeFunctionEdit.feature_name,
-                ShapeFunctionEdit.created_at,
-                ShapeFunctionEdit.x_value
-            ).all()
-
+            submissions = self._get_effective_submissions(db, include_user_names=True)
             grouped_features: Dict[str, Dict[str, Any]] = {}
-            submissions_by_group: Dict[str, Dict[str, Any]] = {}
 
-            for edit, user_name in edits:
-                if edit.feature_name not in grouped_features:
-                    grouped_features[edit.feature_name] = {
-                        "feature_name": edit.feature_name,
-                        "feature_type": edit.feature_type,
-                        "submissions": [],
-                    }
+            for submission in submissions:
+                feature_name = submission["feature_name"]
+                feature_type = submission["feature_type"]
+                rows = submission["rows"]
 
-                group_id = edit.submission_id or f"legacy:{edit.id}"
-                submission = submissions_by_group.get(group_id)
-                if submission is None:
-                    submission = {
-                        "submission_id": edit.submission_id or f"legacy-{edit.id}",
-                        "persisted_submission_id": edit.submission_id,
-                        "legacy_edit_id": None if edit.submission_id else edit.id,
-                        "feature_name": edit.feature_name,
-                        "feature_type": edit.feature_type,
-                        "user_id": edit.user_id,
-                        "user_name": user_name,
-                        "created_at": edit.created_at.isoformat(),
-                        "sureness": round(edit.weight * 10),
-                        "message": edit.message or "",
-                        "point_count": 0,
-                        "raw_input_total": 0.0,
-                        "weighted_total": 0.0,
-                        "points": [],
-                        "_rows": [],
-                    }
-                    submissions_by_group[group_id] = submission
-                    grouped_features[edit.feature_name]["submissions"].append(submission)
-
-                raw_input = float(edit.y_offset)
-                weighted_result = float(edit.y_offset) * float(edit.weight)
-                submission["point_count"] += 1
-                submission["raw_input_total"] += raw_input
-                submission["weighted_total"] += weighted_result
-                submission["_rows"].append(edit)
-                submission["points"].append(
+                grouped_features.setdefault(
+                    feature_name,
                     {
-                        "edit_id": edit.id,
-                        "x_value": (
-                            edit.x_value
-                            if edit.feature_type == "categorical"
-                            else _decode_numeric_x_for_display(edit.x_value)
+                        "feature_name": feature_name,
+                        "feature_type": feature_type,
+                        "submissions": [],
+                    },
+                )
+
+                points = []
+                raw_input_total = 0.0
+                weighted_total = 0.0
+                for row in rows:
+                    raw_input = float(row.y_offset)
+                    weighted_result = float(row.y_offset) * float(row.weight)
+                    raw_input_total += raw_input
+                    weighted_total += weighted_result
+                    points.append(
+                        {
+                            "edit_id": row.id,
+                            "x_value": (
+                                row.x_value
+                                if row.feature_type == "categorical"
+                                else _decode_numeric_x_for_display(row.x_value)
+                            ),
+                            "raw_input": raw_input,
+                            "weighted_result": weighted_result,
+                        }
+                    )
+
+                points.sort(
+                    key=lambda point: _point_sort_key(
+                        feature_type,
+                        point["x_value"],
+                    )
+                )
+
+                grouped_features[feature_name]["submissions"].append(
+                    {
+                        "submission_id": submission["submission_id"],
+                        "persisted_submission_id": submission["persisted_submission_id"],
+                        "legacy_edit_id": submission["legacy_edit_id"],
+                        "feature_name": feature_name,
+                        "feature_type": feature_type,
+                        "user_id": submission["user_id"],
+                        "user_name": submission["user_name"],
+                        "created_at": submission["_latest_created_at"].isoformat(),
+                        "sureness": submission["sureness"],
+                        "message": submission["message"],
+                        "point_count": len(rows),
+                        "raw_input_total": raw_input_total,
+                        "weighted_total": weighted_total,
+                        "x_summary": _build_x_summary_from_rows(rows),
+                        "points": points,
+                        "line_preview": self._build_numeric_line_preview(
+                            feature_name,
+                            rows,
                         ),
-                        "raw_input": raw_input,
-                        "weighted_result": weighted_result,
                     }
                 )
 
-            feature_list = list(grouped_features.values())
+            feature_list = sorted(
+                grouped_features.values(),
+                key=lambda feature: feature["feature_name"],
+            )
             for feature in feature_list:
                 feature["submissions"].sort(
                     key=lambda submission: submission["created_at"],
                     reverse=True,
                 )
-                for submission in feature["submissions"]:
-                    submission["points"].sort(
-                        key=lambda point: _point_sort_key(
-                            feature["feature_type"],
-                            point["x_value"],
-                        )
-                    )
-                    submission["x_summary"] = _build_x_summary_from_rows(
-                        submission["_rows"]
-                    )
-                    del submission["_rows"]
-
-            feature_list.sort(key=lambda feature: feature["feature_name"])
-
             return {"features": feature_list}
         finally:
             db.close()
