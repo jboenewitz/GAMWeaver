@@ -10,6 +10,7 @@ const SuperadminPage = ({
   onImportModel,
   language = "en",
 }) => {
+  const t = createTranslator(language);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -21,6 +22,10 @@ const SuperadminPage = ({
   const [inviteExpires, setInviteExpires] = useState("");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [modelTransferMessage, setModelTransferMessage] = useState("");
+  const [exportingModel, setExportingModel] = useState(false);
+  const [importingModel, setImportingModel] = useState(false);
+  const importInputRef = useRef(null);
 
   const appBaseUrl = useMemo(() => {
     const configured = import.meta.env.VITE_PUBLIC_APP_URL;
@@ -119,10 +124,14 @@ const SuperadminPage = ({
     setModelTransferMessage("");
     try {
       const filename = await onExportModel();
-      setModelTransferMessage(`Model exported as ${filename}.`);
+      setModelTransferMessage(
+        t("superadmin.exportSuccess", { filename }),
+      );
     } catch (err) {
       setError(
-        err.response?.data?.detail || err.message || "Failed to export model",
+        err.response?.data?.detail ||
+          err.message ||
+          t("superadmin.error.exportModel"),
       );
     } finally {
       setExportingModel(false);
@@ -146,11 +155,13 @@ const SuperadminPage = ({
     try {
       const result = await onImportModel(file);
       setModelTransferMessage(
-        result?.message || "Model imported successfully.",
+        result?.message || t("superadmin.importSuccess"),
       );
     } catch (err) {
       setError(
-        err.response?.data?.detail || err.message || "Failed to import model",
+        err.response?.data?.detail ||
+          err.message ||
+          t("superadmin.error.importModel"),
       );
     } finally {
       setImportingModel(false);
@@ -219,11 +230,10 @@ const SuperadminPage = ({
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
-                Model Transfer
+                {t("superadmin.modelTransferTitle")}
               </h2>
               <p className="text-sm text-gray-600 mt-1">
-                Export the active trained model to JSON or import a previously
-                exported model artifact.
+                {t("superadmin.modelTransferDescription")}
               </p>
             </div>
             <input
@@ -239,20 +249,23 @@ const SuperadminPage = ({
                 disabled={exportingModel || importingModel}
                 className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
               >
-                {exportingModel ? "Exporting..." : "Export Model"}
+                {exportingModel
+                  ? t("superadmin.exporting")
+                  : t("superadmin.exportModel")}
               </button>
               <button
                 onClick={handleOpenImportDialog}
                 disabled={importingModel || exportingModel}
                 className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
               >
-                {importingModel ? "Importing..." : "Import Model"}
+                {importingModel
+                  ? t("superadmin.importing")
+                  : t("superadmin.importModel")}
               </button>
             </div>
           </div>
           <p className="text-xs text-gray-500">
-            Importing a model replaces the current base model and clears saved
-            user edits tied to the previous one.
+            {t("superadmin.modelTransferWarning")}
           </p>
         </section>
 

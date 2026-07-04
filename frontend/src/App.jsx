@@ -466,8 +466,8 @@ function App() {
       }
     } catch (err) {
       setError(
-        "Failed to apply shape function edits: " +
-          formatApiError(err, "Failed to apply shape function edits"),
+        `${t("app.error.applyShapeEdits")}: ` +
+          formatApiError(err, t("app.error.applyShapeEdits")),
       );
     } finally {
       isApplyingSavedEditsRef.current = false;
@@ -498,8 +498,8 @@ function App() {
       }
     } catch (err) {
       setError(
-        "Failed to reset shape functions: " +
-          formatApiError(err, "Failed to reset shape functions"),
+        `${t("app.error.resetShapeFunctions")}: ` +
+          formatApiError(err, t("app.error.resetShapeFunctions")),
       );
     } finally {
       setComparisonLoading(false);
@@ -535,8 +535,8 @@ function App() {
       }
     } catch (err) {
       setError(
-        "Failed to reset feature: " +
-          formatApiError(err, "Failed to reset feature"),
+        `${t("app.error.resetFeature")}: ` +
+          formatApiError(err, t("app.error.resetFeature")),
       );
     } finally {
       setComparisonLoading(false);
@@ -553,9 +553,9 @@ function App() {
     } catch (err) {
       const message = formatApiError(
         err,
-        "Failed to update feature chart settings",
+        t("app.error.updateFeatureChartSettings"),
       );
-      setError("Failed to update feature chart settings: " + message);
+      setError(`${t("app.error.updateFeatureChartSettings")}: ${message}`);
       throw new Error(message);
     }
   };
@@ -566,7 +566,7 @@ function App() {
       const result = await apiService.uploadDataset(file);
       return result;
     } catch (err) {
-      throw new Error(formatApiError(err, "Failed to upload dataset"));
+      throw new Error(formatApiError(err, t("app.error.uploadDataset")));
     }
   };
 
@@ -578,8 +578,8 @@ function App() {
       clearTrainedModelState();
       await fetchModelStatus();
     } catch (err) {
-      const message = formatApiError(err, "Failed to load data");
-      setError("Failed to load data: " + message);
+      const message = formatApiError(err, t("app.error.loadData"));
+      setError(`${t("app.error.loadData")}: ${message}`);
       throw new Error(message);
     } finally {
       setDataLoading(false);
@@ -598,8 +598,8 @@ function App() {
       }
     } catch (err) {
       setError(
-        "Failed to train model: " +
-          formatApiError(err, "Failed to train model"),
+        `${t("app.error.trainModel")}: ` +
+          formatApiError(err, t("app.error.trainModel")),
       );
     } finally {
       setLoading(false);
@@ -613,7 +613,8 @@ function App() {
       return result;
     } catch (err) {
       setError(
-        "Prediction failed: " + formatApiError(err, "Prediction failed"),
+        `${t("app.error.predictionFailed")}: ` +
+          formatApiError(err, t("app.error.predictionFailed")),
       );
       return null;
     }
@@ -658,6 +659,7 @@ function App() {
       <CombinedResultsPage
         onBack={() => setCurrentPage("main")}
         currentUser={currentUser}
+        language={language}
       />
     );
   }
@@ -827,6 +829,7 @@ function App() {
             onUnsavedEditsChange={handleUnsavedEditsChange}
             isSuperadmin={Boolean(currentUser?.is_superadmin)}
             onUpdateFeatureChartSettings={handleUpdateFeatureChartSettings}
+            language={language}
           />
         </div>
 
@@ -837,6 +840,7 @@ function App() {
               comparisonData={comparisonData}
               loading={comparisonLoading}
               currentUser={currentUser}
+              language={language}
             />
           </div>
         )}

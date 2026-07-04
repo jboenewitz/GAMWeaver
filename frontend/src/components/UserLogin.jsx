@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { createTranslator } from "../i18n";
 
-const formatAuthError = (err, fallback) => {
+const formatAuthError = (err, fallback, t) => {
   const detail = err?.response?.data?.detail;
   const message = err?.response?.data?.message;
 
@@ -19,7 +19,7 @@ const formatAuthError = (err, fallback) => {
   }
   if (typeof message === "string" && message.trim()) return message;
   if (typeof err?.message === "string" && err.message === "Network Error") {
-    return "Unable to reach the server. Please try again.";
+    return t("login.error.serverUnavailable");
   }
   if (typeof err?.message === "string" && err.message.trim()) {
     return err.message;
@@ -67,7 +67,7 @@ function UserLogin({ onLogin, onRegister, language = "en" }) {
         mode === "login"
           ? t("login.error.loginFailed")
           : t("login.error.registerFailed");
-      setError(formatAuthError(err, fallback));
+      setError(formatAuthError(err, fallback, t));
     } finally {
       setLoading(false);
     }

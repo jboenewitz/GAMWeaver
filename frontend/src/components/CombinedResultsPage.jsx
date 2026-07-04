@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
+import { createTranslator, getDateLocale } from "../i18n";
 
 const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
 
@@ -50,14 +51,20 @@ const formatSignedNumber = (value, digits = 3) =>
 const formatXValue = (value) =>
   typeof value === "number" ? value.toFixed(2) : value;
 
-const formatSubmissionDate = (value) => {
-  if (!value) return "Unknown";
+const formatSubmissionDate = (value, language) => {
+  if (!value) return "";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Unknown";
-  return parsed.toLocaleString();
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleString(getDateLocale(language));
 };
 
-const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) => {
+const CombinedPredictionForm = ({
+  modelTrained,
+  featureSchema,
+  targetColumn,
+  language = "en",
+}) => {
+  const t = createTranslator(language);
   const [formData, setFormData] = useState({});
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -91,7 +98,9 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
       }
     } catch (err) {
       setError(
-        err.response?.data?.detail || err.message || "Prediction failed",
+        err.response?.data?.detail ||
+          err.message ||
+          t("combined.predictionFailed"),
       );
     } finally {
       setLoading(false);
@@ -101,17 +110,15 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
   return (
     <div className={GLASS_CARD_CLASS}>
       <h3 className="mb-2 text-lg font-semibold text-slate-800">
-        Predict with Combined Edits
+        {t("combined.formTitle")}
       </h3>
       <p className="mb-4 text-sm text-slate-600">
-        Make a prediction using the model with all combined user edits applied.
-        The result reflects the aggregated shape function modifications from all
-        users.
+        {t("combined.formDescription")}
       </p>
 
       {!modelTrained && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-800">
-          Please train the model first before making predictions.
+          {t("prediction.trainFirst")}
         </div>
       )}
 
@@ -123,7 +130,7 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
 
       {(!featureSchema || featureSchema.length === 0) && (
         <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50/90 p-3 text-sm text-slate-600">
-          No feature schema available. Ask the superadmin to load a dataset.
+          {t("prediction.noSchema")}
         </div>
       )}
 
@@ -167,8 +174,10 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
           className="w-full rounded-lg bg-gradient-to-r from-primary-600 to-cyan-600 px-4 py-2 font-medium text-white shadow-md shadow-primary-800/20 transition-all hover:from-primary-500 hover:to-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading
-            ? "Predicting..."
-            : `Predict ${targetColumn || "Target"} (Combined Model)`}
+            ? t("prediction.predicting")
+            : t("combined.predictButton", {
+                target: targetColumn || t("common.target"),
+              })}
         </button>
       </form>
 
@@ -176,7 +185,9 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
         <div className="mt-6 rounded-lg border border-emerald-200 bg-gradient-to-r from-emerald-50/95 to-sky-50/95 p-4">
           <div className="text-center">
             <div className="text-sm text-slate-600">
-              Predicted {targetColumn || "Target"} (Combined Edits)
+              {t("combined.predictedResult", {
+                target: targetColumn || t("common.target"),
+              })}
             </div>
             <div className="text-4xl font-bold text-primary-600 mt-1">
               {Math.round(prediction)}
@@ -188,7 +199,8 @@ const CombinedPredictionForm = ({ modelTrained, featureSchema, targetColumn }) =
   );
 };
 
-function CombinedResultsPage({ onBack, currentUser }) {
+function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
+  const t = createTranslator(language);
   const allowDestructiveActions =
     import.meta.env.VITE_ALLOW_DESTRUCTIVE_ACTIONS === "true" ||
     currentUser?.is_superadmin;
@@ -260,7 +272,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
         setEditLogsError(
           err.response?.data?.detail ||
             err.message ||
-            "Failed to load edit logs",
+            t("combined.loadEditLogsFailed"),
         );
       }
 
@@ -282,7 +294,9 @@ function CombinedResultsPage({ onBack, currentUser }) {
       }
     } catch (err) {
       setError(
-        err.response?.data?.detail || err.message || "Failed to load data",
+        err.response?.data?.detail ||
+          err.message ||
+          t("combined.loadDataFailed"),
       );
     } finally {
       setLoading(false);
@@ -344,11 +358,11 @@ function CombinedResultsPage({ onBack, currentUser }) {
 
   const handleDeleteEdit = async () => {
     if (!allowDestructiveActions) {
-      setDeleteError("Destructive actions are disabled in this demo.");
+      setDeleteError(t("combined.deleteDisabled"));
       return;
     }
     if (!deleteReason.trim()) {
-      setDeleteError("Please provide a reason for deleting this edit.");
+      setDeleteError(t("combined.deleteReasonRequired"));
       return;
     }
 
@@ -368,7 +382,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
           deleteReason.trim(),
         );
       } else {
-        throw new Error("No deletion target available for this submission");
+        throw new Error(t("combined.noDeletionTarget"));
       }
       setShowDeleteModal(false);
       setEditToDelete(null);
@@ -378,7 +392,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
       setDeleteError(
         err.response?.data?.detail ||
           err.message ||
-          "Failed to delete submission",
+          t("combined.deleteFailed"),
       );
     } finally {
       setDeleting(false);
@@ -421,17 +435,17 @@ function CombinedResultsPage({ onBack, currentUser }) {
       <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
         <div className={GLASS_CARD_CLASS}>
           <h3 className="mb-4 text-lg font-semibold text-slate-800">
-            Original Model
+            {t("combined.originalModel")}
           </h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-slate-600">RMSE:</span>
+              <span className="text-slate-600">{t("combined.rmse")}:</span>
               <span className="font-semibold text-slate-800">
                 {metrics.original_rmse.toFixed(4)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-600">MAE:</span>
+              <span className="text-slate-600">{t("combined.mae")}:</span>
               <span className="font-semibold text-slate-800">
                 {metrics.original_mae.toFixed(4)}
               </span>
@@ -441,11 +455,11 @@ function CombinedResultsPage({ onBack, currentUser }) {
 
         <div className={GLASS_CARD_CLASS}>
           <h3 className="mb-4 text-lg font-semibold text-slate-800">
-            Combined User Edits
+            {t("combined.combinedUserEdits")}
           </h3>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-slate-600">RMSE:</span>
+              <span className="text-slate-600">{t("combined.rmse")}:</span>
               <span className="font-semibold text-slate-800">
                 {metrics.interactive_rmse.toFixed(4)}
               </span>
@@ -460,7 +474,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-600">MAE:</span>
+              <span className="text-slate-600">{t("combined.mae")}:</span>
               <span className="font-semibold text-slate-800">
                 {metrics.interactive_mae.toFixed(4)}
               </span>
@@ -501,7 +515,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
     return (
       <div className={GLASS_CARD_CLASS}>
         <h3 className="mb-4 text-lg font-semibold text-slate-800">
-          Predicted vs Original (Scatter Plot)
+          {t("combined.scatterTitle")}
         </h3>
         <Plot
           data={[
@@ -511,7 +525,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
               y: [minVal, maxVal],
               type: "scatter",
               mode: "lines",
-              name: "Perfect Prediction",
+              name: t("predictionComparison.perfectPrediction"),
               line: { color: "#d1d5db", width: 2, dash: "dash" },
             },
             // Original predictions
@@ -520,7 +534,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
               y: original_predictions,
               type: "scatter",
               mode: "markers",
-              name: "Original Model",
+              name: t("combined.originalModel"),
               marker: { color: "#f59e0b", size: 6, opacity: 0.6 },
             },
             // Combined predictions
@@ -529,7 +543,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
               y: interactive_predictions,
               type: "scatter",
               mode: "markers",
-              name: "Combined Edits",
+              name: t("combined.combinedUserEdits"),
               marker: { color: "#10b981", size: 6, opacity: 0.6 },
             },
           ]}
@@ -537,8 +551,8 @@ function CombinedResultsPage({ onBack, currentUser }) {
             autosize: true,
             height: 400,
             margin: { l: 60, r: 30, t: 20, b: 60 },
-            xaxis: { title: "Actual Bike Rentals" },
-            yaxis: { title: "Predicted Bike Rentals" },
+            xaxis: { title: t("predictionComparison.actualBikeRentals") },
+            yaxis: { title: t("predictionComparison.predictedBikeRentals") },
             legend: { orientation: "h", y: -0.2 },
             hovermode: "closest",
           }}
@@ -546,8 +560,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
           style={{ width: "100%" }}
         />
         <p className="mt-2 text-center text-sm text-slate-600">
-          Points closer to the diagonal line indicate better predictions.
-          Compare how the combined user edits affect prediction accuracy.
+          {t("combined.scatterDescription")}
         </p>
       </div>
     );
@@ -557,7 +570,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
     if (!comparisonData?.combined_shape_functions_display?.length) {
       return (
         <div className={`${GLASS_CARD_CLASS} text-center text-slate-500`}>
-          No shape function data available.
+          {t("combined.shapeFunctionsNone")}
         </div>
       );
     }
@@ -596,7 +609,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
         {/* Section header with toggle buttons */}
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-slate-800">
-            Shape Functions: Original vs Combined Edits
+            {t("combined.shapeFunctionsTitle")}
           </h3>
           <div className="flex items-center gap-2">
             <button
@@ -607,13 +620,13 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   ? "bg-amber-500 text-white hover:bg-amber-600"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
-              title="Toggle whether the combined line uses confidence-weighted averaging or a simple mean"
+              title={t("combined.weightingToggleTitle")}
             >
               {loadingOverlay && !useWeighting
-                ? "Loading..."
+                ? t("common.loading")
                 : useWeighting
-                  ? "Weighting: On"
-                  : "Weighting: Off"}
+                  ? t("combined.weightingOn")
+                  : t("combined.weightingOff")}
             </button>
             <button
               onClick={handleOverlayToggle}
@@ -625,10 +638,10 @@ function CombinedResultsPage({ onBack, currentUser }) {
               }`}
             >
               {loadingOverlay && useWeighting
-                ? "Loading..."
+                ? t("common.loading")
                 : showUserOverlay
-                  ? "Hide User Overlay"
-                  : "Show User Overlay"}
+                  ? t("combined.hideUserOverlay")
+                  : t("combined.showUserOverlay")}
             </button>
           </div>
         </div>
@@ -637,7 +650,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
         {showUserOverlay && !loadingOverlay && (
           <div className={`${GLASS_INSET_CLASS} mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2.5 text-xs`}>
             <span className="shrink-0 font-semibold text-slate-500">
-              Legend:
+              {t("combined.legend")}
             </span>
             {userNames.map((name, i) => (
               <div key={name} className="flex items-center gap-1.5 shrink-0">
@@ -664,22 +677,21 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   strokeDasharray="4 2"
                 />
               </svg>
-              <span className="text-slate-500">Original</span>
+              <span className="text-slate-500">{t("combined.original")}</span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
               <span
                 className="inline-block rounded-full"
                 style={{ width: 28, height: 3, backgroundColor: "#10b981" }}
               />
-              <span className="text-slate-500">Combined</span>
+              <span className="text-slate-500">{t("combined.combined")}</span>
             </div>
           </div>
         )}
 
         {!hasEdits && (
           <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg">
-            No user edits have been made yet. The charts below show the original
-            shape functions.
+            {t("combined.noEdits")}
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -707,9 +719,9 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   plotData.push({
                     x: sf.x_values,
                     y: userY,
-                    type: "scatter",
-                    mode: "lines",
-                    name: name,
+                  type: "scatter",
+                  mode: "lines",
+                  name: name,
                     line: { color, width: 1.5 },
                     showlegend: false,
                   });
@@ -732,7 +744,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   y: sf.original_y_values,
                   type: "scatter",
                   mode: "lines",
-                  name: "Original",
+                  name: t("combined.original"),
                   line: { color: "#9ca3af", width: 2, dash: "dot" },
                   showlegend: false,
                 });
@@ -741,7 +753,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   x: sf.x_values,
                   y: sf.original_y_values,
                   type: "bar",
-                  name: "Original",
+                  name: t("combined.original"),
                   marker: { color: "#9ca3af" },
                   opacity: 0.7,
                   showlegend: false,
@@ -754,7 +766,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   y: getCombinedY(sf),
                   type: "scatter",
                   mode: "lines",
-                  name: "Combined",
+                  name: t("combined.combined"),
                   line: { color: "#10b981", width: 3 },
                   showlegend: false,
                 });
@@ -763,7 +775,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   x: sf.x_values,
                   y: getCombinedY(sf),
                   type: "bar",
-                  name: "Combined",
+                  name: t("combined.combined"),
                   marker: { color: "#10b981" },
                   showlegend: false,
                 });
@@ -777,7 +789,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                       y: sf.original_y_values,
                       type: "scatter",
                       mode: "lines",
-                      name: "Original",
+                      name: t("combined.original"),
                       line: { color: "#9ca3af", width: 2, dash: "dot" },
                     },
                     {
@@ -785,7 +797,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                       y: getCombinedY(sf),
                       type: "scatter",
                       mode: "lines",
-                      name: "Combined",
+                      name: t("combined.combined"),
                       line: { color: "#10b981", width: 2 },
                     },
                   ]
@@ -794,7 +806,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                       x: sf.x_values,
                       y: sf.original_y_values,
                       type: "bar",
-                      name: "Original",
+                      name: t("combined.original"),
                       marker: { color: "#9ca3af" },
                       opacity: 0.7,
                     },
@@ -802,7 +814,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                       x: sf.x_values,
                       y: getCombinedY(sf),
                       type: "bar",
-                      name: "Combined",
+                      name: t("combined.combined"),
                       marker: { color: "#10b981" },
                     },
                   ];
@@ -823,7 +835,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   </h4>
                   {hasChanges && (
                     <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                      Modified
+                      {t("combined.modified")}
                     </span>
                   )}
                 </div>
@@ -847,7 +859,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                           : {}),
                       },
                       yaxis: {
-                        title: { text: "Effect", font: { size: 10 } },
+                        title: { text: t("combined.effect"), font: { size: 10 } },
                         tickfont: { size: 9 },
                       },
                       legend: {
@@ -877,7 +889,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
     if (editLogsError) {
       return (
         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/95 p-4 text-sm text-amber-800">
-          Edit logs are temporarily unavailable: {editLogsError}
+          {t("combined.editLogsUnavailable", { error: editLogsError })}
         </div>
       );
     }
@@ -895,11 +907,11 @@ function CombinedResultsPage({ onBack, currentUser }) {
 
     return (
       <div className={GLASS_CARD_CLASS}>
-        <h3 className="mb-4 text-lg font-semibold text-slate-800">Edit Logs</h3>
+        <h3 className="mb-4 text-lg font-semibold text-slate-800">
+          {t("combined.editLogsTitle")}
+        </h3>
         <p className="mb-4 text-sm text-slate-600">
-          Detailed log of all user edits, grouped by feature. Shows who edited,
-          their self-reported confidence rating (1-10), raw input value, and the
-          weighted result applied to the combined view.
+          {t("combined.editLogsDescription")}
         </p>
         <div className="space-y-4">
           {editLogs.features.map((feature, idx) => {
@@ -921,10 +933,14 @@ function CombinedResultsPage({ onBack, currentUser }) {
                       {feature.feature_name}
                     </h4>
                     <span className="text-sm text-slate-500">
-                      {submissionCount} submission
-                      {submissionCount !== 1 ? "s" : ""} by{" "}
-                      {uniqueUsers.length} user
-                      {uniqueUsers.length !== 1 ? "s" : ""}
+                      {submissionCount}{" "}
+                      {submissionCount === 1
+                        ? t("combined.submissionSingular")
+                        : t("combined.submissionPlural")}{" "}
+                      {t("combined.by")} {uniqueUsers.length}{" "}
+                      {uniqueUsers.length === 1
+                        ? t("combined.userSingular")
+                        : t("combined.userPlural")}
                     </span>
                   </div>
                   <svg
@@ -966,7 +982,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                               <div className="grid gap-3 md:grid-cols-6">
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">
-                                    User
+                                    {t("combined.user")}
                                   </div>
                                   <div className="truncate font-medium text-slate-700">
                                     {submission.user_name}
@@ -974,15 +990,18 @@ function CombinedResultsPage({ onBack, currentUser }) {
                                 </div>
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">
-                                    Submitted
+                                    {t("combined.submitted")}
                                   </div>
                                   <div className="text-sm text-slate-700">
-                                    {formatSubmissionDate(submission.created_at)}
+                                    {formatSubmissionDate(
+                                      submission.created_at,
+                                      language,
+                                    ) || t("common.unknown")}
                                   </div>
                                 </div>
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">
-                                    Confidence
+                                    {t("combined.confidence")}
                                   </div>
                                   <div>
                                     <span
@@ -1000,7 +1019,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                                 </div>
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">
-                                    Points
+                                    {t("combined.points")}
                                   </div>
                                   <div className="text-sm text-slate-700">
                                     {submission.point_count}
@@ -1008,7 +1027,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                                 </div>
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">
-                                    Raw Total
+                                    {t("combined.rawTotal")}
                                   </div>
                                   <div
                                     className={`font-mono text-sm ${
@@ -1022,7 +1041,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                                 </div>
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">
-                                    Weighted Total
+                                    {t("combined.weightedTotal")}
                                   </div>
                                   <div
                                     className={`font-mono text-sm font-semibold ${
@@ -1037,10 +1056,11 @@ function CombinedResultsPage({ onBack, currentUser }) {
                               </div>
                               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
                                 <span>
-                                  Message: {submission.message || "-"}
+                                  {t("combined.message")}: {submission.message || "-"}
                                 </span>
                                 <span>
-                                  X Summary: {submission.x_summary || submission.point_count}
+                                  {t("combined.xSummary")}:{" "}
+                                  {submission.x_summary || submission.point_count}
                                 </span>
                               </div>
                             </button>
@@ -1059,7 +1079,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                                     ? "text-slate-400 hover:bg-red-50 hover:text-red-600"
                                     : "cursor-not-allowed text-slate-300"
                                 }`}
-                                title="Delete this submission"
+                                title={t("combined.deleteSubmission")}
                                 disabled={!allowDestructiveActions}
                               >
                                 <svg
@@ -1107,9 +1127,9 @@ function CombinedResultsPage({ onBack, currentUser }) {
                                   gridTemplateColumns: "1fr 1fr 1fr",
                                 }}
                               >
-                                <span>X Value</span>
-                                <span className="text-right">Raw Input</span>
-                                <span className="text-right">Weighted</span>
+                                <span>{t("combined.xValue")}</span>
+                                <span className="text-right">{t("combined.rawInput")}</span>
+                                <span className="text-right">{t("combined.weighted")}</span>
                               </div>
                               <div className="space-y-1 max-h-64 overflow-y-auto">
                                 {submission.points.map((point, pointIdx) => (
@@ -1151,7 +1171,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                     })}
                     {submissionCount === 0 && (
                       <div className="rounded-lg border border-slate-200 bg-white/80 p-4 text-sm text-slate-500">
-                        No submissions available for this feature.
+                        {t("combined.noSubmissions")}
                       </div>
                     )}
                   </div>
@@ -1168,10 +1188,10 @@ function CombinedResultsPage({ onBack, currentUser }) {
     return (
       <div className={GLASS_CARD_CLASS}>
         <h3 className="mb-4 text-lg font-semibold text-slate-800">
-          Participating Users ({users.length})
+          {t("combined.participatingUsers", { count: users.length })}
         </h3>
         {users.length === 0 ? (
-          <p className="text-slate-500">No users yet.</p>
+          <p className="text-slate-500">{t("combined.noUsers")}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {users.map((user) => (
@@ -1216,7 +1236,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                 </svg>
               </button>
               <h1 className="text-xl font-bold text-slate-800">
-                Combined Results - All Users
+                {t("combined.title")}
               </h1>
             </div>
 
@@ -1226,7 +1246,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                 disabled={loading}
                 className="rounded-lg bg-gradient-to-r from-primary-600 to-cyan-600 px-4 py-2 text-white shadow-md shadow-primary-800/20 transition-all hover:from-primary-500 hover:to-cyan-500 disabled:opacity-50"
               >
-                Refresh
+                {t("combined.refresh")}
               </button>
             </div>
           </div>
@@ -1265,7 +1285,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                 />
               </svg>
-              <p className="text-slate-600">Loading combined results...</p>
+              <p className="text-slate-600">{t("combined.loading")}</p>
             </div>
           </div>
         ) : (
@@ -1274,13 +1294,12 @@ function CombinedResultsPage({ onBack, currentUser }) {
             <div className="glass-surface relative mb-6 overflow-hidden border-primary-200/60 bg-gradient-to-r from-primary-600 to-cyan-600 p-6 text-white">
               <div className="pointer-events-none absolute -top-14 right-8 h-40 w-40 rounded-full bg-white/20 blur-3xl" />
               <h2 className="text-2xl font-bold mb-2">
-                Combined Analysis from{" "}
-                {comparisonData?.total_users_with_edits || 0} Users
+                {t("combined.summaryTitle", {
+                  count: comparisonData?.total_users_with_edits || 0,
+                })}
               </h2>
               <p className="max-w-3xl opacity-95">
-                This page shows the aggregated effect of all user edits on the
-                GAM model. Each point's offset is averaged across all users who
-                edited it.
+                {t("combined.summaryDescription")}
               </p>
             </div>
 
@@ -1298,6 +1317,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
               modelTrained={Boolean(modelStatus?.is_trained)}
               featureSchema={modelStatus?.feature_schema || []}
               targetColumn={modelStatus?.target_column}
+              language={language}
             />
 
             {/* Combined Shape Functions Visualization */}
@@ -1316,28 +1336,29 @@ function CombinedResultsPage({ onBack, currentUser }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
           <div className="glass-surface-strong mx-4 w-full max-w-md p-6">
             <h3 className="mb-2 text-lg font-bold text-slate-800">
-              Delete Submission
+              {t("combined.deleteModalTitle")}
             </h3>
             <p className="mb-1 text-sm text-slate-600">
-              You are about to delete a submitted curve edit by{" "}
-              <span className="font-semibold">{editToDelete.user_name}</span>.
+              {t("combined.deleteModalDescription", {
+                user: editToDelete.user_name,
+              })}
             </p>
             <p className="mb-4 text-xs text-slate-500">
-              Feature:{" "}
+              {t("combined.feature")}:{" "}
               <span className="font-mono">
                 {editToDelete.feature_name || "—"}
               </span>{" "}
-              • Points:{" "}
+              • {t("combined.points")}:{" "}
               <span className="font-mono">
                 {editToDelete.point_count || 0}
               </span>
-              {" • X Summary: "}
+              {` • ${t("combined.xSummary")}: `}
               <span className="font-mono">
                 {editToDelete.x_summary || "—"}
               </span>
             </p>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Why is this submission being removed?{" "}
+              {t("combined.whyRemoved")}{" "}
               <span className="text-red-500">*</span>
             </label>
             <textarea
@@ -1346,7 +1367,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                 setDeleteReason(e.target.value);
                 if (deleteError) setDeleteError("");
               }}
-              placeholder="Provide a reason for removing this submission..."
+              placeholder={t("combined.deleteReasonPlaceholder")}
               rows={3}
               className="w-full resize-none rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 focus:border-red-500 focus:ring-2 focus:ring-red-500"
             />
@@ -1359,7 +1380,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                 disabled={deleting}
                 className="rounded-lg border border-slate-300 px-4 py-2 text-sm transition-colors hover:bg-slate-100"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleDeleteEdit}
@@ -1387,7 +1408,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                       />
                     </svg>
-                    Deleting...
+                    {t("combined.deleting")}
                   </>
                 ) : (
                   <>
@@ -1404,7 +1425,7 @@ function CombinedResultsPage({ onBack, currentUser }) {
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                       />
                     </svg>
-                    Delete Submission
+                    {t("combined.deleteSubmission")}
                   </>
                 )}
               </button>

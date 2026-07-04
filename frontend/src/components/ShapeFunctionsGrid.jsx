@@ -1,7 +1,8 @@
 import React from "react";
 import Plot from "react-plotly.js";
+import { createTranslator } from "../i18n";
 
-const ShapeFunctionChart = ({ shapeFunction }) => {
+const ShapeFunctionChart = ({ shapeFunction, t }) => {
   if (!shapeFunction) return null;
 
   const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
@@ -33,7 +34,7 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
       fill: isNumeric ? "tozeroy" : undefined,
       fillcolor: "rgba(59, 130, 246, 0.1)",
       hovertemplate: !isNumeric
-        ? "<b>%{customdata}</b><br>Effect: %{y:.3f}<extra></extra>"
+        ? `<b>%{customdata}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra></extra>`
         : undefined,
     },
   ];
@@ -57,7 +58,7 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
         : {}),
     },
     yaxis: {
-      title: "Effect on Prediction",
+      title: t("shapeFunctions.effectOnPrediction"),
       gridcolor: "#e5e7eb",
       zeroline: true,
       zerolinecolor: "#9ca3af",
@@ -82,12 +83,18 @@ const ShapeFunctionChart = ({ shapeFunction }) => {
   );
 };
 
-const ShapeFunctionsGrid = ({ shapeFunctions, loading }) => {
+const ShapeFunctionsGrid = ({
+  shapeFunctions,
+  loading,
+  language = "en",
+}) => {
+  const t = createTranslator(language);
+
   if (loading) {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Shape Functions
+          {t("shapeFunctions.title")}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -105,14 +112,12 @@ const ShapeFunctionsGrid = ({ shapeFunctions, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Shape Functions
+          {t("shapeFunctions.title")}
         </h3>
         <p className="text-gray-500 text-center py-8">
-          Train the model to see feature shape functions.
+          {t("shapeFunctions.emptyDescription")}
           <br />
-          <span className="text-sm">
-            Shape functions show how each feature affects the prediction.
-          </span>
+          <span className="text-sm">{t("shapeFunctions.sharedDescription")}</span>
         </p>
       </div>
     );
@@ -121,15 +126,14 @@ const ShapeFunctionsGrid = ({ shapeFunctions, loading }) => {
   return (
     <div className="card">
       <div className="mb-4">
-        <h3 className="text-lg font-semibold text-gray-700">Shape Functions</h3>
-        <p className="text-sm text-gray-500">
-          These plots show how each feature affects the bike rental prediction.
-          Values above zero increase the prediction, values below decrease it.
-        </p>
+        <h3 className="text-lg font-semibold text-gray-700">
+          {t("shapeFunctions.title")}
+        </h3>
+        <p className="text-sm text-gray-500">{t("shapeFunctions.gridDescription")}</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {shapeFunctions.map((sf, index) => (
-          <ShapeFunctionChart key={index} shapeFunction={sf} />
+          <ShapeFunctionChart key={index} shapeFunction={sf} t={t} />
         ))}
       </div>
     </div>

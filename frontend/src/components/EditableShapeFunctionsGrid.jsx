@@ -6,6 +6,7 @@ import React, {
   useMemo,
 } from "react";
 import Plot from "react-plotly.js";
+import { createTranslator } from "../i18n";
 
 const NUMERIC_X_PRECISION = 6;
 const NUMERIC_BRUSH_SIGMA_RATIO = 0.08;
@@ -231,6 +232,7 @@ const EditableShapeFunctionChart = ({
   brushHardness = 50,
   enlarged = false,
   sharedYRange = null,
+  t,
 }) => {
   if (!shapeFunction) return null;
 
@@ -835,7 +837,7 @@ const EditableShapeFunctionChart = ({
       y: y_values,
       type: "scatter",
       mode: "lines",
-      name: "Original",
+      name: t("shapeFunctions.original"),
       line: { color: "#9ca3af", width: 1.5, dash: "dash" },
       opacity: 0.6,
       showlegend: hasEdits,
@@ -847,13 +849,15 @@ const EditableShapeFunctionChart = ({
       y: merged.y,
       type: "scatter",
       mode: "lines",
-      name: hasEdits ? "Edited" : "Current",
+      name: hasEdits
+        ? t("shapeFunctions.edited")
+        : t("shapeFunctions.current"),
       line: { color: hasEdits ? "#10b981" : "#3b82f6", width: 2.5 },
       fill: "tozeroy",
       fillcolor: hasEdits
         ? "rgba(16, 185, 129, 0.1)"
         : "rgba(59, 130, 246, 0.1)",
-      hovertemplate: "<b>%{x:.3f}</b><br>Effect: %{y:.3f}<extra></extra>",
+      hovertemplate: `<b>%{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra></extra>`,
     };
 
     const dragHighlightTraces =
@@ -888,7 +892,7 @@ const EditableShapeFunctionChart = ({
             y: editMarkerPoints.map((p) => p.y_value),
             type: "scatter",
             mode: "markers",
-            name: "Edit points",
+            name: t("shapeFunctions.editPoints"),
             marker: {
               color: "#10b981",
               size: 8,
@@ -897,7 +901,7 @@ const EditableShapeFunctionChart = ({
             },
             showlegend: false,
             hovertemplate:
-              "<b>x: %{x:.3f}</b><br>Effect: %{y:.3f}<extra>Edited</extra>",
+              `<b>x: %{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra>${t("shapeFunctions.edited")}</extra>`,
           }
         : null;
 
@@ -913,7 +917,7 @@ const EditableShapeFunctionChart = ({
       x: x_values,
       y: y_values,
       type: "bar",
-      name: "Original",
+      name: t("shapeFunctions.original"),
       marker: { color: "#9ca3af", size: 4 },
       opacity: 0.6,
       showlegend: hasEdits,
@@ -936,7 +940,9 @@ const EditableShapeFunctionChart = ({
       x: x_values,
       y: currentYValues,
       type: "bar",
-      name: hasEdits ? "Edited" : "Current",
+      name: hasEdits
+        ? t("shapeFunctions.edited")
+        : t("shapeFunctions.current"),
       customdata: xTickLabels || x_values,
       marker: {
         color: markerColors,
@@ -957,7 +963,11 @@ const EditableShapeFunctionChart = ({
     title: {
       text:
         feature_name +
-        (isDragging ? " (dragging...)" : hasEdits ? " (edited)" : ""),
+        (isDragging
+          ? ` ${t("shapeFunctions.draggingSuffix")}`
+          : hasEdits
+            ? ` ${t("shapeFunctions.editedSuffix")}`
+            : ""),
       font: {
         size: enlarged ? 18 : 14,
         color: isDragging ? "#ef4444" : hasEdits ? "#10b981" : "#374151",
@@ -979,7 +989,10 @@ const EditableShapeFunctionChart = ({
       ...(isNumeric ? { range: xRange } : {}),
     },
     yaxis: {
-      title: { text: "Effect", font: { size: enlarged ? 14 : 12 } },
+      title: {
+        text: t("shapeFunctions.effect"),
+        font: { size: enlarged ? 14 : 12 },
+      },
       gridcolor: "#e5e7eb",
       zeroline: true,
       zerolinecolor: "#9ca3af",
@@ -1053,7 +1066,7 @@ const EditableShapeFunctionChart = ({
             onClick={(e) => e.stopPropagation()}
           >
             <h4 className="text-base font-semibold text-gray-800 mb-1">
-              Set Effect Value
+              {t("shapeFunctions.setEffectValue")}
             </h4>
             <p className="text-sm text-gray-500 mb-4">
               {feature_name} = {preciseEntry.displayX}
@@ -1091,7 +1104,7 @@ const EditableShapeFunctionChart = ({
                 onClick={() => setPreciseEntry(null)}
                 className="flex-1 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={() => {
@@ -1115,7 +1128,7 @@ const EditableShapeFunctionChart = ({
                 disabled={isNaN(parseFloat(preciseValue))}
                 className="flex-1 px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Apply
+                {t("common.apply")}
               </button>
             </div>
           </div>
@@ -1133,46 +1146,53 @@ const EditableShapeFunctionChart = ({
             isNumeric ? (
               <>
                 <span className="font-bold animate-pulse">
-                  Brushing at x ={" "}
-                  {dragXValue != null ? Number(dragXValue).toFixed(3) : ""}
+                  {t("shapeFunctions.brushingAtX", {
+                    value:
+                      dragXValue != null ? Number(dragXValue).toFixed(3) : "",
+                  })}
                 </span>
                 <span className="text-red-500">|</span>
                 <span>
-                  Release to apply smoothed stroke:{" "}
-                  {dragYValue != null ? dragYValue.toFixed(3) : ""}
+                  {t("shapeFunctions.releaseToApply", {
+                    value: dragYValue != null ? dragYValue.toFixed(3) : "",
+                  })}
                 </span>
               </>
             ) : (
               <>
                 <span className="font-bold animate-pulse">
-                  Dragging point {dragPointIndex + 1}
+                  {t("shapeFunctions.draggingPoint", {
+                    index: dragPointIndex + 1,
+                  })}
                 </span>
                 <span className="text-red-500">|</span>
                 <span>
-                  Release to set value:{" "}
-                  {localYValues?.[dragPointIndex]?.toFixed(2)}
+                  {t("shapeFunctions.releaseToSetValue", {
+                    value: localYValues?.[dragPointIndex]?.toFixed(2),
+                  })}
                 </span>
               </>
             )
           ) : isNumeric ? (
             <>
               <span className="font-medium">
-                Click and drag to brush the line. Double-click for precise
-                entry.
+                {t("shapeFunctions.clickDragHint")}
               </span>
             </>
           ) : hoveredPoint !== null ? (
             <>
               <span className="font-medium">
-                Point {hoveredPoint + 1} selected
+                {t("shapeFunctions.pointSelected", {
+                  index: hoveredPoint + 1,
+                })}
               </span>
               <span className="text-blue-400">|</span>
-              <span>Double-click for precise value</span>
+              <span>{t("shapeFunctions.preciseValueHint")}</span>
             </>
           ) : (
             <>
               <span className="font-medium">
-                Hover over a point to select it
+                {t("shapeFunctions.hoverSelectHint")}
               </span>
             </>
           )}
@@ -1199,7 +1219,7 @@ const EditableShapeFunctionChart = ({
 };
 
 // Sureness Rating Modal Component
-const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
+const SurenessModal = ({ isOpen, onClose, onConfirm, featureName, t }) => {
   const [sureness, setSureness] = useState(5);
   const [message, setMessage] = useState("");
 
@@ -1224,21 +1244,21 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-semibold text-gray-800 mb-2">
-          Submit Edit for {featureName}
+          {t("shapeFunctions.submitEditTitle", { feature: featureName })}
         </h3>
         <p className="text-sm text-gray-600 mb-4">
-          Rate your confidence and provide a description for your edit.
+          {t("shapeFunctions.submitEditDescription")}
         </p>
 
         {/* Confidence Slider */}
         <div className="mb-5">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Confidence Level
+            {t("shapeFunctions.confidenceLevel")}
           </label>
           <div className="flex justify-between text-sm text-gray-500 mb-2">
-            <span>Not sure</span>
+            <span>{t("shapeFunctions.notSure")}</span>
             <span className="font-bold text-lg text-blue-600">{sureness}</span>
-            <span>Very sure</span>
+            <span>{t("shapeFunctions.verySure")}</span>
           </div>
           <input
             type="range"
@@ -1263,18 +1283,19 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
         {/* Commit Message */}
         <div className="mb-5">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Edit Description <span className="text-red-500">*</span>
+            {t("shapeFunctions.editDescription")}{" "}
+            <span className="text-red-500">*</span>
           </label>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Describe why you made this edit..."
+            placeholder={t("shapeFunctions.editDescriptionPlaceholder")}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
             rows={3}
           />
           {!isValid && message.length > 0 && (
             <p className="text-xs text-red-500 mt-1">
-              Please enter a description for your edit.
+              {t("shapeFunctions.editDescriptionRequired")}
             </p>
           )}
         </div>
@@ -1284,7 +1305,7 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
             onClick={handleClose}
             className="flex-1 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleConfirm}
@@ -1295,7 +1316,7 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName }) => {
                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
-            Submit Edit
+            {t("shapeFunctions.submitEdit")}
           </button>
         </div>
       </div>
@@ -1308,6 +1329,7 @@ const FeatureChartSettingsModal = ({
   shapeFunction,
   onClose,
   onSave,
+  t,
 }) => {
   const [treatAsCategorical, setTreatAsCategorical] = useState(false);
   const [valueLabels, setValueLabels] = useState({});
@@ -1380,7 +1402,7 @@ const FeatureChartSettingsModal = ({
       });
       onClose();
     } catch (err) {
-      setError(err?.message || "Failed to save chart settings");
+      setError(err?.message || t("shapeFunctions.chartSettingsSaveError"));
     } finally {
       setSaving(false);
     }
@@ -1397,10 +1419,10 @@ const FeatureChartSettingsModal = ({
       >
         <div className="px-5 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800">
-            Chart Mapping: {featureName}
+            {t("shapeFunctions.chartMappingTitle", { feature: featureName })}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
-            Configure how categorical x-axis values are displayed for all users.
+            {t("shapeFunctions.chartMappingDescription")}
           </p>
         </div>
 
@@ -1416,11 +1438,10 @@ const FeatureChartSettingsModal = ({
               />
               <div>
                 <div className="text-sm font-medium text-slate-700">
-                  Treat this chart as categorical
+                  {t("shapeFunctions.treatAsCategorical")}
                 </div>
                 <div className="text-xs text-slate-500">
-                  Use bars with discrete category labels instead of a continuous
-                  line.
+                  {t("shapeFunctions.treatAsCategoricalHint")}
                 </div>
               </div>
             </label>
@@ -1428,20 +1449,19 @@ const FeatureChartSettingsModal = ({
 
           {!canBeCategorical && baseFeatureType === "numeric" && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              This feature has too many or non-discrete values and cannot be
-              converted to a categorical chart.
+              {t("shapeFunctions.cannotConvertCategorical")}
             </div>
           )}
 
           {effectiveCategorical && (
             <div className="rounded-lg border border-gray-200">
               <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium text-gray-700">
-                X-Axis Value Labels
+                {t("shapeFunctions.xAxisValueLabels")}
               </div>
               <div className="max-h-72 overflow-auto">
                 {availableValues.length === 0 ? (
                   <div className="px-3 py-3 text-sm text-gray-500">
-                    No categorical values available for mapping.
+                    {t("shapeFunctions.noCategoricalValues")}
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-100">
@@ -1464,7 +1484,9 @@ const FeatureChartSettingsModal = ({
                                 [key]: e.target.value,
                               }))
                             }
-                            placeholder={`Display label for ${key}`}
+                            placeholder={t("shapeFunctions.displayLabelFor", {
+                              value: key,
+                            })}
                             disabled={saving}
                             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
                           />
@@ -1479,8 +1501,7 @@ const FeatureChartSettingsModal = ({
 
           {!effectiveCategorical && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              Label mapping is available once this feature is displayed as a
-              categorical chart.
+              {t("shapeFunctions.mappingAvailableAfterCategorical")}
             </div>
           )}
 
@@ -1497,14 +1518,14 @@ const FeatureChartSettingsModal = ({
             disabled={saving}
             className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
             className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save Mapping"}
+            {saving ? t("shapeFunctions.saving") : t("shapeFunctions.saveMapping")}
           </button>
         </div>
       </div>
@@ -1527,6 +1548,7 @@ const FeatureEditCard = ({
   hasSavedEdits,
   isSuperadmin = false,
   sharedYRange = null,
+  t,
 }) => {
   const [isEnlarged, setIsEnlarged] = useState(false);
   const [isCyclingChartType, setIsCyclingChartType] = useState(false);
@@ -1592,9 +1614,9 @@ const FeatureEditCard = ({
           title={
             canCycleChartType
               ? currentChartType === "categorical"
-                ? "Switch chart to numeric"
-                : "Switch chart to categorical"
-              : "This feature cannot be switched to the other chart type"
+                ? t("shapeFunctions.switchChartToNumeric")
+                : t("shapeFunctions.switchChartToCategorical")
+              : t("shapeFunctions.chartTypeUnavailable")
           }
           disabled={!canCycleChartType || isCyclingChartType}
           className={`absolute top-2 left-2 z-10 p-1.5 border rounded-md shadow-sm transition-colors ${
@@ -1625,16 +1647,16 @@ const FeatureEditCard = ({
       {isSuperadmin && canConfigureCategoricalChart && (
         <button
           onClick={() => onOpenChartSettings(shapeFunction)}
-          title="Edit categorical mapping"
+          title={t("shapeFunctions.editCategoricalMapping")}
           className="absolute top-2 left-10 z-10 h-7 px-2 bg-white/90 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-xs text-gray-700 font-medium"
         >
-          Chart Mapping
+          {t("shapeFunctions.chartMappingButton")}
         </button>
       )}
       {/* Enlarge button */}
       <button
         onClick={() => setIsEnlarged(true)}
-        title="Enlarge chart"
+        title={t("shapeFunctions.enlargeChart")}
         className="absolute top-2 right-2 z-10 p-1.5 bg-white/80 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-gray-500 hover:text-gray-700"
       >
         <svg
@@ -1662,6 +1684,7 @@ const FeatureEditCard = ({
         isEditing={isEditing}
         brushHardness={brushHardness}
         sharedYRange={sharedYRange}
+        t={t}
       />
       <div className="mt-2 flex justify-between items-center">
         {/* Reset button - show if there are saved or unsaved edits */}
@@ -1671,7 +1694,7 @@ const FeatureEditCard = ({
             className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
           >
             <span>✕</span>
-            <span>Reset</span>
+            <span>{t("common.reset")}</span>
           </button>
         )}
         {!(hasSavedEdits || hasUnsavedEdits) && <div />}
@@ -1683,7 +1706,11 @@ const FeatureEditCard = ({
             className="px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
           >
             <span>✓</span>
-            <span>Submit {shapeFunction.feature_name}</span>
+            <span>
+              {t("shapeFunctions.submitFeature", {
+                feature: shapeFunction.feature_name,
+              })}
+            </span>
           </button>
         )}
       </div>
@@ -1706,7 +1733,7 @@ const FeatureEditCard = ({
               <button
                 onClick={() => setIsEnlarged(false)}
                 className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
-                title="Close"
+                title={t("common.close")}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1734,6 +1761,7 @@ const FeatureEditCard = ({
                 brushHardness={brushHardness}
                 enlarged
                 sharedYRange={sharedYRange}
+                t={t}
               />
             </div>
             {/* Modal footer actions */}
@@ -1744,7 +1772,7 @@ const FeatureEditCard = ({
                   className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
                 >
                   <span>✕</span>
-                  <span>Reset</span>
+                  <span>{t("common.reset")}</span>
                 </button>
               ) : (
                 <div />
@@ -1759,14 +1787,18 @@ const FeatureEditCard = ({
                     className="px-4 py-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
                   >
                     <span>✓</span>
-                    <span>Submit {shapeFunction.feature_name}</span>
+                    <span>
+                      {t("shapeFunctions.submitFeature", {
+                        feature: shapeFunction.feature_name,
+                      })}
+                    </span>
                   </button>
                 )}
                 <button
                   onClick={() => setIsEnlarged(false)}
                   className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
                 >
-                  Close
+                  {t("common.close")}
                 </button>
               </div>
             </div>
@@ -1787,7 +1819,9 @@ const EditableShapeFunctionsGrid = ({
   onUnsavedEditsChange,
   isSuperadmin = false,
   onUpdateFeatureChartSettings,
+  language = "en",
 }) => {
+  const t = createTranslator(language);
   const [isEditing, setIsEditing] = useState(false);
   const [editedPoints, setEditedPoints] = useState({});
   const [hasChanges, setHasChanges] = useState(false);
@@ -2021,7 +2055,7 @@ const EditableShapeFunctionsGrid = ({
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Interactive Shape Functions
+          {t("shapeFunctions.interactiveTitle")}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -2039,14 +2073,12 @@ const EditableShapeFunctionsGrid = ({
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Interactive Shape Functions
+          {t("shapeFunctions.interactiveTitle")}
         </h3>
         <p className="text-gray-500 text-center py-8">
-          Train the model to see and edit feature shape functions.
+          {t("shapeFunctions.interactiveEmptyDescription")}
           <br />
-          <span className="text-sm">
-            Shape functions show how each feature affects the prediction.
-          </span>
+          <span className="text-sm">{t("shapeFunctions.sharedDescription")}</span>
         </p>
       </div>
     );
@@ -2059,23 +2091,25 @@ const EditableShapeFunctionsGrid = ({
         onClose={handleSurenessModalClose}
         onConfirm={handleSurenessConfirm}
         featureName={pendingFeatureSubmit || ""}
+        t={t}
       />
       <FeatureChartSettingsModal
         isOpen={Boolean(chartSettingsFeature)}
         shapeFunction={chartSettingsFeature}
         onClose={handleCloseChartSettings}
         onSave={handleSaveChartSettings}
+        t={t}
       />
 
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-700">
-            Interactive Shape Functions
+            {t("shapeFunctions.interactiveTitle")}
           </h3>
           <p className="text-sm text-gray-500">
             {isEditing
-              ? "Edit points, then click Submit on each feature to save with your confidence rating."
-              : "Enable editing mode to interactively modify shape functions."}
+              ? t("shapeFunctions.interactiveEditDescription")
+              : t("shapeFunctions.interactiveViewDescription")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -2084,15 +2118,15 @@ const EditableShapeFunctionsGrid = ({
               onClick={handleReset}
               className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
             >
-              Reset All
+              {t("shapeFunctions.resetAll")}
             </button>
           )}
           <button
             onClick={() => setSyncAxes((v) => !v)}
             title={
               syncAxes
-                ? "Axes are synced — click to use per-chart scale"
-                : "Click to sync all chart axes to the same scale"
+                ? t("shapeFunctions.syncAxesHintOn")
+                : t("shapeFunctions.syncAxesHintOff")
             }
             className={`px-3 py-1.5 text-sm rounded-lg transition-colors font-medium flex items-center gap-1.5 ${
               syncAxes
@@ -2115,7 +2149,9 @@ const EditableShapeFunctionsGrid = ({
               <line x1="3" y1="6" x2="21" y2="6" />
               <line x1="3" y1="18" x2="21" y2="18" />
             </svg>
-            {syncAxes ? "Axes Synced" : "Sync Axes"}
+            {syncAxes
+              ? t("shapeFunctions.axesSynced")
+              : t("shapeFunctions.syncAxes")}
           </button>
           <button
             onClick={() => setIsEditing(!isEditing)}
@@ -2125,22 +2161,16 @@ const EditableShapeFunctionsGrid = ({
                 : "bg-blue-100 text-blue-700 hover:bg-blue-200"
             }`}
           >
-            {isEditing ? "Editing Mode ON" : "Enable Editing"}
+            {isEditing
+              ? t("shapeFunctions.editingModeOn")
+              : t("shapeFunctions.enableEditing")}
           </button>
         </div>
       </div>
 
       {isEditing && (
         <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-700">
-            <strong>How to edit:</strong> For numeric features, click and drag
-            to brush edits along the curve. Use the <strong>Soft↔Hard</strong>{" "}
-            slider to control how much of the curve is affected (Soft = wider,
-            Hard = more local for sharper spikes). For categorical features,
-            hover a point, then drag it up or down. Double-click for precise
-            value entry. When done editing a feature, click its{" "}
-            <strong>Submit</strong> button and rate your confidence.
-          </p>
+          <p className="text-sm text-blue-700">{t("shapeFunctions.editHelp")}</p>
         </div>
       )}
 
@@ -2148,14 +2178,16 @@ const EditableShapeFunctionsGrid = ({
         <div className="mb-4 p-3 bg-white border border-slate-200 rounded-lg">
           <div className="flex items-center justify-between gap-4 mb-1">
             <span className="text-sm font-medium text-slate-700">
-              Line Brush Hardness
+              {t("shapeFunctions.lineBrushHardness")}
             </span>
             <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
               {brushHardness}
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 w-9">Soft</span>
+            <span className="text-xs text-slate-500 w-9">
+              {t("shapeFunctions.soft")}
+            </span>
             <input
               type="range"
               min="0"
@@ -2171,7 +2203,9 @@ const EditableShapeFunctionsGrid = ({
                 background: `linear-gradient(to right, #10b981 0%, #10b981 ${brushHardness}%, #e5e7eb ${brushHardness}%, #e5e7eb 100%)`,
               }}
             />
-            <span className="text-xs text-slate-500 w-9 text-right">Hard</span>
+            <span className="text-xs text-slate-500 w-9 text-right">
+              {t("shapeFunctions.hard")}
+            </span>
           </div>
         </div>
       )}
@@ -2196,6 +2230,7 @@ const EditableShapeFunctionsGrid = ({
             }
             isSuperadmin={isSuperadmin}
             sharedYRange={globalYRange}
+            t={t}
           />
         ))}
       </div>

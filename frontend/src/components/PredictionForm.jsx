@@ -56,7 +56,7 @@ const PredictionForm = ({
   const title = useMemo(
     () =>
       t("prediction.predictTarget", {
-        target: targetColumn || "Target",
+        target: targetColumn || t("common.target"),
       }),
     [t, targetColumn],
   );
@@ -157,7 +157,7 @@ const PredictionForm = ({
           <div className="text-center">
             <div className="text-sm text-gray-600">
               {t("prediction.predictedTarget", {
-                target: targetColumn || "Target",
+                target: targetColumn || t("common.target"),
               })}
             </div>
             <div className="text-4xl font-bold text-primary-600 mt-1">

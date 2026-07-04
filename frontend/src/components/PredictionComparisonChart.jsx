@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Plot from "react-plotly.js";
 import { apiService } from "../api/apiService";
+import { createTranslator } from "../i18n";
 
 const DEFAULT_COLORS = {
   originalColor: "#3b82f6",
@@ -51,7 +52,9 @@ const PredictionComparisonChart = ({
   comparisonData,
   loading,
   currentUser,
+  language = "en",
 }) => {
+  const t = createTranslator(language);
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [showColorPanel, setShowColorPanel] = useState(false);
   const [draftColors, setDraftColors] = useState(DEFAULT_COLORS);
@@ -118,7 +121,7 @@ const PredictionComparisonChart = ({
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Prediction Comparison
+          {t("predictionComparison.title")}
         </h3>
         <div className="h-80 bg-gray-100 rounded-lg animate-pulse"></div>
       </div>
@@ -129,10 +132,10 @@ const PredictionComparisonChart = ({
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Prediction Comparison
+          {t("predictionComparison.title")}
         </h3>
         <p className="text-gray-500 text-center py-8">
-          Edit shape functions and apply changes to see prediction comparison.
+          {t("predictionComparison.empty")}
         </p>
       </div>
     );
@@ -169,7 +172,7 @@ const PredictionComparisonChart = ({
     y: original_predictions,
     type: "scatter",
     mode: "markers",
-    name: "IGANN (Original)",
+    name: t("predictionComparison.originalTrace"),
     marker: originalMarker,
   };
 
@@ -178,7 +181,7 @@ const PredictionComparisonChart = ({
     y: interactive_predictions,
     type: "scatter",
     mode: "markers",
-    name: "IGANN Interactive (Edited)",
+    name: t("predictionComparison.editedTrace"),
     marker: editedMarker,
   };
 
@@ -187,7 +190,7 @@ const PredictionComparisonChart = ({
     y: [Math.min(...actual_values), Math.max(...actual_values)],
     type: "scatter",
     mode: "lines",
-    name: "Perfect Prediction",
+    name: t("predictionComparison.perfectPrediction"),
     line: { color: colors.lineColor, width: 2, dash: "dash" },
   };
 
@@ -223,12 +226,18 @@ const PredictionComparisonChart = ({
   const layout = {
     title: {
       text: hasDifferences
-        ? "Predictions vs Actual (Original vs Edited)"
-        : "Predictions vs Actual",
+        ? t("predictionComparison.plotTitleWithEdits")
+        : t("predictionComparison.plotTitle"),
       font: { size: 14, color: "#374151" },
     },
-    xaxis: { title: "Actual Bike Rentals", gridcolor: "#e5e7eb" },
-    yaxis: { title: "Predicted Bike Rentals", gridcolor: "#e5e7eb" },
+    xaxis: {
+      title: t("predictionComparison.actualBikeRentals"),
+      gridcolor: "#e5e7eb",
+    },
+    yaxis: {
+      title: t("predictionComparison.predictedBikeRentals"),
+      gridcolor: "#e5e7eb",
+    },
     margin: { l: 60, r: 30, t: 50, b: 50 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
@@ -246,9 +255,9 @@ const PredictionComparisonChart = ({
   const handleHover = (eventData) => {
     if (!eventData?.points?.length) return;
     const traceName = eventData.points[0]?.data?.name;
-    if (traceName === "IGANN (Original)") {
+    if (traceName === t("predictionComparison.originalTrace")) {
       setHoveredSeries("original");
-    } else if (traceName === "IGANN Interactive (Edited)") {
+    } else if (traceName === t("predictionComparison.editedTrace")) {
       setHoveredSeries("edited");
     }
   };
@@ -263,12 +272,12 @@ const PredictionComparisonChart = ({
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-gray-700">
-            Prediction Comparison
+            {t("predictionComparison.title")}
           </h3>
           <p className="text-sm text-gray-500">
             {hasDifferences
-              ? "Compare predictions between original IGANN model and your edited version."
-              : "Edit shape functions to see how predictions change."}
+              ? t("predictionComparison.subtitleWithEdits")
+              : t("predictionComparison.subtitleWithoutEdits")}
           </p>
         </div>
 
@@ -280,27 +289,36 @@ const PredictionComparisonChart = ({
               setShowColorPanel((v) => !v);
             }}
             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-            title="Customise chart colours"
+            title={t("predictionComparison.customizeColors")}
           >
             <span className="flex gap-0.5 items-center">
               <ColorSwatch color={colors.originalColor} />
               <ColorSwatch color={colors.editedColor} />
               <ColorSwatch color={colors.lineColor} />
             </span>
-            Colours
+            {t("predictionComparison.colorsButton")}
           </button>
 
           {/* Colour picker dropdown */}
           {showColorPanel && (
             <div className="absolute right-0 top-10 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-4 w-64">
               <p className="text-sm font-semibold text-gray-700 mb-3">
-                Chart Colours
+                {t("predictionComparison.chartColors")}
               </p>
 
               {[
-                { key: "originalColor", label: "Original model dots" },
-                { key: "editedColor", label: "Edited model dots" },
-                { key: "lineColor", label: "Perfect prediction line" },
+                {
+                  key: "originalColor",
+                  label: t("predictionComparison.originalModelDots"),
+                },
+                {
+                  key: "editedColor",
+                  label: t("predictionComparison.editedModelDots"),
+                },
+                {
+                  key: "lineColor",
+                  label: t("predictionComparison.perfectPredictionLine"),
+                },
               ].map(({ key, label }) => (
                 <label
                   key={key}
@@ -331,19 +349,23 @@ const PredictionComparisonChart = ({
                   onClick={handleReset}
                   className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                 >
-                  Reset
+                  {t("common.reset")}
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving}
                   className="flex-1 px-3 py-1.5 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors disabled:opacity-50"
                 >
-                  {saving ? "Saving…" : currentUser ? "Save" : "Apply"}
+                  {saving
+                    ? t("shapeFunctions.saving")
+                    : currentUser
+                      ? t("common.save")
+                      : t("common.apply")}
                 </button>
               </div>
               {!currentUser && (
                 <p className="text-xs text-gray-400 mt-2 text-center">
-                  Log in to persist colours across sessions.
+                  {t("predictionComparison.persistHint")}
                 </p>
               )}
             </div>
@@ -361,11 +383,11 @@ const PredictionComparisonChart = ({
                 className="w-3 h-3 rounded-full mr-2"
                 style={{ backgroundColor: colors.originalColor }}
               ></span>
-              IGANN (Original)
+              {t("predictionComparison.originalModel")}
             </h4>
             <div className="grid grid-cols-2 gap-3">
-              <MetricDisplay label="RMSE" value={metrics.original_rmse} />
-              <MetricDisplay label="MAE" value={metrics.original_mae} />
+              <MetricDisplay label={t("combined.rmse")} value={metrics.original_rmse} />
+              <MetricDisplay label={t("combined.mae")} value={metrics.original_mae} />
             </div>
           </div>
 
@@ -376,16 +398,16 @@ const PredictionComparisonChart = ({
                 className="w-3 h-3 rounded-full mr-2"
                 style={{ backgroundColor: colors.editedColor }}
               ></span>
-              IGANN Interactive (Edited)
+              {t("predictionComparison.editedModel")}
             </h4>
             <div className="grid grid-cols-2 gap-3">
               <MetricDisplay
-                label="RMSE"
+                label={t("combined.rmse")}
                 value={metrics.interactive_rmse}
                 tone={rmseTone}
               />
               <MetricDisplay
-                label="MAE"
+                label={t("combined.mae")}
                 value={metrics.interactive_mae}
                 tone={maeTone}
               />
@@ -397,23 +419,29 @@ const PredictionComparisonChart = ({
         {hasDifferences && (
           <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
             <div className="text-sm">
-              <strong>Summary:</strong>
+              <strong>{t("predictionComparison.summary")}</strong>
               <span className="ml-2">
-                RMSE{" "}
+                {t("combined.rmse")}{" "}
                 <span
                   className={rmseImproved ? "text-green-600" : "text-red-600"}
                 >
-                  {rmseImproved ? "improved" : "worsened"} by{" "}
+                  {rmseImproved
+                    ? t("predictionComparison.improved")
+                    : t("predictionComparison.worsened")}{" "}
+                  {t("combined.by")}{" "}
                   {Math.abs(
                     metrics.original_rmse - metrics.interactive_rmse,
                   ).toFixed(4)}
                 </span>
                 {" | "}
-                MAE{" "}
+                {t("combined.mae")}{" "}
                 <span
                   className={maeImproved ? "text-green-600" : "text-red-600"}
                 >
-                  {maeImproved ? "improved" : "worsened"} by{" "}
+                  {maeImproved
+                    ? t("predictionComparison.improved")
+                    : t("predictionComparison.worsened")}{" "}
+                  {t("combined.by")}{" "}
                   {Math.abs(
                     metrics.original_mae - metrics.interactive_mae,
                   ).toFixed(4)}

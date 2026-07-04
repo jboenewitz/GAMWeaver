@@ -139,17 +139,29 @@ const TrainingPanel = ({
           {t("training.restrictedNotice")}
         </div>
         <div className="mt-4 space-y-2 text-sm text-gray-600">
-          <div>Data loaded: {modelStatus?.data_loaded ? "Yes" : "No"}</div>
-          <div>Model trained: {modelStatus?.is_trained ? "Yes" : "No"}</div>
-          <div>Model source: {modelStatus?.model_source || "trained"}</div>
+          <div>
+            {t("training.statusDataLoaded")}:{" "}
+            {modelStatus?.data_loaded ? t("common.yes") : t("common.no")}
+          </div>
+          <div>
+            {t("training.statusModelTrained")}:{" "}
+            {modelStatus?.is_trained ? t("common.yes") : t("common.no")}
+          </div>
+          <div>
+            {t("training.statusModelSource")}:{" "}
+            {modelStatus?.model_source === "imported"
+              ? t("training.modelSourceImported")
+              : t("training.modelSourceTrained")}
+          </div>
           {modelStatus?.dataset_name && (
-            <div>Active dataset: {modelStatus.dataset_name}</div>
+            <div>
+              {t("training.activeDataset")}: {modelStatus.dataset_name}
+            </div>
           )}
           {modelStatus?.model_source === "imported" &&
             !modelStatus?.analytics_available && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
-                Imported model analytics stay unavailable until the superadmin
-                loads a compatible dataset.
+                {t("training.importedAnalyticsUnavailable")}
               </div>
             )}
         </div>
