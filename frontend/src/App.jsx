@@ -227,7 +227,6 @@ function App() {
 
       // If model is trained, fetch metrics and visualizations
       if (status.is_trained) {
-        fetchMetrics();
         await fetchShapeFunctions({ refreshComparison: false });
 
         // Load user's saved edits FIRST, then fetch comparison data
@@ -253,9 +252,15 @@ function App() {
           }
         }
 
-        // Now fetch predictions data (with user edits already applied)
-        fetchPredictionsVsActual();
-        await fetchComparisonData();
+        if (status.analytics_available) {
+          fetchMetrics(status.analytics_available);
+          fetchPredictionsVsActual(status.analytics_available);
+          await fetchComparisonData(status.analytics_available);
+        } else {
+          setMetrics(null);
+          setPredictionsData(null);
+          setComparisonData(null);
+        }
       } else {
         clearTrainedModelState();
       }
@@ -282,7 +287,13 @@ function App() {
     }
   };
 
-  const fetchMetrics = async () => {
+  const fetchMetrics = async (
+    analyticsAvailable = modelStatus?.analytics_available,
+  ) => {
+    if (!analyticsAvailable) {
+      setMetrics(null);
+      return;
+    }
     try {
       const metrics = await apiService.getModelMetrics();
       setMetrics(metrics);
@@ -297,7 +308,7 @@ function App() {
       const response = await apiService.getShapeFunctions();
       setShapeFunctions(response.shape_functions || []);
       // Also fetch initial comparison data after shape functions are loaded
-      if (refreshComparison) {
+      if (refreshComparison && modelStatus?.analytics_available) {
         await fetchComparisonData();
       }
     } catch (err) {
@@ -307,7 +318,13 @@ function App() {
     }
   };
 
-  const fetchPredictionsVsActual = async () => {
+  const fetchPredictionsVsActual = async (
+    analyticsAvailable = modelStatus?.analytics_available,
+  ) => {
+    if (!analyticsAvailable) {
+      setPredictionsData(null);
+      return;
+    }
     try {
       const data = await apiService.getPredictionsVsActual();
       setPredictionsData(data);
@@ -316,7 +333,13 @@ function App() {
     }
   };
 
-  const fetchComparisonData = async () => {
+  const fetchComparisonData = async (
+    analyticsAvailable = modelStatus?.analytics_available,
+  ) => {
+    if (!analyticsAvailable) {
+      setComparisonData(null);
+      return;
+    }
     try {
       setComparisonLoading(true);
       const data = await apiService.getPredictionsComparison();
@@ -371,14 +394,18 @@ function App() {
         try {
           const mergedPreviewEdits = buildMergedPreviewEdits(unsavedEdits);
           await apiService.updateShapeFunctions(mergedPreviewEdits);
-          const data = await apiService.getPredictionsComparison();
-          setComparisonData(data);
+          if (modelStatus?.analytics_available) {
+            const data = await apiService.getPredictionsComparison();
+            setComparisonData(data);
+          } else {
+            setComparisonData(null);
+          }
         } catch (err) {
           console.error("Failed to refresh live comparison preview:", err);
         }
       }, 180);
     },
-    [modelStatus?.is_trained, buildMergedPreviewEdits],
+    [modelStatus?.is_trained, modelStatus?.analytics_available, buildMergedPreviewEdits],
   );
 
   useEffect(() => {
@@ -413,8 +440,11 @@ function App() {
         });
       }
 
-      // Fetch updated comparison data
-      await fetchComparisonData();
+      if (modelStatus?.analytics_available) {
+        await fetchComparisonData();
+      } else {
+        setComparisonData(null);
+      }
     } catch (err) {
       setError(
         "Failed to apply shape function edits: " +
@@ -442,8 +472,11 @@ function App() {
       // Clear local saved edits
       setUserSavedEdits({});
 
-      // Fetch updated comparison data (should show same values for both)
-      await fetchComparisonData();
+      if (modelStatus?.analytics_available) {
+        await fetchComparisonData();
+      } else {
+        setComparisonData(null);
+      }
     } catch (err) {
       setError(
         "Failed to reset shape functions: " +
@@ -476,8 +509,11 @@ function App() {
         await apiService.loadUserEditsToModel(currentUser.id);
       }
 
-      // Fetch updated comparison data
-      await fetchComparisonData();
+      if (modelStatus?.analytics_available) {
+        await fetchComparisonData();
+      } else {
+        setComparisonData(null);
+      }
     } catch (err) {
       setError(
         "Failed to reset feature: " +
@@ -492,7 +528,9 @@ function App() {
     try {
       setError(null);
       await apiService.updateFeatureChartSettings(featureName, settings);
-      await fetchShapeFunctions({ refreshComparison: true });
+      await fetchShapeFunctions({
+        refreshComparison: Boolean(modelStatus?.analytics_available),
+      });
     } catch (err) {
       const message = formatApiError(
         err,
@@ -562,6 +600,28 @@ function App() {
     }
   };
 
+  const handleExportModelArtifact = async () => {
+    setError(null);
+    const { blob, filename } = await apiService.exportModelArtifact();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
+    return filename;
+  };
+
+  const handleImportModelArtifact = async (file) => {
+    setError(null);
+    const result = await apiService.importModelArtifact(file);
+    clearTrainedModelState();
+    await fetchModelStatus();
+    return result;
+  };
+
   // Render login page
   if (currentPage === "login") {
     return <UserLogin onLogin={handleLogin} onRegister={handleRegister} />;
@@ -583,6 +643,8 @@ function App() {
         onBack={() => setCurrentPage("main")}
         onOpenCombined={() => setCurrentPage("combined")}
         onResetDatabase={handleResetDatabase}
+        onExportModel={handleExportModelArtifact}
+        onImportModel={handleImportModelArtifact}
       />
     );
   }
@@ -665,6 +727,16 @@ function App() {
             </button>
           </div>
         )}
+
+        {modelStatus?.is_trained &&
+          modelStatus?.model_source === "imported" &&
+          !modelStatus?.analytics_available && (
+            <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50/95 p-4 text-amber-900 shadow-sm">
+              Imported model is active for predictions and shape-function
+              editing. Load a compatible dataset as superadmin to re-enable
+              metrics and dataset-derived analytics.
+            </div>
+          )}
 
         {/* Top Row: Training + Data Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

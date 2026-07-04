@@ -66,6 +66,31 @@ export const apiService = {
     return response.data;
   },
 
+  exportModelArtifact: async () => {
+    const response = await api.get("/model/export", {
+      headers: adminHeaders(),
+      responseType: "blob",
+    });
+    const disposition = response.headers["content-disposition"] || "";
+    const match = disposition.match(/filename="([^"]+)"/);
+    return {
+      blob: response.data,
+      filename: match?.[1] || "igann-model.json",
+    };
+  },
+
+  importModelArtifact: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post("/model/import", formData, {
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
   getModelStatus: async () => {
     const response = await api.get("/model/status");
     return response.data;

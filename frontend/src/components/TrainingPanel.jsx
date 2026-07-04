@@ -132,7 +132,15 @@ const TrainingPanel = ({
         <div className="mt-4 space-y-2 text-sm text-gray-600">
           <div>Data loaded: {modelStatus?.data_loaded ? "Yes" : "No"}</div>
           <div>Model trained: {modelStatus?.is_trained ? "Yes" : "No"}</div>
+          <div>Model source: {modelStatus?.model_source || "trained"}</div>
           {modelStatus?.dataset_name && <div>Active dataset: {modelStatus.dataset_name}</div>}
+          {modelStatus?.model_source === "imported" &&
+            !modelStatus?.analytics_available && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800">
+                Imported model analytics stay unavailable until the superadmin
+                loads a compatible dataset.
+              </div>
+            )}
         </div>
       </div>
     );
@@ -173,6 +181,13 @@ const TrainingPanel = ({
           {modelStatus?.dataset_name && (
             <p className="text-xs text-gray-500 mt-3">Active dataset: {modelStatus.dataset_name}</p>
           )}
+          {modelStatus?.model_source === "imported" &&
+            !modelStatus?.analytics_available && (
+              <p className="text-xs text-amber-700 mt-3">
+                Compatible dataset load is required to restore metrics and
+                dataset-derived charts for the imported model.
+              </p>
+            )}
         </div>
 
         <div className="border border-gray-200 rounded-lg p-4">

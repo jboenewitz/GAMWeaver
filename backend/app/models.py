@@ -86,6 +86,32 @@ class TrainModelResponse(BaseModel):
     metrics: Optional[ModelMetrics] = None
 
 
+class ModelImportResponse(BaseModel):
+    """Response after importing a model artifact."""
+    success: bool
+    message: str
+    model_source: str
+    imported_artifact_version: Optional[str] = None
+
+
+class ModelStatusResponse(BaseModel):
+    """Response describing the currently active model/runtime state."""
+    is_trained: bool
+    data_loaded: bool
+    features: List[str]
+    feature_schema: List[Dict[str, Any]]
+    target_column: Optional[str] = None
+    selected_feature_columns: List[str]
+    dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
+    train_size: int = 0
+    test_size: int = 0
+    model_source: str = "trained"
+    analytics_available: bool = False
+    shape_functions_available: bool = False
+    imported_artifact_version: Optional[str] = None
+
+
 class EditedShapePoint(BaseModel):
     """A single edited point in a shape function."""
     x_value: Any  # Can be numeric or categorical

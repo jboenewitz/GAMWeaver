@@ -1,6 +1,8 @@
 """FastAPI main application for Bike Rental Prediction API."""
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Body
+import json
+
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Body, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 from pathlib import Path
@@ -13,6 +15,8 @@ from .models import (
     DatasetUploadResponse,
     TrainModelRequest,
     TrainModelResponse,
+    ModelImportResponse,
+    ModelStatusResponse,
     EditedShapeFunctionsRequest,
     UserLoginRequest,
     UserResponse,
@@ -232,6 +236,54 @@ async def train_model(http_request: Request, request: Optional[TrainModelRequest
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/model/export")
+async def export_model(http_request: Request):
+    """Export the active model artifact as JSON (superadmin only)."""
+    try:
+        _require_superadmin(http_request)
+        artifact = ml_service.export_model_artifact()
+        file_name = f"igann-model-{artifact.get('exported_at', '').replace(':', '-').replace('.', '-')}.json"
+        return Response(
+            content=json.dumps(artifact, ensure_ascii=True, indent=2),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{file_name}"',
+            },
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/model/import", response_model=ModelImportResponse)
+async def import_model(http_request: Request, file: UploadFile = File(...)):
+    """Import a model artifact from JSON (superadmin only)."""
+    try:
+        _require_superadmin(http_request)
+        file_name = (file.filename or "").lower()
+        if file_name and not file_name.endswith(".json"):
+            raise HTTPException(status_code=400, detail="Only JSON model artifacts are supported")
+        raw_bytes = await file.read()
+        if not raw_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        try:
+            artifact = json.loads(raw_bytes.decode("utf-8"))
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Failed to parse JSON artifact: {exc}") from exc
+        result = ml_service.import_model_artifact(artifact)
+        db_service.clear_all_shape_edits()
+        return ModelImportResponse(**result)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/model/metrics", response_model=ModelMetrics)
 async def get_model_metrics():
     """Get model performance metrics."""
@@ -326,22 +378,10 @@ async def batch_predict(input_data: Dict[str, Any] = Body(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/model/status")
+@app.get("/api/model/status", response_model=ModelStatusResponse)
 async def get_model_status():
     """Get the current status of the model."""
-    return {
-        "is_trained": ml_service.is_trained,
-        "data_loaded": ml_service.X_train is not None,
-        "features": ml_service.feature_names if ml_service.feature_names else [],
-        "feature_schema": ml_service.feature_schema if ml_service.feature_schema else [],
-        "target_column": ml_service.target_column,
-        "selected_feature_columns": ml_service.selected_feature_columns if ml_service.selected_feature_columns else [],
-        "dataset_id": ml_service.active_dataset_id,
-        "dataset_name": ml_service.active_dataset_name
-        or (Path(ml_service.active_dataset_path).name if ml_service.active_dataset_path else None),
-        "train_size": len(ml_service.X_train) if ml_service.X_train is not None else 0,
-        "test_size": len(ml_service.X_test) if ml_service.X_test is not None else 0,
-    }
+    return ModelStatusResponse(**ml_service.get_model_status())
 
 
 @app.post("/api/model/update-shape-functions")
