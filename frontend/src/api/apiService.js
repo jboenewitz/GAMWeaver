@@ -66,9 +66,10 @@ export const apiService = {
     return response.data;
   },
 
-  exportModelArtifact: async () => {
+  exportModelArtifact: async (includeEdits = false) => {
     const response = await api.get("/model/export", {
       headers: adminHeaders(),
+      params: { include_edits: includeEdits },
       responseType: "blob",
     });
     const disposition = response.headers["content-disposition"] || "";

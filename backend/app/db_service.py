@@ -16,6 +16,7 @@ from .database import (
 from .config import settings
 from .security import hash_password, verify_password
 from .ml_service import ml_service
+from uuid import uuid4
 
 
 def _decode_numeric_x_for_display(raw_value: Any) -> Any:
@@ -245,6 +246,40 @@ class DatabaseService:
             "original_y_values": original_y_values,
             "weighted_y_values": weighted_y_values,
         }
+
+    @staticmethod
+    def _parse_optional_datetime(raw_value: Any) -> Optional[datetime]:
+        """Parse an optional ISO datetime string into a naive UTC-compatible datetime."""
+        if not raw_value:
+            return None
+        if isinstance(raw_value, datetime):
+            return raw_value.replace(tzinfo=None) if raw_value.tzinfo else raw_value
+        raw_str = str(raw_value).strip()
+        if not raw_str:
+            return None
+        if raw_str.endswith("Z"):
+            raw_str = f"{raw_str[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(raw_str)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+
+    @staticmethod
+    def _get_or_create_import_user(db: Session, user_name: str) -> User:
+        """Resolve an imported edit author to an existing or placeholder user."""
+        existing_user = db.query(User).filter(User.name == user_name).first()
+        if existing_user is not None:
+            return existing_user
+
+        user = User(
+            name=user_name,
+            password_hash=None,
+            is_superadmin=False,
+        )
+        db.add(user)
+        db.flush()
+        return user
 
     # ==================== User Operations ====================
 
@@ -651,6 +686,212 @@ class DatabaseService:
             db.query(DeletedEditNotification).delete()
             db.commit()
             return True
+        except Exception as e:
+            db.rollback()
+            raise e
+        finally:
+            db.close()
+
+    def export_shape_function_edits_artifact(self) -> Dict[str, Any]:
+        """Export the active saved shape-function edits in a model-artifact friendly shape."""
+        db = self.get_db()
+        try:
+            submissions = self._get_effective_submissions(db, include_user_names=True)
+            users: List[Dict[str, Any]] = []
+            edits: List[Dict[str, Any]] = []
+            seen_user_names = set()
+            total_submissions = 0
+
+            for submission in sorted(
+                submissions,
+                key=lambda item: (
+                    item["user_name"].lower(),
+                    item["feature_name"].lower(),
+                    self._submission_sort_key(item),
+                ),
+            ):
+                user_name = str(submission["user_name"]).strip()
+                if not user_name:
+                    continue
+
+                if user_name not in seen_user_names:
+                    users.append(
+                        {
+                            "name": user_name,
+                            "is_superadmin": False,
+                        }
+                    )
+                    edits.append(
+                        {
+                            "user_name": user_name,
+                            "shape_functions": [],
+                        }
+                    )
+                    seen_user_names.add(user_name)
+
+                user_edit_group = next(
+                    group for group in edits if group["user_name"] == user_name
+                )
+                rows = sorted(
+                    submission["rows"],
+                    key=lambda row: _point_sort_key(
+                        submission["feature_type"],
+                        row.x_value,
+                    ),
+                )
+                edited_points = []
+                for row in rows:
+                    point_payload = {
+                        "x_value": row.x_value,
+                        "y_value": float(row.y_offset),
+                        "weight": float(row.weight),
+                        "message": row.message or "",
+                    }
+                    if row.created_at:
+                        point_payload["created_at"] = row.created_at.isoformat()
+                    if row.updated_at:
+                        point_payload["updated_at"] = row.updated_at.isoformat()
+                    edited_points.append(point_payload)
+
+                created_candidates = [row.created_at for row in rows if row.created_at]
+                updated_candidates = [
+                    row.updated_at or row.created_at for row in rows if row.updated_at or row.created_at
+                ]
+                shape_payload = {
+                    "feature_name": submission["feature_name"],
+                    "feature_type": submission["feature_type"],
+                    "submission_id": submission["persisted_submission_id"] or submission["submission_id"],
+                    "message": submission["message"],
+                    "sureness": submission["sureness"],
+                    "edited_points": edited_points,
+                }
+                if created_candidates:
+                    shape_payload["created_at"] = min(created_candidates).isoformat()
+                if updated_candidates:
+                    shape_payload["updated_at"] = max(updated_candidates).isoformat()
+                user_edit_group["shape_functions"].append(shape_payload)
+                total_submissions += 1
+
+            return {
+                "included": True,
+                "users": users,
+                "edits": edits,
+                "user_count": len(users),
+                "submission_count": total_submissions,
+            }
+        finally:
+            db.close()
+
+    def import_shape_function_edits_artifact(self, payload: Optional[Dict[str, Any]]) -> Dict[str, int]:
+        """Import saved shape-function edits from an artifact payload."""
+        if not payload or not payload.get("included"):
+            self.clear_all_shape_edits()
+            return {
+                "imported_edit_user_count": 0,
+                "imported_edit_submission_count": 0,
+            }
+
+        users_payload = payload.get("users")
+        edits_payload = payload.get("edits")
+        if not isinstance(users_payload, list) or not isinstance(edits_payload, list):
+            raise ValueError("Imported shape-function edits payload must include users and edits arrays")
+
+        declared_user_names = {
+            str(user.get("name", "")).strip()
+            for user in users_payload
+            if isinstance(user, dict) and str(user.get("name", "")).strip()
+        }
+
+        db = self.get_db()
+        try:
+            db.query(ShapeFunctionEdit).delete()
+            db.query(DeletedEditNotification).delete()
+
+            imported_user_names = set()
+            imported_submission_count = 0
+
+            for user_group in edits_payload:
+                if not isinstance(user_group, dict):
+                    raise ValueError("Imported shape-function edits must group edits by user")
+
+                user_name = str(user_group.get("user_name", "")).strip()
+                if not user_name:
+                    raise ValueError("Imported shape-function edits contain a user group without user_name")
+                if declared_user_names and user_name not in declared_user_names:
+                    raise ValueError(f"Imported shape-function edits reference undeclared user '{user_name}'")
+
+                shape_functions = user_group.get("shape_functions")
+                if not isinstance(shape_functions, list):
+                    raise ValueError(f"Imported shape-function edits for '{user_name}' must include shape_functions")
+
+                user = self._get_or_create_import_user(db, user_name)
+                inserted_any_for_user = False
+
+                for shape_function in shape_functions:
+                    if not isinstance(shape_function, dict):
+                        raise ValueError("Imported shape-function edit entries must be objects")
+
+                    feature_name = str(shape_function.get("feature_name", "")).strip()
+                    feature_type = str(shape_function.get("feature_type", "")).strip()
+                    if feature_name not in ml_service.original_shape_functions:
+                        raise ValueError(
+                            f"Imported shape-function edits reference unknown feature '{feature_name}'"
+                        )
+                    if feature_type not in {"numeric", "categorical"}:
+                        raise ValueError(
+                            f"Imported shape-function edits have invalid feature_type for '{feature_name}'"
+                        )
+
+                    edited_points = shape_function.get("edited_points")
+                    if not isinstance(edited_points, list) or not edited_points:
+                        continue
+
+                    submission_id = str(shape_function.get("submission_id", "")).strip() or uuid4().hex
+                    feature_created_at = self._parse_optional_datetime(
+                        shape_function.get("created_at")
+                    )
+                    feature_updated_at = self._parse_optional_datetime(
+                        shape_function.get("updated_at")
+                    )
+                    feature_message = str(shape_function.get("message", "") or "")
+
+                    for point in edited_points:
+                        if not isinstance(point, dict):
+                            raise ValueError(
+                                f"Imported shape-function edit points for '{feature_name}' must be objects"
+                            )
+                        x_value = str(point.get("x_value"))
+                        y_value = float(point.get("y_value"))
+                        weight = float(point.get("weight", 0.5))
+                        message = str(point.get("message", feature_message) or "")
+                        created_at = self._parse_optional_datetime(point.get("created_at")) or feature_created_at
+                        updated_at = self._parse_optional_datetime(point.get("updated_at")) or feature_updated_at or created_at
+
+                        edit = ShapeFunctionEdit(
+                            user_id=user.id,
+                            feature_name=feature_name,
+                            feature_type=feature_type,
+                            x_value=x_value,
+                            y_offset=y_value,
+                            weight=weight,
+                            message=message,
+                            submission_id=submission_id,
+                            created_at=created_at or datetime.utcnow(),
+                            updated_at=updated_at or created_at or datetime.utcnow(),
+                        )
+                        db.add(edit)
+
+                    imported_submission_count += 1
+                    inserted_any_for_user = True
+
+                if inserted_any_for_user:
+                    imported_user_names.add(user_name)
+
+            db.commit()
+            return {
+                "imported_edit_user_count": len(imported_user_names),
+                "imported_edit_submission_count": imported_submission_count,
+            }
         except Exception as e:
             db.rollback()
             raise e

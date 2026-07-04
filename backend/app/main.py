@@ -239,12 +239,20 @@ async def train_model(http_request: Request, request: Optional[TrainModelRequest
 
 
 @app.get("/api/model/export")
-async def export_model(http_request: Request):
+async def export_model(http_request: Request, include_edits: bool = False):
     """Export the active model artifact as JSON (superadmin only)."""
     try:
         _require_superadmin(http_request)
-        artifact = ml_service.export_model_artifact()
-        file_name = f"igann-model-{artifact.get('exported_at', '').replace(':', '-').replace('.', '-')}.json"
+        artifact = ml_service.export_model_artifact(
+            include_shape_function_edits=include_edits
+        )
+        if include_edits:
+            artifact["shape_function_edits_export"] = (
+                db_service.export_shape_function_edits_artifact()
+            )
+        timestamp = artifact.get("exported_at", "").replace(":", "-").replace(".", "-")
+        suffix = "-with-edits" if include_edits else ""
+        file_name = f"igann-model{suffix}-{timestamp}.json"
         return Response(
             content=json.dumps(artifact, ensure_ascii=True, indent=2),
             media_type="application/json",
@@ -276,7 +284,14 @@ async def import_model(http_request: Request, file: UploadFile = File(...)):
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Failed to parse JSON artifact: {exc}") from exc
         result = ml_service.import_model_artifact(artifact)
-        db_service.clear_all_shape_edits()
+        imported_edits_payload = result.pop("_shape_function_edits_export", {})
+        if result.get("imported_shape_function_edits"):
+            import_counts = db_service.import_shape_function_edits_artifact(
+                imported_edits_payload
+            )
+            result.update(import_counts)
+        else:
+            db_service.clear_all_shape_edits()
         return ModelImportResponse(**result)
     except HTTPException:
         raise

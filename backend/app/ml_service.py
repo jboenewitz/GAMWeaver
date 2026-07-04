@@ -20,6 +20,11 @@ from .data_processing import prepare_training_data
 DATA_FILE_NAME = "bike.csv"
 MAX_PREVIEW_ROWS = 500
 MODEL_ARTIFACT_VERSION = "1.0"
+MODEL_ARTIFACT_VERSION_WITH_EDITS = "1.1"
+SUPPORTED_MODEL_ARTIFACT_VERSIONS = {
+    MODEL_ARTIFACT_VERSION,
+    MODEL_ARTIFACT_VERSION_WITH_EDITS,
+}
 
 
 def _json_safe(value: Any) -> Any:
@@ -784,7 +789,11 @@ class MLService:
             return 0.0
         return float(intercept)
 
-    def export_model_artifact(self) -> Dict[str, Any]:
+    def export_model_artifact(
+        self,
+        *,
+        include_shape_function_edits: bool = False,
+    ) -> Dict[str, Any]:
         if not self.is_trained or self.model is None:
             raise ValueError("Model not trained yet")
 
@@ -808,8 +817,12 @@ class MLService:
             feature_name for feature_name in self.num_features if feature_name in exported_feature_names
         ]
 
-        return {
-            "artifact_version": MODEL_ARTIFACT_VERSION,
+        artifact = {
+            "artifact_version": (
+                MODEL_ARTIFACT_VERSION_WITH_EDITS
+                if include_shape_function_edits
+                else MODEL_ARTIFACT_VERSION
+            ),
             "exported_at": datetime.now(timezone.utc).isoformat(),
             "model_type": "IGANN",
             "model_source": self.model_source,
@@ -828,6 +841,9 @@ class MLService:
             "dataset_name": self.active_dataset_name
             or (Path(self.active_dataset_path).name if self.active_dataset_path else None),
         }
+        if include_shape_function_edits:
+            artifact["shape_function_edits_export"] = {}
+        return artifact
 
     @staticmethod
     def _validate_shape_function_artifact(shape_function: Dict[str, Any]) -> Dict[str, Any]:
@@ -858,6 +874,137 @@ class MLService:
             normalized["x_tick_labels"] = [str(label) for label in x_tick_labels]
         return normalized
 
+    @staticmethod
+    def _validate_shape_function_edits_export(
+        payload: Dict[str, Any],
+        *,
+        feature_names: List[str],
+    ) -> Dict[str, Any]:
+        """Validate optional exported per-user shape-function edits."""
+        included = bool(payload.get("included"))
+        users_payload = payload.get("users", [])
+        edits_payload = payload.get("edits", [])
+
+        if not isinstance(users_payload, list) or not isinstance(edits_payload, list):
+            raise ValueError(
+                "Imported artifact shape_function_edits_export must include users and edits arrays"
+            )
+
+        normalized_users = []
+        declared_user_names = set()
+        for user in users_payload:
+            if not isinstance(user, dict):
+                raise ValueError("Imported artifact shape_function_edits_export users must be objects")
+            user_name = str(user.get("name", "")).strip()
+            if not user_name:
+                raise ValueError("Imported artifact shape_function_edits_export contains a user without a name")
+            if user_name in declared_user_names:
+                raise ValueError(
+                    f"Imported artifact shape_function_edits_export contains duplicate user '{user_name}'"
+                )
+            declared_user_names.add(user_name)
+            normalized_users.append(
+                {
+                    "name": user_name,
+                    "is_superadmin": False,
+                }
+            )
+
+        normalized_edits = []
+        submission_count = 0
+        for user_group in edits_payload:
+            if not isinstance(user_group, dict):
+                raise ValueError(
+                    "Imported artifact shape_function_edits_export edits must group entries by user"
+                )
+            user_name = str(user_group.get("user_name", "")).strip()
+            if not user_name:
+                raise ValueError(
+                    "Imported artifact shape_function_edits_export contains an edit group without user_name"
+                )
+            if declared_user_names and user_name not in declared_user_names:
+                raise ValueError(
+                    f"Imported artifact shape_function_edits_export references undeclared user '{user_name}'"
+                )
+
+            shape_functions = user_group.get("shape_functions", [])
+            if not isinstance(shape_functions, list):
+                raise ValueError(
+                    f"Imported artifact shape_function_edits_export for '{user_name}' must include shape_functions"
+                )
+
+            normalized_shape_functions = []
+            for shape_function in shape_functions:
+                if not isinstance(shape_function, dict):
+                    raise ValueError(
+                        "Imported artifact shape_function_edits_export shape function entries must be objects"
+                    )
+                feature_name = str(shape_function.get("feature_name", "")).strip()
+                feature_type = str(shape_function.get("feature_type", "")).strip()
+                if feature_name not in feature_names:
+                    raise ValueError(
+                        f"Imported artifact shape_function_edits_export references unknown feature '{feature_name}'"
+                    )
+                if feature_type not in {"numeric", "categorical"}:
+                    raise ValueError(
+                        f"Imported artifact shape_function_edits_export has invalid feature_type for '{feature_name}'"
+                    )
+
+                edited_points = shape_function.get("edited_points", [])
+                if not isinstance(edited_points, list):
+                    raise ValueError(
+                        f"Imported artifact shape_function_edits_export for '{feature_name}' must include edited_points"
+                    )
+
+                normalized_points = []
+                for point in edited_points:
+                    if not isinstance(point, dict):
+                        raise ValueError(
+                            f"Imported artifact shape_function_edits_export points for '{feature_name}' must be objects"
+                        )
+                    normalized_point = {
+                        "x_value": point.get("x_value"),
+                        "y_value": float(point.get("y_value")),
+                        "weight": float(point.get("weight", 0.5)),
+                        "message": str(point.get("message", "") or ""),
+                    }
+                    if point.get("created_at"):
+                        normalized_point["created_at"] = str(point.get("created_at"))
+                    if point.get("updated_at"):
+                        normalized_point["updated_at"] = str(point.get("updated_at"))
+                    normalized_points.append(normalized_point)
+
+                normalized_shape = {
+                    "feature_name": feature_name,
+                    "feature_type": feature_type,
+                    "submission_id": str(shape_function.get("submission_id", "") or ""),
+                    "message": str(shape_function.get("message", "") or ""),
+                    "edited_points": normalized_points,
+                }
+                if shape_function.get("created_at"):
+                    normalized_shape["created_at"] = str(shape_function.get("created_at"))
+                if shape_function.get("updated_at"):
+                    normalized_shape["updated_at"] = str(shape_function.get("updated_at"))
+                if shape_function.get("sureness") is not None:
+                    normalized_shape["sureness"] = int(shape_function.get("sureness"))
+                normalized_shape_functions.append(normalized_shape)
+                submission_count += 1
+
+            normalized_edits.append(
+                {
+                    "user_name": user_name,
+                    "shape_functions": normalized_shape_functions,
+                }
+            )
+
+        return {
+            "included": included,
+            "users": normalized_users,
+            "edits": normalized_edits,
+            "user_count": len(normalized_users),
+            "submission_count": submission_count,
+        }
+
     def _validate_import_artifact(self, artifact: Dict[str, Any]) -> Dict[str, Any]:
         required_keys = [
             "artifact_version",
@@ -879,9 +1026,10 @@ class MLService:
             raise ValueError(f"Imported artifact is missing required keys: {missing}")
 
         artifact_version = str(artifact.get("artifact_version", "")).strip()
-        if artifact_version != MODEL_ARTIFACT_VERSION:
+        if artifact_version not in SUPPORTED_MODEL_ARTIFACT_VERSIONS:
             raise ValueError(
-                f"Unsupported artifact version '{artifact_version}'. Expected '{MODEL_ARTIFACT_VERSION}'"
+                "Unsupported artifact version "
+                f"'{artifact_version}'. Expected one of {sorted(SUPPORTED_MODEL_ARTIFACT_VERSIONS)}"
             )
         if str(artifact.get("model_type", "")).strip() != "IGANN":
             raise ValueError("Only IGANN model artifacts are supported")
@@ -931,6 +1079,20 @@ class MLService:
         if sorted(sf["feature_name"] for sf in normalized_shape_functions) != sorted([str(item) for item in feature_names]):
             raise ValueError("Imported artifact shape_functions must cover all feature_names exactly")
 
+        shape_function_edits_export = artifact.get("shape_function_edits_export")
+        if shape_function_edits_export is not None and not isinstance(
+            shape_function_edits_export,
+            dict,
+        ):
+            raise ValueError(
+                "Imported artifact shape_function_edits_export must be an object when present"
+            )
+
+        normalized_shape_function_edits_export = self._validate_shape_function_edits_export(
+            _json_safe(shape_function_edits_export or {}),
+            feature_names=[str(item) for item in feature_names],
+        ) if shape_function_edits_export is not None else {}
+
         return {
             "artifact_version": artifact_version,
             "igann_params": dict(artifact.get("igann_params") or {}),
@@ -947,6 +1109,7 @@ class MLService:
             "shape_functions": normalized_shape_functions,
             "dataset_id": artifact.get("dataset_id"),
             "dataset_name": artifact.get("dataset_name"),
+            "shape_function_edits_export": normalized_shape_function_edits_export,
         }
 
     def import_model_artifact(self, artifact: Dict[str, Any]) -> Dict[str, Any]:
@@ -993,6 +1156,14 @@ class MLService:
             "message": "Model imported successfully",
             "model_source": self.model_source,
             "imported_artifact_version": self.imported_artifact_version,
+            "imported_shape_function_edits": bool(
+                validated.get("shape_function_edits_export", {}).get("included")
+            ),
+            "imported_edit_user_count": 0,
+            "imported_edit_submission_count": 0,
+            "_shape_function_edits_export": validated.get(
+                "shape_function_edits_export", {}
+            ),
         }
 
     def _validate_dataset_compatibility(

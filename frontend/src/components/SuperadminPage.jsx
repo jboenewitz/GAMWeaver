@@ -21,6 +21,8 @@ const SuperadminPage = ({
   const [inviteLink, setInviteLink] = useState("");
   const [inviteExpires, setInviteExpires] = useState("");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const [includeExportEdits, setIncludeExportEdits] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [modelTransferMessage, setModelTransferMessage] = useState("");
   const [exportingModel, setExportingModel] = useState(false);
@@ -123,10 +125,15 @@ const SuperadminPage = ({
     setError(null);
     setModelTransferMessage("");
     try {
-      const filename = await onExportModel();
+      const result = await onExportModel(includeExportEdits);
+      const filename = result?.filename || "igann-model.json";
       setModelTransferMessage(
-        t("superadmin.exportSuccess", { filename }),
+        includeExportEdits
+          ? t("superadmin.exportSuccessWithEdits", { filename })
+          : t("superadmin.exportSuccess", { filename }),
       );
+      setShowExportConfirm(false);
+      setIncludeExportEdits(false);
     } catch (err) {
       setError(
         err.response?.data?.detail ||
@@ -136,6 +143,13 @@ const SuperadminPage = ({
     } finally {
       setExportingModel(false);
     }
+  };
+
+  const handleOpenExportDialog = () => {
+    setError(null);
+    setModelTransferMessage("");
+    setIncludeExportEdits(false);
+    setShowExportConfirm(true);
   };
 
   const handleOpenImportDialog = () => {
@@ -155,7 +169,12 @@ const SuperadminPage = ({
     try {
       const result = await onImportModel(file);
       setModelTransferMessage(
-        result?.message || t("superadmin.importSuccess"),
+        result?.imported_shape_function_edits
+          ? t("superadmin.importSuccessWithEdits", {
+              users: result.imported_edit_user_count || 0,
+              submissions: result.imported_edit_submission_count || 0,
+            })
+          : t("superadmin.importSuccess"),
       );
     } catch (err) {
       setError(
@@ -245,7 +264,7 @@ const SuperadminPage = ({
             />
             <div className="flex items-center gap-3">
               <button
-                onClick={handleExportModel}
+                onClick={handleOpenExportDialog}
                 disabled={exportingModel || importingModel}
                 className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
               >
@@ -450,6 +469,48 @@ const SuperadminPage = ({
                 ) : (
                   t("superadmin.resetEverything")
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showExportConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl mx-4 w-full max-w-md p-6">
+            <h3 className="mb-3 text-lg font-bold text-slate-800">
+              {t("superadmin.exportConfirmTitle")}
+            </h3>
+            <p className="mb-5 text-sm text-slate-600">
+              {t("superadmin.exportConfirmBody")}
+            </p>
+            <label className="mb-6 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={includeExportEdits}
+                onChange={(e) => setIncludeExportEdits(e.target.checked)}
+                disabled={exportingModel}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+              />
+              <span>{t("superadmin.exportIncludeEdits")}</span>
+            </label>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowExportConfirm(false);
+                  setIncludeExportEdits(false);
+                }}
+                disabled={exportingModel}
+                className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleExportModel}
+                disabled={exportingModel}
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50 flex items-center"
+              >
+                {exportingModel ? t("superadmin.exporting") : t("superadmin.exportConfirmAction")}
               </button>
             </div>
           </div>

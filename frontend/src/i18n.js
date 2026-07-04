@@ -391,7 +391,17 @@ const translations = {
     "superadmin.modelTransferWarning":
       "Importing a model replaces the current base model and clears saved user edits tied to the previous one.",
     "superadmin.exportSuccess": "Model exported as {filename}.",
+    "superadmin.exportSuccessWithEdits":
+      "Model and saved shape-function edits exported as {filename}.",
     "superadmin.importSuccess": "Model imported successfully.",
+    "superadmin.importSuccessWithEdits":
+      "Model and saved shape-function edits imported successfully for {users} users across {submissions} submissions.",
+    "superadmin.exportConfirmTitle": "Export Model Artifact?",
+    "superadmin.exportConfirmBody":
+      "Choose whether the exported model artifact should also include saved shape-function edits tied to the current model.",
+    "superadmin.exportIncludeEdits":
+      "Include saved shape-function edits",
+    "superadmin.exportConfirmAction": "Export Artifact",
   },
   de: {
     "language.switchToEnglish": "Sprache auf Englisch umstellen",
@@ -818,8 +828,18 @@ const translations = {
     "superadmin.modelTransferWarning":
       "Beim Importieren eines Modells wird das aktuelle Basismodell ersetzt und gespeicherte Benutzerbearbeitungen, die mit dem vorherigen Modell verknuepft sind, werden geloescht.",
     "superadmin.exportSuccess": "Modell wurde als {filename} exportiert.",
+    "superadmin.exportSuccessWithEdits":
+      "Modell und gespeicherte Shape-Function-Bearbeitungen wurden als {filename} exportiert.",
     "superadmin.importSuccess":
       "Modell wurde erfolgreich importiert.",
+    "superadmin.importSuccessWithEdits":
+      "Modell und gespeicherte Shape-Function-Bearbeitungen wurden erfolgreich fuer {users} Benutzer mit {submissions} Einreichungen importiert.",
+    "superadmin.exportConfirmTitle": "Modellartefakt exportieren?",
+    "superadmin.exportConfirmBody":
+      "Waehle, ob das exportierte Modellartefakt auch gespeicherte Shape-Function-Bearbeitungen des aktuellen Modells enthalten soll.",
+    "superadmin.exportIncludeEdits":
+      "Gespeicherte Shape-Function-Bearbeitungen einschliessen",
+    "superadmin.exportConfirmAction": "Artefakt exportieren",
   },
 };
 

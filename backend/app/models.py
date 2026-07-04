@@ -92,6 +92,9 @@ class ModelImportResponse(BaseModel):
     message: str
     model_source: str
     imported_artifact_version: Optional[str] = None
+    imported_shape_function_edits: bool = False
+    imported_edit_user_count: int = 0
+    imported_edit_submission_count: int = 0
 
 
 class ModelStatusResponse(BaseModel):

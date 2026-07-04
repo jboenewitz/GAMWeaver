@@ -620,9 +620,9 @@ function App() {
     }
   };
 
-  const handleExportModelArtifact = async () => {
+  const handleExportModelArtifact = async (includeEdits = false) => {
     setError(null);
-    const { blob, filename } = await apiService.exportModelArtifact();
+    const { blob, filename } = await apiService.exportModelArtifact(includeEdits);
     const objectUrl = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = objectUrl;
@@ -631,7 +631,7 @@ function App() {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(objectUrl);
-    return filename;
+    return { filename, includeEdits };
   };
 
   const handleImportModelArtifact = async (file) => {
