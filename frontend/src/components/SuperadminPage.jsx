@@ -1,7 +1,13 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import apiService from "../api/apiService";
 
-const SuperadminPage = ({ onBack, onOpenCombined, onResetDatabase }) => {
+const SuperadminPage = ({
+  onBack,
+  onOpenCombined,
+  onResetDatabase,
+  onExportModel,
+  onImportModel,
+}) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -13,6 +19,10 @@ const SuperadminPage = ({ onBack, onOpenCombined, onResetDatabase }) => {
   const [inviteExpires, setInviteExpires] = useState("");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [exportingModel, setExportingModel] = useState(false);
+  const [importingModel, setImportingModel] = useState(false);
+  const [modelTransferMessage, setModelTransferMessage] = useState("");
+  const importInputRef = useRef(null);
 
   const appBaseUrl = useMemo(() => {
     const configured = import.meta.env.VITE_PUBLIC_APP_URL;
@@ -96,6 +106,51 @@ const SuperadminPage = ({ onBack, onOpenCombined, onResetDatabase }) => {
     }
   };
 
+  const handleExportModel = async () => {
+    if (!onExportModel) return;
+    setExportingModel(true);
+    setError(null);
+    setModelTransferMessage("");
+    try {
+      const filename = await onExportModel();
+      setModelTransferMessage(`Model exported as ${filename}.`);
+    } catch (err) {
+      setError(
+        err.response?.data?.detail || err.message || "Failed to export model",
+      );
+    } finally {
+      setExportingModel(false);
+    }
+  };
+
+  const handleOpenImportDialog = () => {
+    setError(null);
+    setModelTransferMessage("");
+    importInputRef.current?.click();
+  };
+
+  const handleImportFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !onImportModel) return;
+
+    setImportingModel(true);
+    setError(null);
+    setModelTransferMessage("");
+    try {
+      const result = await onImportModel(file);
+      setModelTransferMessage(
+        result?.message || "Model imported successfully.",
+      );
+    } catch (err) {
+      setError(
+        err.response?.data?.detail || err.message || "Failed to import model",
+      );
+    } finally {
+      setImportingModel(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
@@ -147,6 +202,53 @@ const SuperadminPage = ({ onBack, onOpenCombined, onResetDatabase }) => {
             {error}
           </div>
         )}
+
+        {modelTransferMessage && (
+          <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+            {modelTransferMessage}
+          </div>
+        )}
+
+        <section className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">
+                Model Transfer
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Export the active trained model to JSON or import a previously
+                exported model artifact.
+              </p>
+            </div>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportFileChange}
+            />
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleExportModel}
+                disabled={exportingModel || importingModel}
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
+              >
+                {exportingModel ? "Exporting..." : "Export Model"}
+              </button>
+              <button
+                onClick={handleOpenImportDialog}
+                disabled={importingModel || exportingModel}
+                className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+              >
+                {importingModel ? "Importing..." : "Import Model"}
+              </button>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            Importing a model replaces the current base model and clears saved
+            user edits tied to the previous one.
+          </p>
+        </section>
 
         <section className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center justify-between mb-4">

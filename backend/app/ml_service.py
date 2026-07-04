@@ -19,6 +19,94 @@ from .data_processing import prepare_training_data
 
 DATA_FILE_NAME = "bike.csv"
 MAX_PREVIEW_ROWS = 500
+MODEL_ARTIFACT_VERSION = "1.0"
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively convert numpy/pandas values to JSON-safe Python types."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, np.ndarray):
+        return [_json_safe(item) for item in value.tolist()]
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    if isinstance(value, (np.bool_,)):
+        return bool(value)
+    return value
+
+
+class ImportedIGANNRuntime:
+    """Lightweight predictor that reconstructs model output from exported shape functions."""
+
+    def __init__(
+        self,
+        *,
+        feature_names: List[str],
+        shape_functions: List[Dict[str, Any]],
+        base_prediction_offset: float,
+        igann_params: Dict[str, Any],
+        effective_boosting_rounds: int,
+    ) -> None:
+        self.feature_names = list(feature_names)
+        self.base_prediction_offset = float(base_prediction_offset)
+        self._params = dict(igann_params or {})
+        self.boosting_rates = [0.0] * max(int(effective_boosting_rounds), 0)
+        self._shape_by_feature: Dict[str, Dict[str, Any]] = {}
+
+        for shape_function in shape_functions:
+            feature_name = str(shape_function.get("feature_name", "")).strip()
+            if not feature_name:
+                continue
+            self._shape_by_feature[feature_name] = shape_function
+
+    def get_params(self, deep: bool = True) -> Dict[str, Any]:
+        return dict(self._params)
+
+    @staticmethod
+    def _predict_numeric(shape_function: Dict[str, Any], value: Any) -> float:
+        x_values = np.asarray(shape_function.get("x_values", []), dtype=float)
+        y_values = np.asarray(shape_function.get("y_values", []), dtype=float)
+        if x_values.size == 0 or y_values.size == 0 or x_values.size != y_values.size:
+            return 0.0
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        return float(np.interp(numeric_value, x_values, y_values))
+
+    @staticmethod
+    def _predict_categorical(shape_function: Dict[str, Any], value: Any) -> float:
+        x_values = [str(item) for item in shape_function.get("x_values", [])]
+        y_values = [float(item) for item in shape_function.get("y_values", [])]
+        if not x_values or len(x_values) != len(y_values):
+            return 0.0
+        value_str = str(value)
+        try:
+            idx = x_values.index(value_str)
+        except ValueError:
+            return 0.0
+        return y_values[idx]
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        predictions: List[float] = []
+        for _, row in X.iterrows():
+            total = self.base_prediction_offset
+            for feature_name in self.feature_names:
+                shape_function = self._shape_by_feature.get(feature_name)
+                if shape_function is None:
+                    continue
+                if shape_function.get("feature_type") == "categorical":
+                    total += self._predict_categorical(shape_function, row.get(feature_name))
+                else:
+                    total += self._predict_numeric(shape_function, row.get(feature_name))
+            predictions.append(float(total))
+        return np.asarray(predictions, dtype=float)
 
 
 def _candidate_data_files() -> List[Path]:
@@ -74,7 +162,7 @@ class MLService:
     """Service for managing IGANN models, datasets and predictions."""
 
     def __init__(self) -> None:
-        self.model: Optional[IGANN] = None
+        self.model: Optional[Any] = None
         self.preprocessor = None
 
         self.X_train: Optional[pd.DataFrame] = None
@@ -92,6 +180,9 @@ class MLService:
 
         self.feature_schema: List[Dict[str, Any]] = []
         self.feature_schema_map: Dict[str, Dict[str, Any]] = {}
+        self.model_source: str = "trained"
+        self.imported_artifact_version: Optional[str] = None
+        self.analytics_available = False
 
         # Store original shape functions for interactive editing
         self.original_shape_functions: Dict[str, Dict[str, Any]] = {}
@@ -529,10 +620,15 @@ class MLService:
         self._persist_active_dataset_metadata()
         return self.get_feature_chart_setting(feature_name)
 
-    def _build_feature_schema(self, X_all: pd.DataFrame) -> List[Dict[str, Any]]:
+    def _build_feature_schema_for(
+        self,
+        feature_names: List[str],
+        num_features: List[str],
+        X_all: pd.DataFrame,
+    ) -> List[Dict[str, Any]]:
         schema: List[Dict[str, Any]] = []
-        for feature_name in self.feature_names:
-            if feature_name in self.num_features:
+        for feature_name in feature_names:
+            if feature_name in num_features:
                 numeric_series = pd.to_numeric(X_all[feature_name], errors="coerce")
                 min_val = float(numeric_series.min())
                 max_val = float(numeric_series.max())
@@ -567,6 +663,381 @@ class MLService:
 
         return schema
 
+    def _build_feature_schema(self, X_all: pd.DataFrame) -> List[Dict[str, Any]]:
+        return self._build_feature_schema_for(self.feature_names, self.num_features, X_all)
+
+    def _has_analytics_data(self) -> bool:
+        return (
+            self.is_trained
+            and self.X_test is not None
+            and self.y_test is not None
+            and self.model is not None
+        )
+
+    def _shape_functions_available(self) -> bool:
+        return self.is_trained and (
+            bool(self.original_shape_functions) or self.model is not None
+        )
+
+    def _require_analytics_data(self) -> None:
+        if self._has_analytics_data():
+            return
+        if self.model_source == "imported":
+            raise ValueError(
+                "Analytics are unavailable for imported models until a compatible dataset is loaded"
+            )
+        raise ValueError("Model analytics are not available yet")
+
+    def _ensure_original_shape_functions(self) -> None:
+        if not self.is_trained or self.model is None:
+            raise ValueError("Model not trained yet")
+        if self.original_shape_functions:
+            return
+        if self.model_source == "imported":
+            raise ValueError("Imported model shape functions are unavailable")
+
+        existing_offsets = {
+            feature: dict(offsets)
+            for feature, offsets in self.shape_function_offsets.items()
+        }
+        shape_functions = self.get_shape_functions()
+        self.original_shape_functions = {
+            shape_function["feature_name"]: shape_function
+            for shape_function in shape_functions
+        }
+        self.shape_function_offsets = existing_offsets
+
+    def _export_shape_functions_payload(self) -> List[Dict[str, Any]]:
+        if self.model_source == "imported":
+            self._ensure_original_shape_functions()
+            return [
+                _json_safe(shape_function)
+                for shape_function in self.original_shape_functions.values()
+            ]
+
+        if self.model is None or not hasattr(self.model, "get_shape_functions_as_dict"):
+            raise ValueError("Unable to export complete shape functions for the trained model")
+
+        raw_shape_functions = self.model.get_shape_functions_as_dict()
+        exported: List[Dict[str, Any]] = []
+        for feature_name in self.feature_names:
+            raw_shape = raw_shape_functions.get(feature_name)
+            if raw_shape is None:
+                continue
+            chart_config = {}
+            if feature_name in self.feature_names:
+                try:
+                    chart_config = self.get_feature_chart_setting(feature_name)
+                except Exception:
+                    chart_config = {}
+            feature_type = (
+                "categorical"
+                if str(raw_shape.get("datatype", "")).strip() == "categorical"
+                else "numeric"
+            )
+            exported_shape = {
+                "feature_name": feature_name,
+                "x_values": _json_safe(raw_shape.get("x", [])),
+                "y_values": _json_safe(raw_shape.get("y", [])),
+                "feature_type": feature_type,
+                "chart_config": chart_config,
+            }
+            if feature_type == "categorical":
+                exported_shape["x_tick_labels"] = [
+                    str(value) for value in _json_safe(raw_shape.get("x", []))
+                ]
+            exported.append(exported_shape)
+        if not exported:
+            raise ValueError("Unable to export any shape functions for the trained model")
+        return exported
+
+    def _infer_base_prediction_offset(self) -> float:
+        if self.model is None:
+            raise ValueError("Model not trained yet")
+        if self.model_source == "imported":
+            return float(getattr(self.model, "base_prediction_offset", 0.0))
+
+        y_scaler = getattr(self.model, "y_scaler", None)
+        mean_values = getattr(y_scaler, "mean_", None)
+        if mean_values is not None and len(mean_values):
+            return float(mean_values[0])
+        intercept = getattr(getattr(self.model, "linear_model", None), "intercept_", 0.0)
+        if isinstance(intercept, np.ndarray):
+            if intercept.size:
+                return float(intercept.reshape(-1)[0])
+            return 0.0
+        return float(intercept)
+
+    def export_model_artifact(self) -> Dict[str, Any]:
+        if not self.is_trained or self.model is None:
+            raise ValueError("Model not trained yet")
+
+        igann_params = {}
+        if hasattr(self.model, "get_params"):
+            igann_params = _json_safe(self.model.get_params())
+
+        shape_functions = self._export_shape_functions_payload()
+        exported_feature_names = [
+            shape_function["feature_name"] for shape_function in shape_functions
+        ]
+        exported_feature_schema = [
+            _json_safe(item)
+            for item in self.feature_schema
+            if str(item.get("name")) in exported_feature_names
+        ]
+        exported_cat_features = [
+            feature_name for feature_name in self.cat_features if feature_name in exported_feature_names
+        ]
+        exported_num_features = [
+            feature_name for feature_name in self.num_features if feature_name in exported_feature_names
+        ]
+
+        return {
+            "artifact_version": MODEL_ARTIFACT_VERSION,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "model_type": "IGANN",
+            "model_source": self.model_source,
+            "igann_params": igann_params,
+            "effective_boosting_rounds": int(len(getattr(self.model, "boosting_rates", []) or [])),
+            "base_prediction_offset": float(self._infer_base_prediction_offset()),
+            "feature_names": exported_feature_names,
+            "selected_feature_columns": list(self.selected_feature_columns),
+            "target_column": self.target_column,
+            "feature_schema": exported_feature_schema,
+            "cat_features": exported_cat_features,
+            "num_features": exported_num_features,
+            "feature_chart_settings": _json_safe(self.feature_chart_settings),
+            "shape_functions": shape_functions,
+            "dataset_id": self.active_dataset_id,
+            "dataset_name": self.active_dataset_name
+            or (Path(self.active_dataset_path).name if self.active_dataset_path else None),
+        }
+
+    @staticmethod
+    def _validate_shape_function_artifact(shape_function: Dict[str, Any]) -> Dict[str, Any]:
+        feature_name = str(shape_function.get("feature_name", "")).strip()
+        if not feature_name:
+            raise ValueError("Imported artifact contains a shape function without feature_name")
+
+        feature_type = str(shape_function.get("feature_type", "")).strip()
+        if feature_type not in {"numeric", "categorical"}:
+            raise ValueError(f"Invalid feature_type for '{feature_name}'")
+
+        x_values = shape_function.get("x_values")
+        y_values = shape_function.get("y_values")
+        if not isinstance(x_values, list) or not isinstance(y_values, list):
+            raise ValueError(f"Shape function '{feature_name}' must include x_values and y_values arrays")
+        if len(x_values) != len(y_values) or not x_values:
+            raise ValueError(f"Shape function '{feature_name}' must have equally sized non-empty x/y arrays")
+
+        normalized = {
+            "feature_name": feature_name,
+            "x_values": [str(x) for x in x_values] if feature_type == "categorical" else [float(x) for x in x_values],
+            "y_values": [float(y) for y in y_values],
+            "feature_type": feature_type,
+            "chart_config": shape_function.get("chart_config") or {},
+        }
+        x_tick_labels = shape_function.get("x_tick_labels")
+        if isinstance(x_tick_labels, list):
+            normalized["x_tick_labels"] = [str(label) for label in x_tick_labels]
+        return normalized
+
+    def _validate_import_artifact(self, artifact: Dict[str, Any]) -> Dict[str, Any]:
+        required_keys = [
+            "artifact_version",
+            "model_type",
+            "igann_params",
+            "effective_boosting_rounds",
+            "base_prediction_offset",
+            "feature_names",
+            "selected_feature_columns",
+            "target_column",
+            "feature_schema",
+            "cat_features",
+            "num_features",
+            "feature_chart_settings",
+            "shape_functions",
+        ]
+        missing = [key for key in required_keys if key not in artifact]
+        if missing:
+            raise ValueError(f"Imported artifact is missing required keys: {missing}")
+
+        artifact_version = str(artifact.get("artifact_version", "")).strip()
+        if artifact_version != MODEL_ARTIFACT_VERSION:
+            raise ValueError(
+                f"Unsupported artifact version '{artifact_version}'. Expected '{MODEL_ARTIFACT_VERSION}'"
+            )
+        if str(artifact.get("model_type", "")).strip() != "IGANN":
+            raise ValueError("Only IGANN model artifacts are supported")
+
+        feature_names = artifact.get("feature_names")
+        selected_feature_columns = artifact.get("selected_feature_columns")
+        feature_schema = artifact.get("feature_schema")
+        cat_features = artifact.get("cat_features")
+        num_features = artifact.get("num_features")
+        shape_functions = artifact.get("shape_functions")
+
+        if not isinstance(feature_names, list) or not feature_names:
+            raise ValueError("Imported artifact must include non-empty feature_names")
+        if not isinstance(selected_feature_columns, list) or not selected_feature_columns:
+            raise ValueError("Imported artifact must include non-empty selected_feature_columns")
+        if not isinstance(feature_schema, list) or len(feature_schema) != len(feature_names):
+            raise ValueError("Imported artifact feature_schema must match the feature_names length")
+        if not isinstance(cat_features, list) or not isinstance(num_features, list):
+            raise ValueError("Imported artifact must include cat_features and num_features arrays")
+        if sorted([str(item) for item in cat_features] + [str(item) for item in num_features]) != sorted([str(item) for item in feature_names]):
+            raise ValueError("Imported artifact cat_features and num_features must cover all feature_names exactly")
+        if not isinstance(shape_functions, list) or len(shape_functions) != len(feature_names):
+            raise ValueError("Imported artifact must include one shape function per feature")
+
+        feature_schema_map = {}
+        for item in feature_schema:
+            if not isinstance(item, dict):
+                raise ValueError("Imported artifact feature_schema entries must be objects")
+            feature_name = str(item.get("name", "")).strip()
+            feature_type = str(item.get("feature_type", "")).strip()
+            if feature_name not in feature_names:
+                raise ValueError(f"Imported artifact schema references unknown feature '{feature_name}'")
+            if feature_type not in {"numeric", "categorical"}:
+                raise ValueError(f"Imported artifact schema has invalid feature_type for '{feature_name}'")
+            feature_schema_map[feature_name] = _json_safe(item)
+
+        if sorted(feature_schema_map.keys()) != sorted([str(item) for item in feature_names]):
+            raise ValueError("Imported artifact feature_schema must cover all feature_names exactly")
+        selected_feature_names = [str(item) for item in selected_feature_columns]
+        if not set(feature_names).issubset(set(selected_feature_names)):
+            raise ValueError("Imported artifact feature_names must be a subset of selected_feature_columns")
+
+        normalized_shape_functions = [
+            self._validate_shape_function_artifact(item)
+            for item in shape_functions
+        ]
+        if sorted(sf["feature_name"] for sf in normalized_shape_functions) != sorted([str(item) for item in feature_names]):
+            raise ValueError("Imported artifact shape_functions must cover all feature_names exactly")
+
+        return {
+            "artifact_version": artifact_version,
+            "igann_params": dict(artifact.get("igann_params") or {}),
+            "effective_boosting_rounds": int(artifact.get("effective_boosting_rounds") or 0),
+            "base_prediction_offset": float(artifact.get("base_prediction_offset")),
+            "feature_names": [str(item) for item in feature_names],
+            "selected_feature_columns": selected_feature_names,
+            "target_column": str(artifact.get("target_column")),
+            "feature_schema": list(feature_schema_map.values()),
+            "feature_schema_map": feature_schema_map,
+            "cat_features": [str(item) for item in cat_features],
+            "num_features": [str(item) for item in num_features],
+            "feature_chart_settings": _json_safe(artifact.get("feature_chart_settings") or {}),
+            "shape_functions": normalized_shape_functions,
+            "dataset_id": artifact.get("dataset_id"),
+            "dataset_name": artifact.get("dataset_name"),
+        }
+
+    def import_model_artifact(self, artifact: Dict[str, Any]) -> Dict[str, Any]:
+        validated = self._validate_import_artifact(artifact)
+        imported_model = ImportedIGANNRuntime(
+            feature_names=validated["feature_names"],
+            shape_functions=validated["shape_functions"],
+            base_prediction_offset=validated["base_prediction_offset"],
+            igann_params=validated["igann_params"],
+            effective_boosting_rounds=validated["effective_boosting_rounds"],
+        )
+
+        self.model = imported_model
+        self.preprocessor = None
+        self.X_train = None
+        self.X_test = None
+        self.y_train = None
+        self.y_test = None
+        self.df = None
+        self.is_trained = True
+        self.feature_names = list(validated["feature_names"])
+        self.selected_feature_columns = list(validated["selected_feature_columns"])
+        self.cat_features = list(validated["cat_features"])
+        self.num_features = list(validated["num_features"])
+        self.target_column = validated["target_column"]
+        self.feature_schema = list(validated["feature_schema"])
+        self.feature_schema_map = dict(validated["feature_schema_map"])
+        self.feature_chart_settings = dict(validated["feature_chart_settings"])
+        self.original_shape_functions = {
+            shape_function["feature_name"]: shape_function
+            for shape_function in validated["shape_functions"]
+        }
+        self.shape_function_offsets = {}
+        self.model_source = "imported"
+        self.imported_artifact_version = validated["artifact_version"]
+        self.analytics_available = False
+        self.active_dataset_id = None
+        self.active_dataset_path = None
+        self.active_dataset_name = None
+        self.active_dataset_file.unlink(missing_ok=True)
+
+        return {
+            "success": True,
+            "message": "Model imported successfully",
+            "model_source": self.model_source,
+            "imported_artifact_version": self.imported_artifact_version,
+        }
+
+    def _validate_dataset_compatibility(
+        self,
+        *,
+        feature_names: List[str],
+        feature_schema: List[Dict[str, Any]],
+    ) -> None:
+        if list(feature_names) != list(self.selected_feature_columns):
+            raise ValueError(
+                "Loaded dataset is incompatible with the imported model: selected feature names do not match"
+            )
+
+        incoming_schema_map = {
+            str(item["name"]): item for item in feature_schema if isinstance(item, dict) and item.get("name")
+        }
+        for imported_feature in self.selected_feature_columns:
+            imported_schema = self.feature_schema_map.get(imported_feature)
+            incoming_schema = incoming_schema_map.get(imported_feature)
+            if imported_schema is None or incoming_schema is None:
+                raise ValueError(
+                    f"Loaded dataset is incompatible with the imported model: missing schema for '{imported_feature}'"
+                )
+            if str(imported_schema.get("feature_type")) != str(incoming_schema.get("feature_type")):
+                raise ValueError(
+                    f"Loaded dataset is incompatible with the imported model: feature type mismatch for '{imported_feature}'"
+                )
+            if str(imported_schema.get("feature_type")) == "categorical":
+                allowed = {
+                    str(value)
+                    for value in (imported_schema.get("categorical_options") or [])
+                }
+                incoming = {
+                    str(value)
+                    for value in (incoming_schema.get("categorical_options") or [])
+                }
+                if not incoming.issubset(allowed):
+                    raise ValueError(
+                        f"Loaded dataset is incompatible with the imported model: categorical values for '{imported_feature}' are not representable by the imported schema"
+                    )
+
+    def get_model_status(self) -> Dict[str, Any]:
+        self.analytics_available = self._has_analytics_data()
+        return {
+            "is_trained": self.is_trained,
+            "data_loaded": self.X_train is not None,
+            "features": self.feature_names if self.feature_names else [],
+            "feature_schema": self.feature_schema if self.feature_schema else [],
+            "target_column": self.target_column,
+            "selected_feature_columns": self.selected_feature_columns if self.selected_feature_columns else [],
+            "dataset_id": self.active_dataset_id,
+            "dataset_name": self.active_dataset_name
+            or (Path(self.active_dataset_path).name if self.active_dataset_path else None),
+            "train_size": len(self.X_train) if self.X_train is not None else 0,
+            "test_size": len(self.X_test) if self.X_test is not None else 0,
+            "model_source": self.model_source,
+            "analytics_available": self.analytics_available,
+            "shape_functions_available": self._shape_functions_available(),
+            "imported_artifact_version": self.imported_artifact_version,
+        }
+
     def _reset_runtime_state(self) -> None:
         self.model = None
         self.preprocessor = None
@@ -582,6 +1053,9 @@ class MLService:
         self.num_features = []
         self.feature_schema = []
         self.feature_schema_map = {}
+        self.model_source = "trained"
+        self.imported_artifact_version = None
+        self.analytics_available = False
         self.original_shape_functions = {}
         self.shape_function_offsets = {}
         self.target_column = None
@@ -635,6 +1109,40 @@ class MLService:
         previous_dataset_path = self.active_dataset_path
         previous_target = self.target_column
         previous_selected_features = list(self.selected_feature_columns)
+        existing_model = self.model
+        existing_shape_functions = dict(self.original_shape_functions)
+        existing_model_source = self.model_source
+        existing_artifact_version = self.imported_artifact_version
+        existing_chart_settings = dict(self.feature_chart_settings)
+        previous_runtime_state = {
+            "model": self.model,
+            "preprocessor": self.preprocessor,
+            "X_train": self.X_train,
+            "X_test": self.X_test,
+            "y_train": self.y_train,
+            "y_test": self.y_test,
+            "df": self.df,
+            "is_trained": self.is_trained,
+            "feature_names": list(self.feature_names),
+            "selected_feature_columns": list(self.selected_feature_columns),
+            "cat_features": list(self.cat_features),
+            "num_features": list(self.num_features),
+            "target_column": self.target_column,
+            "feature_schema": list(self.feature_schema),
+            "feature_schema_map": dict(self.feature_schema_map),
+            "model_source": self.model_source,
+            "imported_artifact_version": self.imported_artifact_version,
+            "analytics_available": self.analytics_available,
+            "original_shape_functions": dict(self.original_shape_functions),
+            "shape_function_offsets": {
+                feature: dict(offsets)
+                for feature, offsets in self.shape_function_offsets.items()
+            },
+            "active_dataset_id": self.active_dataset_id,
+            "active_dataset_path": self.active_dataset_path,
+            "active_dataset_name": self.active_dataset_name,
+            "feature_chart_settings": dict(self.feature_chart_settings),
+        }
 
         resolved_path, resolved_dataset_id = self._resolve_dataset_path(dataset_id)
         resolved_path_str = str(resolved_path)
@@ -659,11 +1167,24 @@ class MLService:
             feature_columns=feature_columns,
         )
 
-        # Any dataset load invalidates trained state and shape offsets.
-        self.model = None
-        self.is_trained = False
-        self.original_shape_functions = {}
-        self.shape_function_offsets = {}
+        X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
+        rebuilt_feature_schema = self._build_feature_schema_for(
+            list(X_train.columns),
+            list(num_features),
+            X_all,
+        )
+        rebuilt_feature_schema_map = {item["name"]: item for item in rebuilt_feature_schema}
+
+        if existing_model_source == "imported" and existing_model is not None and self.is_trained:
+            try:
+                self._validate_dataset_compatibility(
+                    feature_names=list(selected_features),
+                    feature_schema=rebuilt_feature_schema,
+                )
+            except Exception:
+                for key, value in previous_runtime_state.items():
+                    setattr(self, key, value)
+                raise
 
         self.X_train = X_train
         self.X_test = X_test
@@ -677,16 +1198,37 @@ class MLService:
         self.num_features = list(num_features)
         self.target_column = resolved_target
 
-        # Keep only settings for currently selected features.
-        self.feature_chart_settings = {
-            feature: setting
-            for feature, setting in self.feature_chart_settings.items()
-            if feature in self.feature_names
-        }
-
-        X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
-        self.feature_schema = self._build_feature_schema(X_all)
-        self.feature_schema_map = {item["name"]: item for item in self.feature_schema}
+        if existing_model_source == "imported" and existing_model is not None and previous_runtime_state["is_trained"]:
+            self.model = existing_model
+            self.is_trained = True
+            self.model_source = existing_model_source
+            self.imported_artifact_version = existing_artifact_version
+            self.analytics_available = True
+            self.feature_schema = list(self.feature_schema)
+            self.feature_schema_map = dict(self.feature_schema_map)
+            self.original_shape_functions = existing_shape_functions
+            self.shape_function_offsets = {}
+            self.feature_chart_settings = {
+                feature: setting
+                for feature, setting in existing_chart_settings.items()
+                if feature in self.feature_names
+            }
+        else:
+            # Any dataset load invalidates a trained local model and shape offsets.
+            self.model = None
+            self.is_trained = False
+            self.model_source = "trained"
+            self.imported_artifact_version = None
+            self.analytics_available = False
+            self.original_shape_functions = {}
+            self.shape_function_offsets = {}
+            self.feature_schema = rebuilt_feature_schema
+            self.feature_schema_map = rebuilt_feature_schema_map
+            self.feature_chart_settings = {
+                feature: setting
+                for feature, setting in self.feature_chart_settings.items()
+                if feature in self.feature_names
+            }
 
         self.active_dataset_id = resolved_dataset_id
         self.active_dataset_path = resolved_path_str
@@ -731,6 +1273,11 @@ class MLService:
         )
         self.model.fit(self.X_train, self.y_train)
         self.is_trained = True
+        self.model_source = "trained"
+        self.imported_artifact_version = None
+        self.analytics_available = self._has_analytics_data()
+        self.original_shape_functions = {}
+        self.shape_function_offsets = {}
 
         metrics = self.evaluate_model()
         return metrics
@@ -739,6 +1286,7 @@ class MLService:
         """Evaluate the model on test data."""
         if not self.is_trained or self.model is None:
             raise ValueError("Model not trained yet")
+        self._require_analytics_data()
 
         y_pred = self.model.predict(self.X_test)
         rmse = root_mean_squared_error(self.y_test, y_pred)
@@ -754,8 +1302,8 @@ class MLService:
 
     def _validate_and_normalize_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
         """Validate prediction payload against loaded feature schema."""
-        if self.X_train is None:
-            raise ValueError("Data not loaded yet")
+        if not self.feature_schema_map:
+            raise ValueError("Feature schema is not available yet")
 
         provided_keys = set(features.keys())
         expected_keys = set(self.feature_names)
@@ -857,6 +1405,8 @@ class MLService:
         """Get shape function data for all features."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
+        if self.model_source == "imported" and self.original_shape_functions:
+            return list(self.original_shape_functions.values())
 
         shape_functions = []
         for idx, feature_name in enumerate(self.feature_names):
@@ -1007,6 +1557,7 @@ class MLService:
         """Get predictions vs actual values for visualization."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
+        self._require_analytics_data()
 
         y_pred = self.model.predict(self.X_test)
         y_actual = self.y_test.values.flatten().tolist()
@@ -1486,6 +2037,7 @@ class MLService:
         """Get comparison between original and interactive predictions."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
+        self._require_analytics_data()
 
         y_pred_original = self.model.predict(self.X_test)
         y_pred_interactive = self.predict_interactive(self.X_test)
