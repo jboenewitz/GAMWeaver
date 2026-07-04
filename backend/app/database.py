@@ -58,6 +58,7 @@ class ShapeFunctionEdit(Base):
     y_offset = Column(Float, nullable=False)  # The offset/change applied to the y value
     weight = Column(Float, nullable=False, default=0.5)  # Sureness weight (0.1 to 1.0, derived from 1-10 slider)
     message = Column(Text, nullable=True, default="")  # Commit message for the edit
+    submission_id = Column(String(64), nullable=True, default=None)  # Groups point rows from a single curve submission
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -74,6 +75,9 @@ class DeletedEditNotification(Base):
     deleted_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)  # User who deleted the edit
     feature_name = Column(String(100), nullable=False)
     x_value = Column(String(100), nullable=False)
+    submission_id = Column(String(64), nullable=True, default=None)
+    point_count = Column(Integer, nullable=True, default=None)
+    x_summary = Column(Text, nullable=True, default=None)
     reason = Column(Text, nullable=False)
     seen = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -100,24 +104,65 @@ class InviteToken(Base):
 def init_db():
     """Initialize the database, creating all tables."""
     Base.metadata.create_all(bind=engine)
-    # Migrate: add columns to existing users table if absent
+    # Migrate: add columns to existing tables if absent
     try:
         inspector = inspect(engine)
-        columns = [col["name"] for col in inspector.get_columns("users")]
-        if "password_hash" not in columns:
+        user_columns = [col["name"] for col in inspector.get_columns("users")]
+        if "password_hash" not in user_columns:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL"))
                 conn.commit()
-        if "is_superadmin" not in columns:
+        if "is_superadmin" not in user_columns:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_superadmin BOOLEAN DEFAULT 0"))
                 conn.commit()
-        if "preferences" not in columns:
+        if "preferences" not in user_columns:
             with engine.connect() as conn:
                 if engine.dialect.name == "postgresql":
                     conn.execute(text("ALTER TABLE users ADD COLUMN preferences JSONB DEFAULT NULL"))
                 else:
                     conn.execute(text("ALTER TABLE users ADD COLUMN preferences TEXT DEFAULT NULL"))
+                conn.commit()
+
+        edit_columns = [
+            col["name"] for col in inspector.get_columns("shape_function_edits")
+        ]
+        if "submission_id" not in edit_columns:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE shape_function_edits ADD COLUMN submission_id TEXT DEFAULT NULL"
+                    )
+                )
+                conn.commit()
+
+        notification_columns = [
+            col["name"]
+            for col in inspector.get_columns("deleted_edit_notifications")
+        ]
+        if "submission_id" not in notification_columns:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE deleted_edit_notifications ADD COLUMN submission_id TEXT DEFAULT NULL"
+                    )
+                )
+                conn.commit()
+        if "point_count" not in notification_columns:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE deleted_edit_notifications ADD COLUMN point_count INTEGER DEFAULT NULL"
+                    )
+                )
+                conn.commit()
+        if "x_summary" not in notification_columns:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE deleted_edit_notifications ADD COLUMN x_summary TEXT DEFAULT NULL"
+                    )
+                )
                 conn.commit()
     except Exception:
         pass  # Table may not exist yet on fresh installs — create_all handles it

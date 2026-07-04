@@ -1,7 +1,10 @@
 import React from "react";
+import { createTranslator, getNumberLocale } from "../i18n";
 
-const Header = ({ modelStatus }) => {
-  const totalRecords = (modelStatus?.train_size || 0) + (modelStatus?.test_size || 0);
+const Header = ({ modelStatus, language = "en" }) => {
+  const totalRecords =
+    (modelStatus?.train_size || 0) + (modelStatus?.test_size || 0);
+  const t = createTranslator(language);
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/88 backdrop-blur-xl">
@@ -13,7 +16,7 @@ const Header = ({ modelStatus }) => {
               GAMWeaver
             </h1>
             <p className="text-sm text-slate-600">
-              Interactive GAM Editor
+              {t("header.subtitle")}
             </p>
           </div>
 
@@ -30,12 +33,16 @@ const Header = ({ modelStatus }) => {
                   modelStatus?.is_trained ? "bg-emerald-500" : "bg-amber-500"
                 }`}
               />
-              {modelStatus?.is_trained ? "Model Trained" : "Model Not Trained"}
+              {modelStatus?.is_trained
+                ? t("header.modelTrained")
+                : t("header.modelNotTrained")}
             </div>
 
             {modelStatus?.data_loaded && (
               <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-700">
-                {totalRecords.toLocaleString()} records loaded
+                {t("header.recordsLoaded", {
+                  count: totalRecords.toLocaleString(getNumberLocale(language)),
+                })}
               </div>
             )}
           </div>

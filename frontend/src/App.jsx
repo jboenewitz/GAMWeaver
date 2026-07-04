@@ -12,6 +12,12 @@ import DataSummaryCard from "./components/DataSummaryCard";
 import UserLogin from "./components/UserLogin";
 import CombinedResultsPage from "./components/CombinedResultsPage";
 import SuperadminPage from "./components/SuperadminPage";
+import LanguageToggleButton from "./components/LanguageToggleButton";
+import {
+  createTranslator,
+  getInitialLanguage,
+  LANGUAGE_STORAGE_KEY,
+} from "./i18n";
 
 const formatApiError = (err, fallback = "Request failed") => {
   const responseData = err?.response?.data;
@@ -50,6 +56,10 @@ const formatApiError = (err, fallback = "Request failed") => {
 };
 
 function App() {
+  const showPredictionComparisonOnMain = false;
+  const [language, setLanguage] = useState(getInitialLanguage);
+  const t = createTranslator(language);
+
   // User state
   const [currentUser, setCurrentUser] = useState(null);
   const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined', 'superadmin'
@@ -80,6 +90,11 @@ function App() {
   const [error, setError] = useState(null);
 
   // Check for saved user on mount
+  useEffect(() => {
+    document.documentElement.lang = language;
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+  }, [language]);
+
   useEffect(() => {
     const validateAndLoadUser = async () => {
       const savedUser = localStorage.getItem("currentUser");
@@ -405,7 +420,11 @@ function App() {
         }
       }, 180);
     },
-    [modelStatus?.is_trained, modelStatus?.analytics_available, buildMergedPreviewEdits],
+    [
+      modelStatus?.is_trained,
+      modelStatus?.analytics_available,
+      buildMergedPreviewEdits,
+    ],
   );
 
   useEffect(() => {
@@ -624,7 +643,13 @@ function App() {
 
   // Render login page
   if (currentPage === "login") {
-    return <UserLogin onLogin={handleLogin} onRegister={handleRegister} />;
+    return (
+      <UserLogin
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        language={language}
+      />
+    );
   }
 
   // Render combined results page
@@ -645,6 +670,7 @@ function App() {
         onResetDatabase={handleResetDatabase}
         onExportModel={handleExportModelArtifact}
         onImportModel={handleImportModelArtifact}
+        language={language}
       />
     );
   }
@@ -655,7 +681,7 @@ function App() {
       <div className="pointer-events-none absolute -top-20 left-8 h-64 w-64 rounded-full bg-primary-200/40 blur-3xl" />
       <div className="pointer-events-none absolute top-64 right-0 h-72 w-72 rounded-full bg-cyan-200/35 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-20 left-1/3 h-72 w-72 rounded-full bg-sky-200/25 blur-3xl" />
-      <Header modelStatus={modelStatus} />
+      <Header modelStatus={modelStatus} language={language} />
 
       {/* User Bar */}
       <div className="relative z-10 pt-2">
@@ -668,7 +694,9 @@ function App() {
                 </span>
               </div>
               <div>
-                <span className="text-sm text-slate-600">Logged in as </span>
+                <span className="text-sm text-slate-600">
+                  {t("app.loggedInAs")}{" "}
+                </span>
                 <span className="font-medium text-slate-800">
                   {currentUser?.name}
                 </span>
@@ -676,6 +704,19 @@ function App() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <LanguageToggleButton
+                language={language}
+                onToggle={() =>
+                  setLanguage((currentLanguage) =>
+                    currentLanguage === "en" ? "de" : "en",
+                  )
+                }
+                title={
+                  language === "en"
+                    ? t("language.switchToGerman")
+                    : t("language.switchToEnglish")
+                }
+              />
               <button
                 onClick={() => setCurrentPage("combined")}
                 className="flex items-center space-x-2 rounded-lg bg-gradient-to-r from-emerald-600 to-cyan-600 px-4 py-2 text-white shadow-lg shadow-emerald-800/20 transition-all hover:from-emerald-500 hover:to-cyan-500"
@@ -693,21 +734,21 @@ function App() {
                     d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
                   />
                 </svg>
-                <span>View Combined Results</span>
+                <span>{t("app.viewCombinedResults")}</span>
               </button>
               {currentUser?.is_superadmin && (
                 <button
                   onClick={() => setCurrentPage("superadmin")}
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-white transition-colors hover:bg-indigo-700"
                 >
-                  Superadmin
+                  {t("app.superadmin")}
                 </button>
               )}
               <button
                 onClick={handleLogout}
                 className="rounded-lg border border-slate-300 bg-white/70 px-4 py-2 text-slate-700 transition-colors hover:bg-white"
               >
-                Logout
+                {t("app.logout")}
               </button>
             </div>
           </div>
@@ -747,8 +788,13 @@ function App() {
             loading={loading || dataLoading}
             modelStatus={modelStatus}
             isSuperadmin={Boolean(currentUser?.is_superadmin)}
+            language={language}
           />
-          <DataSummaryCard summary={dataSummary} loading={dataLoading} />
+          <DataSummaryCard
+            summary={dataSummary}
+            loading={dataLoading}
+            language={language}
+          />
         </div>
 
         {/* Remaining Dashboard Cards/Charts */}
@@ -784,14 +830,16 @@ function App() {
           />
         </div>
 
-        {/* Prediction Comparison Section */}
-        <div className="mt-6">
-          <PredictionComparisonChart
-            comparisonData={comparisonData}
-            loading={comparisonLoading}
-            currentUser={currentUser}
-          />
-        </div>
+        {/* Prediction Comparison Section stays available for combined view but is hidden on the main dashboard */}
+        {showPredictionComparisonOnMain && (
+          <div className="mt-6">
+            <PredictionComparisonChart
+              comparisonData={comparisonData}
+              loading={comparisonLoading}
+              currentUser={currentUser}
+            />
+          </div>
+        )}
 
         {/* Full Width Prediction */}
         <div className="mt-6">
@@ -801,15 +849,14 @@ function App() {
             modelTrained={modelStatus?.is_trained}
             featureSchema={modelStatus?.feature_schema || []}
             targetColumn={modelStatus?.target_column}
+            language={language}
           />
         </div>
 
         {/* Footer */}
         <footer className="glass-surface mt-12 px-4 py-5 text-center text-sm text-slate-600">
           <p>
-            GAMWeaver - Interactive GAM Editor for interactive modeling and
-            explainability. Developed by{" Johann Boenewitz"} as part of a
-            master's thesis.
+            {t("app.footerDescription", { name: "Johann Boenewitz" })}
             <span className="mx-2">•</span>
             <a
               href="https://github.com/jboenewitz/GAMWeaver"
@@ -817,7 +864,7 @@ function App() {
               rel="noopener noreferrer"
               className="text-primary-600 hover:underline"
             >
-              GAMWeaver GitHub
+              {t("app.githubLink")}
             </a>
           </p>
         </footer>
@@ -842,13 +889,17 @@ function App() {
                 />
               </svg>
               <h3 className="text-lg font-bold text-slate-800">
-                Edit{deletionNotifications.length > 1 ? "s" : ""} Removed
+                {deletionNotifications.length > 1
+                  ? t("app.notification.editsRemoved")
+                  : t("app.notification.editRemoved")}
               </h3>
             </div>
             <p className="mb-4 text-sm text-slate-600">
               {deletionNotifications.length === 1
-                ? "One of your edits was removed by another user:"
-                : `${deletionNotifications.length} of your edits were removed by other users:`}
+                ? t("app.notification.singleMessage")
+                : t("app.notification.multipleMessage", {
+                    count: deletionNotifications.length,
+                  })}
             </p>
             <div className="space-y-3 max-h-60 overflow-y-auto mb-4">
               {deletionNotifications.map((notification) => (
@@ -858,21 +909,41 @@ function App() {
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-medium text-gray-700">
-                      Feature:{" "}
+                      {t("app.notification.feature")}:{" "}
                       <span className="font-mono">
                         {notification.feature_name}
                       </span>
                     </span>
                     <span className="text-xs text-gray-500">
-                      by {notification.deleted_by}
+                      {t("app.notification.by")} {notification.deleted_by}
                     </span>
                   </div>
-                  <div className="text-xs text-gray-500 mb-1">
-                    X Value:{" "}
-                    <span className="font-mono">{notification.x_value}</span>
-                  </div>
+                  {notification.point_count ? (
+                    <>
+                      <div className="text-xs text-gray-500 mb-1">
+                        {t("app.notification.curveEdit")}:{" "}
+                        <span className="font-medium">
+                          {notification.point_count}{" "}
+                          {t("app.notification.pointCount").toLowerCase()}
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mb-1">
+                        {t("app.notification.xSummary")}:{" "}
+                        <span className="font-mono">
+                          {notification.x_summary || notification.x_value}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-gray-500 mb-1">
+                      {t("app.notification.xValue")}:{" "}
+                      <span className="font-mono">{notification.x_value}</span>
+                    </div>
+                  )}
                   <div className="text-sm text-gray-700 mt-1">
-                    <span className="font-medium">Reason:</span>{" "}
+                    <span className="font-medium">
+                      {t("app.notification.reason")}:
+                    </span>{" "}
                     {notification.reason}
                   </div>
                 </div>
@@ -883,7 +954,7 @@ function App() {
                 onClick={handleDismissNotifications}
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
               >
-                Got it
+                {t("app.notification.gotIt")}
               </button>
             </div>
           </div>

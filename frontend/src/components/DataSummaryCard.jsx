@@ -1,6 +1,10 @@
 import React from "react";
+import { createTranslator, getNumberLocale } from "../i18n";
 
-const DataSummaryCard = ({ summary, loading }) => {
+const DataSummaryCard = ({ summary, loading, language = "en" }) => {
+  const t = createTranslator(language);
+  const numberLocale = getNumberLocale(language);
+
   if (loading) {
     return (
       <div className="card animate-pulse">
@@ -18,10 +22,10 @@ const DataSummaryCard = ({ summary, loading }) => {
     return (
       <div className="card">
         <h3 className="text-lg font-semibold text-gray-700 mb-4">
-          Data Summary
+          {t("dataSummary.title")}
         </h3>
         <p className="text-gray-500 text-center py-4">
-          Load the data to see summary statistics
+          {t("dataSummary.empty")}
         </p>
       </div>
     );
@@ -29,41 +33,44 @@ const DataSummaryCard = ({ summary, loading }) => {
 
   return (
     <div className="card">
-      <h3 className="text-lg font-semibold text-gray-700 mb-4">Data Summary</h3>
+      <h3 className="text-lg font-semibold text-gray-700 mb-4">
+        {t("dataSummary.title")}
+      </h3>
 
       <div className="space-y-4">
         <div className="flex justify-between items-center py-2 border-b border-gray-100">
-          <span className="text-gray-600">Total Records</span>
+          <span className="text-gray-600">{t("dataSummary.totalRecords")}</span>
           <span className="font-semibold text-primary-600">
-            {summary.total_records?.toLocaleString()}
+            {summary.total_records?.toLocaleString(numberLocale)}
           </span>
         </div>
 
         <div>
           <div className="text-sm text-gray-500 mb-2">
-            Target Variable ({summary.target_column || "Target"})
+            {t("dataSummary.targetVariable")} (
+            {summary.target_column || t("dataSummary.targetFallback")})
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="bg-gray-50 rounded p-2">
-              <div className="text-gray-500">Mean</div>
+              <div className="text-gray-500">{t("dataSummary.mean")}</div>
               <div className="font-medium">
                 {summary.target_stats?.mean?.toFixed(1)}
               </div>
             </div>
             <div className="bg-gray-50 rounded p-2">
-              <div className="text-gray-500">Std Dev</div>
+              <div className="text-gray-500">{t("dataSummary.stdDev")}</div>
               <div className="font-medium">
                 {summary.target_stats?.std?.toFixed(1)}
               </div>
             </div>
             <div className="bg-gray-50 rounded p-2">
-              <div className="text-gray-500">Min</div>
+              <div className="text-gray-500">{t("dataSummary.min")}</div>
               <div className="font-medium">
                 {summary.target_stats?.min?.toFixed(0)}
               </div>
             </div>
             <div className="bg-gray-50 rounded p-2">
-              <div className="text-gray-500">Max</div>
+              <div className="text-gray-500">{t("dataSummary.max")}</div>
               <div className="font-medium">
                 {summary.target_stats?.max?.toFixed(0)}
               </div>
@@ -73,7 +80,7 @@ const DataSummaryCard = ({ summary, loading }) => {
 
         <div>
           <div className="text-sm text-gray-500 mb-2">
-            Features ({summary.features?.length})
+            {t("dataSummary.features")} ({summary.features?.length})
           </div>
           <div className="flex flex-wrap gap-1">
             {summary.numeric_features?.map((f) => (

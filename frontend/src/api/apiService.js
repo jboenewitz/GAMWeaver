@@ -271,6 +271,19 @@ export const apiService = {
     return response.data;
   },
 
+  deleteSubmission: async (submissionId, deletedByUserId, reason) => {
+    const response = await api.post(
+      "/edits/delete-submission",
+      {
+        submission_id: submissionId,
+        deleted_by_user_id: deletedByUserId,
+        reason,
+      },
+      { headers: adminHeaders() },
+    );
+    return response.data;
+  },
+
   // ==================== Notifications ====================
 
   getUserNotifications: async (userId) => {

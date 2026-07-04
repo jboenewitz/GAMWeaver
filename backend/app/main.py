@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Body, Res
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from uuid import uuid4
 
 from .models import (
     PredictionOutput,
@@ -26,6 +27,7 @@ from .models import (
     InviteCreateResponse,
     ResetDatabaseResponse,
     DeleteEditRequest,
+    DeleteSubmissionRequest,
     DeleteEditResponse,
     UserPreferencesRequest,
     UserPreferencesResponse,
@@ -661,6 +663,8 @@ async def save_user_edits(user_id: int, request: EditedShapeFunctionsRequest):
         
         # Convert to storage format (with indices and offsets) before saving to DB
         storage_format = ml_service.convert_edits_for_storage(edited_sfs)
+        for storage_feature in storage_format:
+            storage_feature["submission_id"] = uuid4().hex
         db_service.save_user_edits(user_id, storage_format)
         
         return {"success": True, "message": "Edits saved successfully"}
@@ -938,6 +942,33 @@ async def delete_edit(request: DeleteEditRequest, http_request: Request):
             raise HTTPException(status_code=404, detail="Edit not found")
         
         return DeleteEditResponse(success=True, message="Edit deleted successfully")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/edits/delete-submission", response_model=DeleteEditResponse)
+async def delete_submission(request: DeleteSubmissionRequest, http_request: Request):
+    """Delete a full curve-edit submission and optionally notify the owner."""
+    try:
+        _require_destructive_access(http_request)
+        if not request.reason or not request.reason.strip():
+            raise HTTPException(status_code=400, detail="Reason is required")
+
+        success = db_service.delete_submission(
+            submission_id=request.submission_id,
+            deleted_by_user_id=request.deleted_by_user_id,
+            reason=request.reason.strip(),
+        )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Submission not found")
+
+        return DeleteEditResponse(
+            success=True,
+            message="Edit submission deleted successfully",
+        )
     except HTTPException:
         raise
     except Exception as e:

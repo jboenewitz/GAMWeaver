@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { createTranslator } from "../i18n";
 
 const formatAuthError = (err, fallback) => {
   const detail = err?.response?.data?.detail;
@@ -26,9 +27,10 @@ const formatAuthError = (err, fallback) => {
   return fallback;
 };
 
-function UserLogin({ onLogin, onRegister }) {
+function UserLogin({ onLogin, onRegister, language = "en" }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const t = createTranslator(language);
   const inviteToken = useMemo(() => {
     try {
       return new URLSearchParams(window.location.search).get("invite") || "";
@@ -43,11 +45,11 @@ function UserLogin({ onLogin, onRegister }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError("Please enter username and password");
+      setError(t("login.error.enterCredentials"));
       return;
     }
     if (mode === "register" && !inviteToken) {
-      setError("Registration requires a valid invite link");
+      setError(t("login.error.inviteRequired"));
       return;
     }
 
@@ -62,7 +64,9 @@ function UserLogin({ onLogin, onRegister }) {
       }
     } catch (err) {
       const fallback =
-        mode === "login" ? "Failed to login" : "Failed to register";
+        mode === "login"
+          ? t("login.error.loginFailed")
+          : t("login.error.registerFailed");
       setError(formatAuthError(err, fallback));
     } finally {
       setLoading(false);
@@ -96,12 +100,12 @@ function UserLogin({ onLogin, onRegister }) {
             GAMWeaver
           </p>
           <h1 className="mt-2 text-3xl font-bold text-white">
-            The Interactive GAM Editor
+            {t("login.title")}
           </h1>
           <p className="mt-2 text-sm text-slate-100/85">
             {mode === "login"
-              ? "Sign in with your credentials"
-              : "Register with an invite link"}
+              ? t("login.subtitleLogin")
+              : t("login.subtitleRegister")}
           </p>
         </div>
 
@@ -111,14 +115,14 @@ function UserLogin({ onLogin, onRegister }) {
               htmlFor="username"
               className="mb-2 block text-sm font-medium text-slate-100"
             >
-              Username
+              {t("common.username")}
             </label>
             <input
               type="text"
               id="username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              placeholder="Your username"
+              placeholder={t("login.usernamePlaceholder")}
               className="w-full rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-white placeholder:text-slate-200/75 transition-all duration-200 focus:border-primary-200 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-primary-300/60"
               disabled={loading}
               autoFocus
@@ -130,14 +134,14 @@ function UserLogin({ onLogin, onRegister }) {
               htmlFor="password"
               className="mb-2 block text-sm font-medium text-slate-100"
             >
-              Password
+              {t("common.password")}
             </label>
             <input
               type="password"
               id="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Your password"
+              placeholder={t("login.passwordPlaceholder")}
               className="w-full rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-white placeholder:text-slate-200/75 transition-all duration-200 focus:border-primary-200 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-primary-300/60"
               disabled={loading}
             />
@@ -145,7 +149,7 @@ function UserLogin({ onLogin, onRegister }) {
 
           {mode === "register" && !inviteToken && (
             <div className="rounded-xl border border-amber-200/40 bg-amber-100/20 p-3 text-sm text-amber-100 backdrop-blur-sm">
-              Registration is only possible via an invite link.
+              {t("login.registerInviteOnly")}
             </div>
           )}
 
@@ -181,12 +185,14 @@ function UserLogin({ onLogin, onRegister }) {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                {mode === "login" ? "Signing in..." : "Registering..."}
+                {mode === "login"
+                  ? t("login.submitSigningIn")
+                  : t("login.submitRegistering")}
               </>
             ) : mode === "login" ? (
-              "Sign In"
+              t("login.submitSignIn")
             ) : (
-              "Register"
+              t("login.submitRegister")
             )}
           </button>
         </form>
