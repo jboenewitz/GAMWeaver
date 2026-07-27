@@ -20,6 +20,8 @@ const TrainingPanel = ({
   const [uploadPreview, setUploadPreview] = useState(null);
   const [targetColumn, setTargetColumn] = useState("");
   const [selectedFeatureColumns, setSelectedFeatureColumns] = useState([]);
+  const [isFeatureSelectorExpanded, setIsFeatureSelectorExpanded] =
+    useState(false);
   const t = createTranslator(language);
 
   const resetModal = () => {
@@ -29,6 +31,7 @@ const TrainingPanel = ({
     setUploadPreview(null);
     setTargetColumn("");
     setSelectedFeatureColumns([]);
+    setIsFeatureSelectorExpanded(false);
   };
 
   const openModal = () => {
@@ -121,6 +124,10 @@ const TrainingPanel = ({
 
   const clearAllFeatureColumns = () => {
     setSelectedFeatureColumns([]);
+  };
+
+  const toggleFeatureSelectorExpanded = () => {
+    setIsFeatureSelectorExpanded((prev) => !prev);
   };
 
   const handleTrain = async () => {
@@ -313,7 +320,13 @@ const TrainingPanel = ({
       {showUploadModal &&
         createPortal(
           <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-xl rounded-xl bg-white shadow-xl">
+            <div
+              className={`flex w-full flex-col overflow-hidden rounded-xl bg-white shadow-xl transition-all duration-200 ${
+                isFeatureSelectorExpanded
+                  ? "max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)]"
+                  : "max-w-xl"
+              }`}
+            >
               <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
                 <h4 className="text-lg font-semibold text-gray-800">
                   {t("training.uploadModalTitle")}
@@ -326,7 +339,7 @@ const TrainingPanel = ({
                 </button>
               </div>
 
-              <div className="space-y-4 px-6 py-5">
+              <div className="space-y-4 overflow-y-auto px-6 py-5">
                 {modalError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                     {modalError}
@@ -360,14 +373,20 @@ const TrainingPanel = ({
                 </button>
 
                 {uploadPreview && (
-                  <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div
+                    className={`rounded-lg border border-gray-200 bg-gray-50 p-3 ${
+                      isFeatureSelectorExpanded
+                        ? "grid gap-4 xl:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]"
+                        : "space-y-3"
+                    }`}
+                  >
                     <div className="text-sm text-gray-700">
                       <span className="font-medium">
                         {t("training.columnsDetected")}:
                       </span>{" "}
                       {uploadPreview.columns.length}
                     </div>
-                    <div>
+                    <div className={isFeatureSelectorExpanded ? "xl:col-start-1" : ""}>
                       <label className="label">
                         {t("training.targetColumn")}
                       </label>
@@ -385,12 +404,79 @@ const TrainingPanel = ({
                         ))}
                       </select>
                     </div>
-                    <div>
+                    <div
+                      className={
+                        isFeatureSelectorExpanded
+                          ? "xl:col-start-2 xl:row-span-3 xl:row-start-1"
+                          : ""
+                      }
+                    >
                       <div className="mb-2 flex items-center justify-between">
                         <label className="label mb-0">
                           {t("training.featureColumns")}
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={toggleFeatureSelectorExpanded}
+                            className="rounded p-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                            title={t(
+                              isFeatureSelectorExpanded
+                                ? "training.collapseFeatureColumns"
+                                : "training.expandFeatureColumns",
+                            )}
+                            aria-label={t(
+                              isFeatureSelectorExpanded
+                                ? "training.collapseFeatureColumns"
+                                : "training.expandFeatureColumns",
+                            )}
+                          >
+                            {isFeatureSelectorExpanded ? (
+                              <svg
+                                className="h-4 w-4"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path
+                                  d="M7.5 3.75H3.75V7.5M12.5 3.75H16.25V7.5M16.25 12.5V16.25H12.5M7.5 16.25H3.75V12.5"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                <path
+                                  d="M8.75 8.75L3.75 3.75M11.25 8.75L16.25 3.75M11.25 11.25L16.25 16.25M8.75 11.25L3.75 16.25"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            ) : (
+                              <svg
+                                className="h-4 w-4"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                              >
+                                <path
+                                  d="M8.75 3.75H3.75V8.75M11.25 3.75H16.25V8.75M16.25 11.25V16.25H11.25M8.75 16.25H3.75V11.25"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                                <path
+                                  d="M6.25 6.25L3.75 3.75M13.75 6.25L16.25 3.75M13.75 13.75L16.25 16.25M6.25 13.75L3.75 16.25"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            )}
+                          </button>
                           <button
                             type="button"
                             onClick={selectAllFeatureColumns}
@@ -407,7 +493,20 @@ const TrainingPanel = ({
                           </button>
                         </div>
                       </div>
-                      <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-gray-200 bg-white p-2">
+                      <div
+                        className={`overflow-y-auto rounded border border-gray-200 bg-white p-2 ${
+                          isFeatureSelectorExpanded
+                            ? "max-h-[calc(100vh-16rem)]"
+                            : "max-h-40"
+                        }`}
+                      >
+                        <div
+                          className={`space-y-1 ${
+                            isFeatureSelectorExpanded
+                              ? "md:columns-2 xl:columns-3"
+                              : ""
+                          }`}
+                        >
                         {uploadPreview.columns.map((column) => {
                           const isTarget = column === targetColumn;
                           const checked =
@@ -416,7 +515,7 @@ const TrainingPanel = ({
                           return (
                             <label
                               key={column}
-                              className={`flex items-center justify-between gap-2 rounded px-2 py-1 ${
+                              className={`mb-1 flex break-inside-avoid items-center justify-between gap-2 rounded px-2 py-1 ${
                                 isTarget
                                   ? "bg-amber-50 text-amber-700"
                                   : "hover:bg-gray-50"
@@ -437,13 +536,18 @@ const TrainingPanel = ({
                             </label>
                           );
                         })}
+                        </div>
                       </div>
                       <p className="mt-2 text-xs text-gray-500">
                         {t("training.selectedFeatures")}:{" "}
                         {selectedFeatureColumns.length}
                       </p>
                     </div>
-                    <div className="max-h-28 overflow-y-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-600">
+                    <div
+                      className={`max-h-28 overflow-y-auto rounded border border-gray-200 bg-white p-2 text-xs text-gray-600 ${
+                        isFeatureSelectorExpanded ? "xl:col-start-1" : ""
+                      }`}
+                    >
                       {uploadPreview.columns.join(", ")}
                     </div>
                   </div>

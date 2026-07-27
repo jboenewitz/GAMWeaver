@@ -5,6 +5,7 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import { createPortal } from "react-dom";
 import Plot from "react-plotly.js";
 import { createTranslator } from "../i18n";
 
@@ -223,6 +224,47 @@ const buildDragHighlightSegments = (
 
   return segments;
 };
+
+const BrushHardnessControl = ({
+  brushHardness,
+  onChange,
+  t,
+  className = "",
+}) => (
+  <div
+    className={`bg-white border border-slate-200 rounded-lg p-3 ${className}`.trim()}
+  >
+    <div className="flex items-center justify-between gap-4 mb-1">
+      <span className="text-sm font-medium text-slate-700">
+        {t("shapeFunctions.lineBrushHardness")}
+      </span>
+      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+        {brushHardness}
+      </span>
+    </div>
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-slate-500 w-9">
+        {t("shapeFunctions.soft")}
+      </span>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={brushHardness}
+        onChange={(e) =>
+          onChange(Math.max(0, Math.min(100, Number(e.target.value))))
+        }
+        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+        style={{
+          background: `linear-gradient(to right, #10b981 0%, #10b981 ${brushHardness}%, #e5e7eb ${brushHardness}%, #e5e7eb 100%)`,
+        }}
+      />
+      <span className="text-xs text-slate-500 w-9 text-right">
+        {t("shapeFunctions.hard")}
+      </span>
+    </div>
+  </div>
+);
 
 const EditableShapeFunctionChart = ({
   shapeFunction,
@@ -1545,6 +1587,7 @@ const FeatureEditCard = ({
   onCycleChartType,
   isEditing,
   brushHardness = 50,
+  onBrushHardnessChange = null,
   hasSavedEdits,
   isSuperadmin = false,
   sharedYRange = null,
@@ -1716,95 +1759,108 @@ const FeatureEditCard = ({
       </div>
 
       {/* Enlarged Chart Modal */}
-      {isEnlarged && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-6"
-          onClick={() => setIsEnlarged(false)}
-        >
+      {isEnlarged &&
+        typeof document !== "undefined" &&
+        createPortal(
           <div
-            className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-auto"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-6"
+            onClick={() => setIsEnlarged(false)}
           >
-            {/* Modal header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">
-                {shapeFunction.feature_name}
-              </h3>
-              <button
-                onClick={() => setIsEnlarged(false)}
-                className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
-                title={t("common.close")}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            {/* Enlarged chart */}
-            <div className="p-4">
-              <EditableShapeFunctionChart
-                shapeFunction={shapeFunction}
-                editedPoints={editedPoints}
-                onPointEdit={onPointEdit}
-                isEditing={isEditing}
-                brushHardness={brushHardness}
-                enlarged
-                sharedYRange={sharedYRange}
-                t={t}
-              />
-            </div>
-            {/* Modal footer actions */}
-            <div className="px-5 py-3 border-t border-gray-200 flex justify-between items-center">
-              {hasSavedEdits || hasUnsavedEdits ? (
-                <button
-                  onClick={() => onFeatureReset(shapeFunction.feature_name)}
-                  className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
-                >
-                  <span>✕</span>
-                  <span>{t("common.reset")}</span>
-                </button>
-              ) : (
-                <div />
-              )}
-              <div className="flex items-center gap-2">
-                {hasUnsavedEdits && (
-                  <button
-                    onClick={() => {
-                      onFeatureSubmit(shapeFunction.feature_name);
-                      setIsEnlarged(false);
-                    }}
-                    className="px-4 py-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
-                  >
-                    <span>✓</span>
-                    <span>
-                      {t("shapeFunctions.submitFeature", {
-                        feature: shapeFunction.feature_name,
-                      })}
-                    </span>
-                  </button>
-                )}
+            <div
+              className="max-h-[90vh] w-full max-w-5xl overflow-auto rounded-2xl bg-white shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal header */}
+              <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+                <h3 className="text-lg font-semibold text-gray-800">
+                  {shapeFunction.feature_name}
+                </h3>
                 <button
                   onClick={() => setIsEnlarged(false)}
-                  className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
+                  title={t("common.close")}
                 >
-                  {t("common.close")}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </div>
+              {/* Enlarged chart */}
+              <div className="p-4">
+                {isEditing &&
+                  shapeFunction?.feature_type === "numeric" &&
+                  onBrushHardnessChange && (
+                    <BrushHardnessControl
+                      brushHardness={brushHardness}
+                      onChange={onBrushHardnessChange}
+                      t={t}
+                      className="mb-4"
+                    />
+                  )}
+                <EditableShapeFunctionChart
+                  shapeFunction={shapeFunction}
+                  editedPoints={editedPoints}
+                  onPointEdit={onPointEdit}
+                  isEditing={isEditing}
+                  brushHardness={brushHardness}
+                  enlarged
+                  sharedYRange={sharedYRange}
+                  t={t}
+                />
+              </div>
+              {/* Modal footer actions */}
+              <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3">
+                {hasSavedEdits || hasUnsavedEdits ? (
+                  <button
+                    onClick={() => onFeatureReset(shapeFunction.feature_name)}
+                    className="px-3 py-1.5 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors font-medium flex items-center gap-1"
+                  >
+                    <span>✕</span>
+                    <span>{t("common.reset")}</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex items-center gap-2">
+                  {hasUnsavedEdits && (
+                    <button
+                      onClick={() => {
+                        onFeatureSubmit(shapeFunction.feature_name);
+                        setIsEnlarged(false);
+                      }}
+                      className="px-4 py-2 text-sm bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors font-medium shadow-md flex items-center gap-1"
+                    >
+                      <span>✓</span>
+                      <span>
+                        {t("shapeFunctions.submitFeature", {
+                          feature: shapeFunction.feature_name,
+                        })}
+                      </span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setIsEnlarged(false)}
+                    className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+                  >
+                    {t("common.close")}
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 };
@@ -2175,39 +2231,12 @@ const EditableShapeFunctionsGrid = ({
       )}
 
       {isEditing && hasNumericCharts && (
-        <div className="mb-4 p-3 bg-white border border-slate-200 rounded-lg">
-          <div className="flex items-center justify-between gap-4 mb-1">
-            <span className="text-sm font-medium text-slate-700">
-              {t("shapeFunctions.lineBrushHardness")}
-            </span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-              {brushHardness}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-500 w-9">
-              {t("shapeFunctions.soft")}
-            </span>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={brushHardness}
-              onChange={(e) =>
-                setBrushHardness(
-                  Math.max(0, Math.min(100, Number(e.target.value))),
-                )
-              }
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
-              style={{
-                background: `linear-gradient(to right, #10b981 0%, #10b981 ${brushHardness}%, #e5e7eb ${brushHardness}%, #e5e7eb 100%)`,
-              }}
-            />
-            <span className="text-xs text-slate-500 w-9 text-right">
-              {t("shapeFunctions.hard")}
-            </span>
-          </div>
-        </div>
+        <BrushHardnessControl
+          brushHardness={brushHardness}
+          onChange={setBrushHardness}
+          t={t}
+          className="mb-4"
+        />
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2224,6 +2253,7 @@ const EditableShapeFunctionsGrid = ({
             onCycleChartType={handleCycleChartType}
             isEditing={isEditing}
             brushHardness={brushHardness}
+            onBrushHardnessChange={setBrushHardness}
             hasSavedEdits={
               initialEditedPoints[sf.feature_name] &&
               initialEditedPoints[sf.feature_name].length > 0
