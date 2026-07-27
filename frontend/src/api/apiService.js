@@ -164,11 +164,12 @@ export const apiService = {
     return response.data;
   },
 
-  registerUser: async (username, password, inviteToken) => {
+  registerUser: async (username, password, inviteToken, profession) => {
     const response = await api.post("/auth/register", {
       username,
       password,
       invite_token: inviteToken,
+      profession,
     });
     return response.data;
   },
@@ -320,10 +321,10 @@ export const apiService = {
     return response.data;
   },
 
-  createAdminUser: async (username, password) => {
+  createAdminUser: async (username, password, profession) => {
     const response = await api.post(
       "/admin/users",
-      { username, password },
+      { username, password, profession },
       { headers: adminHeaders() },
     );
     return response.data;

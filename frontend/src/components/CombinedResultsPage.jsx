@@ -1110,6 +1110,11 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                                   <div className="truncate font-medium text-slate-700">
                                     {submission.user_name}
                                   </div>
+                                  {submission.profession ? (
+                                    <div className="truncate text-xs text-slate-500">
+                                      {submission.profession}
+                                    </div>
+                                  ) : null}
                                 </div>
                                 <div>
                                   <div className="text-xs font-medium uppercase text-slate-500">

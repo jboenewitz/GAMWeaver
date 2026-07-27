@@ -62,6 +62,13 @@ def _require_superadmin(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Superadmin access required")
 
 
+def _normalize_required_profession(raw_profession: str) -> str:
+    profession = raw_profession.strip()
+    if not profession:
+        raise HTTPException(status_code=400, detail="Profession is required")
+    return profession
+
+
 def _extract_prediction_features(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
     Accept both direct feature dictionaries and {"features": {...}} payloads.
@@ -546,6 +553,7 @@ async def register_user(request: UserRegisterRequest):
             raise HTTPException(status_code=400, detail="Username and password are required")
         if not request.invite_token or not request.invite_token.strip():
             raise HTTPException(status_code=400, detail="Invite token is required")
+        profession = _normalize_required_profession(request.profession)
 
         if db_service.get_user_by_name(username):
             raise HTTPException(status_code=409, detail="User already exists")
@@ -553,7 +561,11 @@ async def register_user(request: UserRegisterRequest):
         if not db_service.consume_invite_token(request.invite_token.strip()):
             raise HTTPException(status_code=403, detail="Invalid or expired invite token")
 
-        user = db_service.create_user_with_password(username, request.password)
+        user = db_service.create_user_with_password(
+            username,
+            request.password,
+            profession=profession,
+        )
         return UserResponse(**user, is_new=True)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -594,7 +606,12 @@ async def create_user_admin(request_body: AdminCreateUserRequest, request: Reque
         username = request_body.username.strip()
         if not username or not request_body.password:
             raise HTTPException(status_code=400, detail="Username and password are required")
-        user = db_service.create_user_with_password(username, request_body.password)
+        profession = _normalize_required_profession(request_body.profession)
+        user = db_service.create_user_with_password(
+            username,
+            request_body.password,
+            profession=profession,
+        )
         return UserResponse(**user)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))

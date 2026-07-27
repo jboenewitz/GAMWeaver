@@ -11,6 +11,7 @@ const translations = {
     "common.cancel": "Cancel",
     "common.username": "Username",
     "common.password": "Password",
+    "common.profession": "Profession",
     "common.loading": "Loading...",
     "common.refresh": "Refresh",
     "common.save": "Save",
@@ -31,8 +32,10 @@ const translations = {
     "login.subtitleRegister": "Register with an invite link",
     "login.usernamePlaceholder": "Your username",
     "login.passwordPlaceholder": "Your password",
+    "login.professionPlaceholder": "Your profession",
     "login.registerInviteOnly": "Registration is only possible via an invite link.",
     "login.error.enterCredentials": "Please enter username and password",
+    "login.error.professionRequired": "Please enter your profession",
     "login.error.inviteRequired": "Registration requires a valid invite link",
     "login.error.loginFailed": "Failed to login",
     "login.error.registerFailed": "Failed to register",
@@ -98,6 +101,8 @@ const translations = {
     "training.columnsDetected": "Columns detected",
     "training.targetColumn": "Target Column",
     "training.featureColumns": "Feature Columns",
+    "training.expandFeatureColumns": "Expand feature columns",
+    "training.collapseFeatureColumns": "Collapse feature columns",
     "training.selectAll": "Select all",
     "training.clearAll": "Clear all",
     "training.target": "Target",
@@ -352,6 +357,8 @@ const translations = {
     "superadmin.error.loadUsers": "Failed to load users",
     "superadmin.error.usernamePasswordRequired":
       "Username and password are required",
+    "superadmin.error.usernamePasswordProfessionRequired":
+      "Username, password, and profession are required",
     "superadmin.error.createUser": "Failed to create user",
     "superadmin.error.createInvite": "Failed to create invite",
     "superadmin.error.resetDatabase": "Failed to reset database",
@@ -360,6 +367,7 @@ const translations = {
     "superadmin.title": "Superadmin Overview",
     "superadmin.openCombined": "Open Combined Results",
     "superadmin.createUser": "Create User",
+    "superadmin.professionPlaceholder": "Enter a profession",
     "superadmin.inviteLink": "Invite Link",
     "superadmin.generateInvite": "Generate Invite",
     "superadmin.inviteCopied": "Invite link copied to clipboard.",
@@ -412,6 +420,7 @@ const translations = {
     "common.cancel": "Abbrechen",
     "common.username": "Benutzername",
     "common.password": "Passwort",
+    "common.profession": "Beruf",
     "common.loading": "Laden...",
     "common.refresh": "Aktualisieren",
     "common.save": "Speichern",
@@ -432,10 +441,12 @@ const translations = {
     "login.subtitleRegister": "Mit einem Einladungslink registrieren",
     "login.usernamePlaceholder": "Dein Benutzername",
     "login.passwordPlaceholder": "Dein Passwort",
+    "login.professionPlaceholder": "Dein Beruf",
     "login.registerInviteOnly":
       "Eine Registrierung ist nur ueber einen Einladungslink moeglich.",
     "login.error.enterCredentials":
       "Bitte Benutzername und Passwort eingeben",
+    "login.error.professionRequired": "Bitte gib deinen Beruf ein",
     "login.error.inviteRequired":
       "Die Registrierung erfordert einen gueltigen Einladungslink",
     "login.error.loginFailed": "Anmeldung fehlgeschlagen",
@@ -507,6 +518,8 @@ const translations = {
     "training.columnsDetected": "Erkannte Spalten",
     "training.targetColumn": "Zielspalte",
     "training.featureColumns": "Feature-Spalten",
+    "training.expandFeatureColumns": "Feature-Spalten erweitern",
+    "training.collapseFeatureColumns": "Feature-Spalten verkleinern",
     "training.selectAll": "Alle waehlen",
     "training.clearAll": "Auswahl loeschen",
     "training.target": "Ziel",
@@ -783,6 +796,8 @@ const translations = {
     "superadmin.error.loadUsers": "Benutzer konnten nicht geladen werden",
     "superadmin.error.usernamePasswordRequired":
       "Benutzername und Passwort sind erforderlich",
+    "superadmin.error.usernamePasswordProfessionRequired":
+      "Benutzername, Passwort und Beruf sind erforderlich",
     "superadmin.error.createUser":
       "Benutzer konnte nicht erstellt werden",
     "superadmin.error.createInvite":
@@ -796,6 +811,7 @@ const translations = {
     "superadmin.title": "Superadmin-Uebersicht",
     "superadmin.openCombined": "Kombinierte Ergebnisse oeffnen",
     "superadmin.createUser": "Benutzer erstellen",
+    "superadmin.professionPlaceholder": "Beruf eingeben",
     "superadmin.inviteLink": "Einladungslink",
     "superadmin.generateInvite": "Einladung erzeugen",
     "superadmin.inviteCopied":

@@ -105,6 +105,18 @@ class DatabaseService:
         return SessionLocal()
 
     @staticmethod
+    def _serialize_user(user: User, *, is_new: bool = False) -> Dict[str, Any]:
+        """Convert a user ORM instance into the API payload used by user endpoints."""
+        return {
+            "id": user.id,
+            "name": user.name,
+            "profession": user.profession,
+            "created_at": user.created_at.isoformat(),
+            "is_new": is_new,
+            "is_superadmin": bool(user.is_superadmin),
+        }
+
+    @staticmethod
     def _submission_sort_key(submission: Dict[str, Any]) -> Tuple[datetime, int]:
         """Use the newest row in a submission as its ordering key."""
         return (
@@ -136,11 +148,17 @@ class DatabaseService:
         if not rows:
             return []
 
-        user_names: Dict[int, str] = {}
+        user_metadata: Dict[int, Dict[str, Any]] = {}
         if include_user_names:
             user_ids = sorted({row.user_id for row in rows})
             users = db.query(User).filter(User.id.in_(user_ids)).all()
-            user_names = {user.id: user.name for user in users}
+            user_metadata = {
+                user.id: {
+                    "name": user.name,
+                    "profession": user.profession,
+                }
+                for user in users
+            }
 
         submissions_by_group: Dict[str, Dict[str, Any]] = {}
         ordered_submissions: List[Dict[str, Any]] = []
@@ -158,7 +176,8 @@ class DatabaseService:
                     "feature_name": row.feature_name,
                     "feature_type": row.feature_type,
                     "user_id": row.user_id,
-                    "user_name": user_names.get(row.user_id, "Unknown"),
+                    "user_name": user_metadata.get(row.user_id, {}).get("name", "Unknown"),
+                    "profession": user_metadata.get(row.user_id, {}).get("profession"),
                     "message": row.message or "",
                     "sureness": round(float(row.weight) * 10),
                     "rows": [],
@@ -266,15 +285,22 @@ class DatabaseService:
         return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
 
     @staticmethod
-    def _get_or_create_import_user(db: Session, user_name: str) -> User:
+    def _get_or_create_import_user(
+        db: Session,
+        user_name: str,
+        profession: Optional[str] = None,
+    ) -> User:
         """Resolve an imported edit author to an existing or placeholder user."""
         existing_user = db.query(User).filter(User.name == user_name).first()
         if existing_user is not None:
+            if profession and not existing_user.profession:
+                existing_user.profession = profession
             return existing_user
 
         user = User(
             name=user_name,
             password_hash=None,
+            profession=profession,
             is_superadmin=False,
         )
         db.add(user)
@@ -296,14 +322,8 @@ class DatabaseService:
                 is_new = True
             else:
                 is_new = False
-            
-            return {
-                "id": user.id,
-                "name": user.name,
-                "created_at": user.created_at.isoformat(),
-                "is_new": is_new,
-                "is_superadmin": bool(user.is_superadmin),
-            }
+
+            return self._serialize_user(user, is_new=is_new)
         finally:
             db.close()
 
@@ -313,12 +333,7 @@ class DatabaseService:
         try:
             user = db.query(User).filter(User.name == name).first()
             if user:
-                return {
-                    "id": user.id,
-                    "name": user.name,
-                    "created_at": user.created_at.isoformat(),
-                    "is_superadmin": bool(user.is_superadmin),
-                }
+                return self._serialize_user(user)
             return None
         finally:
             db.close()
@@ -329,17 +344,18 @@ class DatabaseService:
         try:
             user = db.query(User).filter(User.id == user_id).first()
             if user:
-                return {
-                    "id": user.id,
-                    "name": user.name,
-                    "created_at": user.created_at.isoformat(),
-                    "is_superadmin": bool(user.is_superadmin),
-                }
+                return self._serialize_user(user)
             return None
         finally:
             db.close()
 
-    def create_user_with_password(self, username: str, password: str, is_superadmin: bool = False) -> Dict[str, Any]:
+    def create_user_with_password(
+        self,
+        username: str,
+        password: str,
+        profession: Optional[str] = None,
+        is_superadmin: bool = False,
+    ) -> Dict[str, Any]:
         """Create a new user with a password hash."""
         db = self.get_db()
         try:
@@ -349,17 +365,13 @@ class DatabaseService:
             user = User(
                 name=username,
                 password_hash=hash_password(password),
+                profession=profession,
                 is_superadmin=is_superadmin,
             )
             db.add(user)
             db.commit()
             db.refresh(user)
-            return {
-                "id": user.id,
-                "name": user.name,
-                "created_at": user.created_at.isoformat(),
-                "is_superadmin": bool(user.is_superadmin),
-            }
+            return self._serialize_user(user)
         finally:
             db.close()
 
@@ -372,12 +384,7 @@ class DatabaseService:
                 return None
             if not verify_password(password, user.password_hash):
                 return None
-            return {
-                "id": user.id,
-                "name": user.name,
-                "created_at": user.created_at.isoformat(),
-                "is_superadmin": bool(user.is_superadmin),
-            }
+            return self._serialize_user(user)
         finally:
             db.close()
 
@@ -401,12 +408,7 @@ class DatabaseService:
                 user.is_superadmin = True
                 db.commit()
                 db.refresh(user)
-            return {
-                "id": user.id,
-                "name": user.name,
-                "created_at": user.created_at.isoformat(),
-                "is_superadmin": bool(user.is_superadmin),
-            }
+            return self._serialize_user(user)
         finally:
             db.close()
 
@@ -442,15 +444,7 @@ class DatabaseService:
         db = self.get_db()
         try:
             users = db.query(User).all()
-            return [
-                {
-                    "id": user.id,
-                    "name": user.name,
-                    "created_at": user.created_at.isoformat(),
-                    "is_superadmin": bool(user.is_superadmin),
-                }
-                for user in users
-            ]
+            return [self._serialize_user(user) for user in users]
         finally:
             db.close()
 
@@ -466,15 +460,7 @@ class DatabaseService:
                 return []
             
             users = db.query(User).filter(User.id.in_(user_ids)).all()
-            return [
-                {
-                    "id": user.id,
-                    "name": user.name,
-                    "created_at": user.created_at.isoformat(),
-                    "is_superadmin": bool(user.is_superadmin),
-                }
-                for user in users
-            ]
+            return [self._serialize_user(user) for user in users]
         finally:
             db.close()
 
@@ -718,6 +704,7 @@ class DatabaseService:
                     users.append(
                         {
                             "name": user_name,
+                            "profession": submission.get("profession"),
                             "is_superadmin": False,
                         }
                     )
@@ -801,6 +788,13 @@ class DatabaseService:
             for user in users_payload
             if isinstance(user, dict) and str(user.get("name", "")).strip()
         }
+        declared_user_professions = {
+            str(user.get("name", "")).strip(): (
+                str(user.get("profession", "")).strip() or None
+            )
+            for user in users_payload
+            if isinstance(user, dict) and str(user.get("name", "")).strip()
+        }
 
         db = self.get_db()
         try:
@@ -824,7 +818,11 @@ class DatabaseService:
                 if not isinstance(shape_functions, list):
                     raise ValueError(f"Imported shape-function edits for '{user_name}' must include shape_functions")
 
-                user = self._get_or_create_import_user(db, user_name)
+                user = self._get_or_create_import_user(
+                    db,
+                    user_name,
+                    declared_user_professions.get(user_name),
+                )
                 inserted_any_for_user = False
 
                 for shape_function in shape_functions:
@@ -1089,6 +1087,7 @@ class DatabaseService:
                         "feature_type": feature_type,
                         "user_id": submission["user_id"],
                         "user_name": submission["user_name"],
+                        "profession": submission.get("profession"),
                         "created_at": submission["_latest_created_at"].isoformat(),
                         "sureness": submission["sureness"],
                         "message": submission["message"],

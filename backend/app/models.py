@@ -163,6 +163,7 @@ class UserResponse(BaseModel):
     """Response with user information."""
     id: int
     name: str
+    profession: Optional[str] = None
     created_at: str
     is_new: bool = False
     is_superadmin: bool = False
@@ -174,12 +175,14 @@ class UserRegisterRequest(BaseModel):
     username: str
     password: str
     invite_token: str
+    profession: str
 
 
 class AdminCreateUserRequest(BaseModel):
     """Admin request to create a user."""
     username: str
     password: str
+    profession: str
 
 
 class InviteCreateResponse(BaseModel):

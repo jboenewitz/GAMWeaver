@@ -39,6 +39,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False)
     password_hash = Column(Text, nullable=True, default=None)
+    profession = Column(String(255), nullable=True, default=None)
     is_superadmin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     preferences = Column(JSON, nullable=True, default=None)  # User preferences (chart colors, etc.)
@@ -198,6 +199,10 @@ def init_db():
         if "is_superadmin" not in user_columns:
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN is_superadmin BOOLEAN DEFAULT 0"))
+                conn.commit()
+        if "profession" not in user_columns:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN profession VARCHAR(255) DEFAULT NULL"))
                 conn.commit()
         if "preferences" not in user_columns:
             with engine.connect() as conn:

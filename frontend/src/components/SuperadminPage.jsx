@@ -18,6 +18,7 @@ const SuperadminPage = ({
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newProfession, setNewProfession] = useState("");
   const [creating, setCreating] = useState(false);
   const [inviteLink, setInviteLink] = useState("");
   const [inviteExpires, setInviteExpires] = useState("");
@@ -62,16 +63,21 @@ const SuperadminPage = ({
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    if (!newUsername.trim() || !newPassword) {
-      setError(t("superadmin.error.usernamePasswordRequired"));
+    if (!newUsername.trim() || !newPassword || !newProfession.trim()) {
+      setError(t("superadmin.error.usernamePasswordProfessionRequired"));
       return;
     }
     setCreating(true);
     setError(null);
     try {
-      await apiService.createAdminUser(newUsername.trim(), newPassword);
+      await apiService.createAdminUser(
+        newUsername.trim(),
+        newPassword,
+        newProfession.trim(),
+      );
       setNewUsername("");
       setNewPassword("");
+      setNewProfession("");
       setShowCreateForm(false);
       await fetchUsers();
     } catch (err) {
@@ -366,9 +372,26 @@ const SuperadminPage = ({
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("common.profession")}
+                </label>
+                <input
+                  type="text"
+                  value={newProfession}
+                  onChange={(e) => setNewProfession(e.target.value)}
+                  placeholder={t("superadmin.professionPlaceholder")}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
               <button
                 type="submit"
-                disabled={creating}
+                disabled={
+                  creating ||
+                  !newUsername.trim() ||
+                  !newPassword ||
+                  !newProfession.trim()
+                }
                 className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
               >
                 {creating

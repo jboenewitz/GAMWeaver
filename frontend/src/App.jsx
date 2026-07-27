@@ -208,8 +208,13 @@ function App() {
     handleLogout();
   };
 
-  const handleRegister = async (username, password, inviteToken) => {
-    const user = await apiService.registerUser(username, password, inviteToken);
+  const handleRegister = async (username, password, inviteToken, profession) => {
+    const user = await apiService.registerUser(
+      username,
+      password,
+      inviteToken,
+      profession,
+    );
     setCurrentUser(user);
     localStorage.setItem("currentUser", JSON.stringify(user));
     localStorage.removeItem("superadminToken");

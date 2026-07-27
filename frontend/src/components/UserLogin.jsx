@@ -30,6 +30,7 @@ const formatAuthError = (err, fallback, t) => {
 function UserLogin({ onLogin, onRegister, language = "en" }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [profession, setProfession] = useState("");
   const t = createTranslator(language);
   const inviteToken = useMemo(() => {
     try {
@@ -48,6 +49,10 @@ function UserLogin({ onLogin, onRegister, language = "en" }) {
       setError(t("login.error.enterCredentials"));
       return;
     }
+    if (mode === "register" && !profession.trim()) {
+      setError(t("login.error.professionRequired"));
+      return;
+    }
     if (mode === "register" && !inviteToken) {
       setError(t("login.error.inviteRequired"));
       return;
@@ -60,7 +65,12 @@ function UserLogin({ onLogin, onRegister, language = "en" }) {
       if (mode === "login") {
         await onLogin(username.trim(), password);
       } else {
-        await onRegister(username.trim(), password, inviteToken);
+        await onRegister(
+          username.trim(),
+          password,
+          inviteToken,
+          profession.trim(),
+        );
       }
     } catch (err) {
       const fallback =
@@ -147,6 +157,26 @@ function UserLogin({ onLogin, onRegister, language = "en" }) {
             />
           </div>
 
+          {mode === "register" && (
+            <div>
+              <label
+                htmlFor="profession"
+                className="mb-2 block text-sm font-medium text-slate-100"
+              >
+                {t("common.profession")}
+              </label>
+              <input
+                type="text"
+                id="profession"
+                value={profession}
+                onChange={(e) => setProfession(e.target.value)}
+                placeholder={t("login.professionPlaceholder")}
+                className="w-full rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-white placeholder:text-slate-200/75 transition-all duration-200 focus:border-primary-200 focus:bg-white/15 focus:outline-none focus:ring-2 focus:ring-primary-300/60"
+                disabled={loading}
+              />
+            </div>
+          )}
+
           {mode === "register" && !inviteToken && (
             <div className="rounded-xl border border-amber-200/40 bg-amber-100/20 p-3 text-sm text-amber-100 backdrop-blur-sm">
               {t("login.registerInviteOnly")}
@@ -161,7 +191,12 @@ function UserLogin({ onLogin, onRegister, language = "en" }) {
 
           <button
             type="submit"
-            disabled={loading || !username.trim() || !password}
+            disabled={
+              loading ||
+              !username.trim() ||
+              !password ||
+              (mode === "register" && !profession.trim())
+            }
             className="flex w-full items-center justify-center rounded-xl border border-white/30 bg-gradient-to-r from-primary-500 to-cyan-500 px-4 py-3 font-semibold text-white shadow-lg shadow-primary-900/30 transition-all duration-200 hover:from-primary-400 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? (
