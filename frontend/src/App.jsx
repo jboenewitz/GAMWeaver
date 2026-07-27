@@ -69,6 +69,7 @@ function App() {
   const [dataSummary, setDataSummary] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [shapeFunctions, setShapeFunctions] = useState([]);
+  const [comparisonShapeFunctions, setComparisonShapeFunctions] = useState([]);
   const [predictionsData, setPredictionsData] = useState(null);
   const [hourlyPattern, setHourlyPattern] = useState(null);
   const [comparisonData, setComparisonData] = useState(null);
@@ -225,6 +226,7 @@ function App() {
   const clearTrainedModelState = () => {
     setMetrics(null);
     setShapeFunctions([]);
+    setComparisonShapeFunctions([]);
     setPredictionsData(null);
     setComparisonData(null);
     setUserSavedEdits({});
@@ -327,12 +329,14 @@ function App() {
       setChartLoading(true);
       const response = await apiService.getShapeFunctions();
       setShapeFunctions(response.shape_functions || []);
+      setComparisonShapeFunctions(response.comparison_shape_functions || []);
       // Also fetch initial comparison data after shape functions are loaded
       if (refreshComparison && modelStatus?.analytics_available) {
         await fetchComparisonData();
       }
     } catch (err) {
       console.error("Failed to fetch shape functions:", err);
+      setComparisonShapeFunctions([]);
     } finally {
       setChartLoading(false);
     }
@@ -611,6 +615,51 @@ function App() {
     }
   };
 
+  const handleUploadComparisonDataset = async (file) => {
+    try {
+      setError(null);
+      return await apiService.uploadComparisonDataset(file);
+    } catch (err) {
+      throw new Error(formatApiError(err, t("app.error.uploadDataset")));
+    }
+  };
+
+  const handleLoadComparisonData = async (loadRequest) => {
+    try {
+      setDataLoading(true);
+      setError(null);
+      await apiService.loadComparisonData(loadRequest);
+      await fetchShapeFunctions({
+        refreshComparison: Boolean(modelStatus?.analytics_available),
+      });
+      await fetchModelStatus();
+    } catch (err) {
+      const message = formatApiError(err, t("app.error.loadData"));
+      setError(`${t("app.error.loadData")}: ${message}`);
+      throw new Error(message);
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
+  const handleTrainComparisonModel = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await apiService.trainComparisonModel();
+      await fetchShapeFunctions({
+        refreshComparison: Boolean(modelStatus?.analytics_available),
+      });
+      await fetchModelStatus();
+    } catch (err) {
+      const message = formatApiError(err, t("app.error.trainModel"));
+      setError(`${t("app.error.trainModel")}: ${message}`);
+      throw new Error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePredict = async (inputData) => {
     try {
       setError(null);
@@ -677,6 +726,11 @@ function App() {
         onResetDatabase={handleResetDatabase}
         onExportModel={handleExportModelArtifact}
         onImportModel={handleImportModelArtifact}
+        onUploadComparisonDataset={handleUploadComparisonDataset}
+        onLoadComparisonData={handleLoadComparisonData}
+        onTrainComparisonModel={handleTrainComparisonModel}
+        modelStatus={modelStatus}
+        busy={loading || dataLoading}
         language={language}
       />
     );
@@ -826,6 +880,9 @@ function App() {
         <div className="mt-6">
           <EditableShapeFunctionsGrid
             shapeFunctions={shapeFunctions}
+            comparisonShapeFunctions={
+              currentUser?.is_superadmin ? comparisonShapeFunctions : []
+            }
             loading={chartLoading}
             onShapeFunctionsEdit={handleShapeFunctionsEdit}
             onReset={handleResetShapeFunctions}

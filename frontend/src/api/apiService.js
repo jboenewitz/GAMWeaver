@@ -43,6 +43,25 @@ export const apiService = {
     return response.data;
   },
 
+  uploadComparisonDataset: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post("/comparison/upload", formData, {
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
+  loadComparisonData: async (params = {}) => {
+    const response = await api.post("/comparison/load", params, {
+      headers: adminHeaders(),
+    });
+    return response.data;
+  },
+
   getDataSummary: async () => {
     const response = await api.get("/data/summary");
     return response.data;
@@ -63,6 +82,17 @@ export const apiService = {
     const response = await api.post("/model/train", params, {
       headers: adminHeaders(),
     });
+    return response.data;
+  },
+
+  trainComparisonModel: async () => {
+    const response = await api.post(
+      "/comparison/train",
+      {},
+      {
+        headers: adminHeaders(),
+      },
+    );
     return response.data;
   },
 

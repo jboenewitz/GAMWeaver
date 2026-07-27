@@ -181,6 +181,7 @@ const translations = {
     "shapeFunctions.original": "Original",
     "shapeFunctions.edited": "Edited",
     "shapeFunctions.current": "Current",
+    "shapeFunctions.comparison": "Comparison",
     "shapeFunctions.editPoints": "Edit points",
     "shapeFunctions.effect": "Effect",
     "shapeFunctions.draggingSuffix": "(dragging...)",
@@ -364,8 +365,23 @@ const translations = {
     "superadmin.error.resetDatabase": "Failed to reset database",
     "superadmin.error.exportModel": "Failed to export model",
     "superadmin.error.importModel": "Failed to import model",
+    "superadmin.compareUploadError": "Failed to upload comparison dataset",
+    "superadmin.compareLoadError": "Failed to load comparison dataset",
     "superadmin.title": "Superadmin Overview",
     "superadmin.openCombined": "Open Combined Results",
+    "superadmin.compareDatasets": "Compare datasets",
+    "superadmin.compareDatasetsDescription":
+      "Upload a second dataset, train it with the primary estimator count, and overlay its shape functions in the interactive charts.",
+    "superadmin.compareModalDescription":
+      "The comparison dataset must use the same target column and selected feature columns as the primary dataset.",
+    "superadmin.uploadAndSelectComparison":
+      "Upload & Select Features",
+    "superadmin.trainComparison": "Train Comparison Model",
+    "superadmin.primaryEstimators": "Primary estimators",
+    "superadmin.comparisonDataset": "Comparison dataset",
+    "superadmin.noComparisonDataset": "No comparison dataset loaded",
+    "superadmin.comparisonTrained": "Comparison trained",
+    "superadmin.loadComparisonDataset": "Load Comparison Dataset",
     "superadmin.createUser": "Create User",
     "superadmin.professionPlaceholder": "Enter a profession",
     "superadmin.inviteLink": "Invite Link",
@@ -599,6 +615,7 @@ const translations = {
     "shapeFunctions.original": "Original",
     "shapeFunctions.edited": "Bearbeitet",
     "shapeFunctions.current": "Aktuell",
+    "shapeFunctions.comparison": "Vergleich",
     "shapeFunctions.editPoints": "Punkte bearbeiten",
     "shapeFunctions.effect": "Effekt",
     "shapeFunctions.draggingSuffix": "(wird gezogen...)",
@@ -808,8 +825,25 @@ const translations = {
       "Modell konnte nicht exportiert werden",
     "superadmin.error.importModel":
       "Modell konnte nicht importiert werden",
+    "superadmin.compareUploadError":
+      "Vergleichsdatensatz konnte nicht hochgeladen werden",
+    "superadmin.compareLoadError":
+      "Vergleichsdatensatz konnte nicht geladen werden",
     "superadmin.title": "Superadmin-Uebersicht",
     "superadmin.openCombined": "Kombinierte Ergebnisse oeffnen",
+    "superadmin.compareDatasets": "Datensaetze vergleichen",
+    "superadmin.compareDatasetsDescription":
+      "Lade einen zweiten Datensatz hoch, trainiere ihn mit der Estimator-Anzahl des primaeren Modells und lege seine Shape-Funktionen ueber die interaktiven Diagramme.",
+    "superadmin.compareModalDescription":
+      "Der Vergleichsdatensatz muss dieselbe Zielspalte und dieselben ausgewaehlten Feature-Spalten wie der primaere Datensatz verwenden.",
+    "superadmin.uploadAndSelectComparison":
+      "Hochladen und Features waehlen",
+    "superadmin.trainComparison": "Vergleichsmodell trainieren",
+    "superadmin.primaryEstimators": "Primaere Estimatoren",
+    "superadmin.comparisonDataset": "Vergleichsdatensatz",
+    "superadmin.noComparisonDataset": "Kein Vergleichsdatensatz geladen",
+    "superadmin.comparisonTrained": "Vergleich trainiert",
+    "superadmin.loadComparisonDataset": "Vergleichsdatensatz laden",
     "superadmin.createUser": "Benutzer erstellen",
     "superadmin.professionPlaceholder": "Beruf eingeben",
     "superadmin.inviteLink": "Einladungslink",

@@ -188,10 +188,33 @@ class MLService:
         self.model_source: str = "trained"
         self.imported_artifact_version: Optional[str] = None
         self.analytics_available = False
+        self.primary_n_estimators: Optional[int] = None
 
         # Store original shape functions for interactive editing
         self.original_shape_functions: Dict[str, Dict[str, Any]] = {}
         self.shape_function_offsets: Dict[str, Dict[Any, float]] = {}
+
+        # Comparison dataset/model runtime (superadmin-only analysis state)
+        self.comparison_model: Optional[Any] = None
+        self.comparison_preprocessor = None
+        self.comparison_X_train: Optional[pd.DataFrame] = None
+        self.comparison_X_test: Optional[pd.DataFrame] = None
+        self.comparison_y_train: Optional[pd.DataFrame] = None
+        self.comparison_y_test: Optional[pd.DataFrame] = None
+        self.comparison_df: Optional[pd.DataFrame] = None
+        self.comparison_is_trained = False
+        self.comparison_feature_names: List[str] = []
+        self.comparison_selected_feature_columns: List[str] = []
+        self.comparison_cat_features: List[str] = []
+        self.comparison_num_features: List[str] = []
+        self.comparison_target_column: Optional[str] = None
+        self.comparison_feature_schema: List[Dict[str, Any]] = []
+        self.comparison_feature_schema_map: Dict[str, Dict[str, Any]] = {}
+        self.comparison_original_shape_functions: Dict[str, Dict[str, Any]] = {}
+        self.comparison_shape_function_offsets: Dict[str, Dict[Any, float]] = {}
+        self.comparison_dataset_id: Optional[str] = None
+        self.comparison_dataset_path: Optional[str] = None
+        self.comparison_dataset_name: Optional[str] = None
 
         # Dataset persistence
         backend_dir = Path(__file__).resolve().parent.parent
@@ -208,6 +231,59 @@ class MLService:
 
         self._restore_active_dataset_metadata()
         self._auto_load_persisted_dataset()
+
+    def _clear_comparison_state(self) -> None:
+        self.comparison_model = None
+        self.comparison_preprocessor = None
+        self.comparison_X_train = None
+        self.comparison_X_test = None
+        self.comparison_y_train = None
+        self.comparison_y_test = None
+        self.comparison_df = None
+        self.comparison_is_trained = False
+        self.comparison_feature_names = []
+        self.comparison_selected_feature_columns = []
+        self.comparison_cat_features = []
+        self.comparison_num_features = []
+        self.comparison_target_column = None
+        self.comparison_feature_schema = []
+        self.comparison_feature_schema_map = {}
+        self.comparison_original_shape_functions = {}
+        self.comparison_shape_function_offsets = {}
+        self.comparison_dataset_id = None
+        self.comparison_dataset_path = None
+        self.comparison_dataset_name = None
+
+    def _snapshot_runtime_state(self) -> Dict[str, Any]:
+        return {
+            "model": self.model,
+            "preprocessor": self.preprocessor,
+            "X_train": self.X_train,
+            "X_test": self.X_test,
+            "y_train": self.y_train,
+            "y_test": self.y_test,
+            "df": self.df,
+            "is_trained": self.is_trained,
+            "feature_names": list(self.feature_names),
+            "selected_feature_columns": list(self.selected_feature_columns),
+            "cat_features": list(self.cat_features),
+            "num_features": list(self.num_features),
+            "target_column": self.target_column,
+            "feature_schema": list(self.feature_schema),
+            "feature_schema_map": dict(self.feature_schema_map),
+            "original_shape_functions": dict(self.original_shape_functions),
+            "shape_function_offsets": {
+                feature: dict(offsets)
+                for feature, offsets in self.shape_function_offsets.items()
+            },
+            "model_source": self.model_source,
+            "imported_artifact_version": self.imported_artifact_version,
+            "analytics_available": self.analytics_available,
+        }
+
+    def _restore_runtime_state(self, snapshot: Dict[str, Any]) -> None:
+        for key, value in snapshot.items():
+            setattr(self, key, value)
 
     # ==================== Dataset management ====================
 
@@ -1146,9 +1222,11 @@ class MLService:
         self.model_source = "imported"
         self.imported_artifact_version = validated["artifact_version"]
         self.analytics_available = False
+        self.primary_n_estimators = None
         self.active_dataset_id = None
         self.active_dataset_path = None
         self.active_dataset_name = None
+        self._clear_comparison_state()
         self.active_dataset_file.unlink(missing_ok=True)
 
         return {
@@ -1223,6 +1301,21 @@ class MLService:
             "analytics_available": self.analytics_available,
             "shape_functions_available": self._shape_functions_available(),
             "imported_artifact_version": self.imported_artifact_version,
+            "comparison_available": self.comparison_is_trained,
+            "comparison_data_loaded": self.comparison_X_train is not None,
+            "comparison_is_trained": self.comparison_is_trained,
+            "comparison_dataset_name": self.comparison_dataset_name
+            or (
+                Path(self.comparison_dataset_path).name
+                if self.comparison_dataset_path
+                else None
+            ),
+            "comparison_train_size": (
+                len(self.comparison_X_train)
+                if self.comparison_X_train is not None
+                else 0
+            ),
+            "primary_n_estimators": self.primary_n_estimators,
         }
 
     def _reset_runtime_state(self) -> None:
@@ -1243,6 +1336,7 @@ class MLService:
         self.model_source = "trained"
         self.imported_artifact_version = None
         self.analytics_available = False
+        self.primary_n_estimators = None
         self.original_shape_functions = {}
         self.shape_function_offsets = {}
         self.target_column = None
@@ -1250,6 +1344,7 @@ class MLService:
         self.active_dataset_path = None
         self.active_dataset_name = None
         self.feature_chart_settings = {}
+        self._clear_comparison_state()
 
     def reset_all_data(self) -> Dict[str, int]:
         """
@@ -1425,6 +1520,8 @@ class MLService:
             self.active_dataset_name = Path(self.active_dataset_path).name if self.active_dataset_path else None
         self._persist_active_dataset_metadata()
 
+        self._clear_comparison_state()
+
         dataset_changed = (
             previous_dataset_path != self.active_dataset_path
             or previous_target != self.target_column
@@ -1445,6 +1542,170 @@ class MLService:
             "dataset_changed": dataset_changed,
         }
 
+    def _validate_comparison_dataset_selection(
+        self,
+        *,
+        target_column: str,
+        feature_columns: List[str],
+    ) -> None:
+        if not self.is_trained or not self.primary_n_estimators:
+            raise ValueError(
+                "Train the primary model first so the comparison model can inherit its estimator count"
+            )
+        if target_column != self.target_column:
+            raise ValueError(
+                "Comparison dataset target column must match the primary dataset target column exactly"
+            )
+        if list(feature_columns) != list(self.selected_feature_columns):
+            raise ValueError(
+                "Comparison dataset feature columns must match the primary dataset selected feature columns exactly"
+            )
+
+    def _validate_comparison_feature_schema(
+        self,
+        feature_schema: List[Dict[str, Any]],
+    ) -> None:
+        """Validate comparison dataset feature compatibility without requiring identical derived defaults."""
+        incoming_schema_map = {
+            str(item["name"]): item
+            for item in feature_schema
+            if isinstance(item, dict) and item.get("name")
+        }
+        primary_schema_map = {
+            str(item["name"]): item
+            for item in self.feature_schema
+            if isinstance(item, dict) and item.get("name")
+        }
+
+        for feature_name in self.selected_feature_columns:
+            primary_schema = primary_schema_map.get(feature_name)
+            comparison_schema = incoming_schema_map.get(feature_name)
+            if primary_schema is None or comparison_schema is None:
+                raise ValueError(
+                    f"Comparison dataset schema is incompatible: missing schema for '{feature_name}'"
+                )
+
+            primary_type = str(primary_schema.get("feature_type"))
+            comparison_type = str(comparison_schema.get("feature_type"))
+            if primary_type != comparison_type:
+                raise ValueError(
+                    f"Comparison dataset schema is incompatible: feature type mismatch for '{feature_name}'"
+                )
+
+            if primary_type == "categorical":
+                primary_options = {
+                    str(value)
+                    for value in (primary_schema.get("categorical_options") or [])
+                }
+                comparison_options = {
+                    str(value)
+                    for value in (comparison_schema.get("categorical_options") or [])
+                }
+                if not comparison_options.issubset(primary_options):
+                    raise ValueError(
+                        f"Comparison dataset schema is incompatible: categorical values for '{feature_name}' are not representable by the primary dataset schema"
+                    )
+
+    def load_comparison_data(
+        self,
+        dataset_id: Optional[str] = None,
+        dataset_name: Optional[str] = None,
+        target_column: Optional[str] = None,
+        feature_columns: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Load and validate a second dataset for shape-function comparison."""
+        resolved_path, resolved_dataset_id = self._resolve_dataset_path(dataset_id)
+        (
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            preprocessor,
+            df_loaded,
+            resolved_target,
+            selected_features,
+            cat_features,
+            num_features,
+        ) = prepare_training_data(
+            csv_path=str(resolved_path),
+            target_column=target_column,
+            feature_columns=feature_columns,
+        )
+
+        selected_features = list(selected_features)
+        self._validate_comparison_dataset_selection(
+            target_column=resolved_target,
+            feature_columns=selected_features,
+        )
+
+        X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
+        rebuilt_feature_schema = self._build_feature_schema_for(
+            list(X_train.columns),
+            list(num_features),
+            X_all,
+        )
+        self._validate_comparison_feature_schema(rebuilt_feature_schema)
+
+        self.comparison_model = None
+        self.comparison_is_trained = False
+        self.comparison_original_shape_functions = {}
+        self.comparison_shape_function_offsets = {}
+        self.comparison_X_train = X_train
+        self.comparison_X_test = X_test
+        self.comparison_y_train = y_train
+        self.comparison_y_test = y_test
+        self.comparison_preprocessor = preprocessor
+        self.comparison_df = df_loaded
+        self.comparison_feature_names = list(X_train.columns)
+        self.comparison_selected_feature_columns = selected_features
+        self.comparison_cat_features = list(cat_features)
+        self.comparison_num_features = list(num_features)
+        self.comparison_target_column = resolved_target
+        self.comparison_feature_schema = rebuilt_feature_schema
+        self.comparison_feature_schema_map = {
+            item["name"]: item for item in rebuilt_feature_schema
+        }
+        self.comparison_dataset_id = resolved_dataset_id
+        self.comparison_dataset_path = str(resolved_path)
+        self.comparison_dataset_name = (
+            Path(str(dataset_name)).name
+            if dataset_name
+            else Path(str(resolved_path)).name
+        )
+
+        return {
+            "total_records": len(df_loaded),
+            "train_size": len(X_train),
+            "test_size": len(X_test),
+            "features": list(X_train.columns),
+            "target_column": resolved_target,
+            "selected_feature_columns": selected_features,
+            "dataset_id": self.comparison_dataset_id,
+            "dataset_name": self.comparison_dataset_name,
+            "primary_n_estimators": self.primary_n_estimators,
+        }
+
+    def train_comparison_model(self) -> int:
+        """Train the comparison model using the primary model's estimator count."""
+        if not self.is_trained or not self.primary_n_estimators:
+            raise ValueError(
+                "Train the primary model first so the comparison model can inherit its estimator count"
+            )
+        if self.comparison_X_train is None or self.comparison_y_train is None:
+            raise ValueError("Load a comparison dataset first")
+
+        self.comparison_model = IGANN(
+            task="regression",
+            n_estimators=self.primary_n_estimators,
+            verbose=0,
+            scale_y=True,
+        )
+        self.comparison_model.fit(self.comparison_X_train, self.comparison_y_train)
+        self.comparison_is_trained = True
+        self.comparison_original_shape_functions = {}
+        self.comparison_shape_function_offsets = {}
+        return int(self.primary_n_estimators)
+
     # ==================== Model lifecycle ====================
 
     def train_model(self, n_estimators: int = 100) -> Dict[str, float]:
@@ -1463,8 +1724,10 @@ class MLService:
         self.model_source = "trained"
         self.imported_artifact_version = None
         self.analytics_available = self._has_analytics_data()
+        self.primary_n_estimators = int(n_estimators)
         self.original_shape_functions = {}
         self.shape_function_offsets = {}
+        self._clear_comparison_state()
 
         metrics = self.evaluate_model()
         return metrics
@@ -1607,6 +1870,51 @@ class MLService:
 
         self.shape_function_offsets = {}
         return shape_functions
+
+    def get_comparison_shape_functions(self) -> List[Dict[str, Any]]:
+        """Get shape function data for the comparison model, aligned to primary features."""
+        if not self.comparison_is_trained or self.comparison_model is None:
+            return []
+
+        snapshot = self._snapshot_runtime_state()
+        try:
+            self.model = self.comparison_model
+            self.preprocessor = self.comparison_preprocessor
+            self.X_train = self.comparison_X_train
+            self.X_test = self.comparison_X_test
+            self.y_train = self.comparison_y_train
+            self.y_test = self.comparison_y_test
+            self.df = self.comparison_df
+            self.is_trained = self.comparison_is_trained
+            self.feature_names = list(self.comparison_feature_names)
+            self.selected_feature_columns = list(
+                self.comparison_selected_feature_columns
+            )
+            self.cat_features = list(self.comparison_cat_features)
+            self.num_features = list(self.comparison_num_features)
+            self.target_column = self.comparison_target_column
+            self.feature_schema = list(self.comparison_feature_schema)
+            self.feature_schema_map = dict(self.comparison_feature_schema_map)
+            self.original_shape_functions = dict(
+                self.comparison_original_shape_functions
+            )
+            self.shape_function_offsets = {
+                feature: dict(offsets)
+                for feature, offsets in self.comparison_shape_function_offsets.items()
+            }
+            self.model_source = "trained"
+            self.imported_artifact_version = None
+            self.analytics_available = False
+
+            shape_functions = self.get_shape_functions()
+            self.comparison_original_shape_functions = {
+                shape_function["feature_name"]: shape_function
+                for shape_function in shape_functions
+            }
+            self.comparison_shape_function_offsets = {}
+            return shape_functions
+        finally:
+            self._restore_runtime_state(snapshot)
 
     def _build_shape_baseline(self) -> Dict[str, Any]:
         baseline: Dict[str, Any] = {}

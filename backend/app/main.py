@@ -13,9 +13,11 @@ from .models import (
     BatchPredictionOutput,
     ModelMetrics,
     DataLoadRequest,
+    ComparisonDataLoadRequest,
     DatasetUploadResponse,
     TrainModelRequest,
     TrainModelResponse,
+    ComparisonTrainResponse,
     ModelImportResponse,
     ModelStatusResponse,
     EditedShapeFunctionsRequest,
@@ -183,6 +185,50 @@ async def load_data(http_request: Request, request: Optional[DataLoadRequest] = 
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/comparison/upload", response_model=DatasetUploadResponse)
+async def upload_comparison_data(request: Request, file: UploadFile = File(...)):
+    """Upload CSV and return columns for comparison target selection (superadmin only)."""
+    try:
+        _require_superadmin(request)
+        file_name = file.filename or "dataset.csv"
+        file_bytes = await file.read()
+        preview = ml_service.inspect_uploaded_dataset(file_name, file_bytes)
+        return DatasetUploadResponse(**preview)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/comparison/load")
+async def load_comparison_data(
+    http_request: Request,
+    request: Optional[ComparisonDataLoadRequest] = None,
+):
+    """Load and prepare a comparison dataset without replacing the active dataset."""
+    try:
+        _require_superadmin(http_request)
+        if request is None:
+            request = ComparisonDataLoadRequest()
+        result = ml_service.load_comparison_data(
+            dataset_id=request.dataset_id,
+            dataset_name=request.dataset_name,
+            target_column=request.target_column,
+            feature_columns=request.feature_columns,
+        )
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/data/summary")
 async def get_data_summary():
     """Get summary statistics of the dataset."""
@@ -241,6 +287,25 @@ async def train_model(http_request: Request, request: Optional[TrainModelRequest
         )
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/comparison/train", response_model=ComparisonTrainResponse)
+async def train_comparison_model(http_request: Request):
+    """Train the comparison IGANN model using the primary model's estimator count."""
+    try:
+        _require_superadmin(http_request)
+        inherited_n_estimators = ml_service.train_comparison_model()
+        return ComparisonTrainResponse(
+            success=True,
+            message="Comparison model trained successfully",
+            inherited_n_estimators=inherited_n_estimators,
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -331,7 +396,11 @@ async def get_shape_functions():
             raise HTTPException(status_code=400, detail="Model not trained yet")
         
         shape_functions = ml_service.get_shape_functions()
-        return {"shape_functions": shape_functions}
+        comparison_shape_functions = ml_service.get_comparison_shape_functions()
+        return {
+            "shape_functions": shape_functions,
+            "comparison_shape_functions": comparison_shape_functions,
+        }
     except HTTPException:
         raise
     except Exception as e:

@@ -113,6 +113,27 @@ class ModelStatusResponse(BaseModel):
     analytics_available: bool = False
     shape_functions_available: bool = False
     imported_artifact_version: Optional[str] = None
+    comparison_available: bool = False
+    comparison_data_loaded: bool = False
+    comparison_is_trained: bool = False
+    comparison_dataset_name: Optional[str] = None
+    comparison_train_size: int = 0
+    primary_n_estimators: Optional[int] = None
+
+
+class ComparisonDataLoadRequest(BaseModel):
+    """Request to load a selected comparison dataset."""
+    dataset_id: Optional[str] = None
+    dataset_name: Optional[str] = None
+    target_column: Optional[str] = None
+    feature_columns: Optional[List[str]] = None
+
+
+class ComparisonTrainResponse(BaseModel):
+    """Response after training the comparison model."""
+    success: bool
+    message: str
+    inherited_n_estimators: int
 
 
 class EditedShapePoint(BaseModel):

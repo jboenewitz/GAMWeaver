@@ -268,6 +268,7 @@ const BrushHardnessControl = ({
 
 const EditableShapeFunctionChart = ({
   shapeFunction,
+  comparisonShapeFunction = null,
   editedPoints,
   onPointEdit,
   isEditing,
@@ -902,6 +903,21 @@ const EditableShapeFunctionChart = ({
       hovertemplate: `<b>%{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra></extra>`,
     };
 
+    const comparisonTrace =
+      comparisonShapeFunction &&
+      Array.isArray(comparisonShapeFunction.x_values) &&
+      Array.isArray(comparisonShapeFunction.y_values)
+        ? {
+            x: comparisonShapeFunction.x_values,
+            y: comparisonShapeFunction.y_values,
+            type: "scatter",
+            mode: "lines",
+            name: t("shapeFunctions.comparison"),
+            line: { color: "#f97316", width: 2, dash: "dot" },
+            hovertemplate: `<b>%{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra>${t("shapeFunctions.comparison")}</extra>`,
+          }
+        : null;
+
     const dragHighlightTraces =
       isDragging && dragXValue !== null && dragCurvePoints.length > 1
         ? buildDragHighlightSegments(
@@ -950,6 +966,7 @@ const EditableShapeFunctionChart = ({
     data = [
       ...(hasEdits ? [originalTrace] : []),
       currentTrace,
+      ...(comparisonTrace ? [comparisonTrace] : []),
       ...dragHighlightTraces,
       ...(editMarkersTrace ? [editMarkersTrace] : []),
     ];
@@ -994,8 +1011,31 @@ const EditableShapeFunctionChart = ({
       },
       hovertemplate: `<b>%{customdata}</b><br>Effect: %{y:.3f}<extra></extra>`,
     };
+    const comparisonTrace =
+      comparisonShapeFunction &&
+      Array.isArray(comparisonShapeFunction.x_values) &&
+      Array.isArray(comparisonShapeFunction.y_values)
+        ? {
+            x: comparisonShapeFunction.x_values,
+            y: comparisonShapeFunction.y_values,
+            type: "bar",
+            name: t("shapeFunctions.comparison"),
+            customdata:
+              comparisonShapeFunction.x_tick_labels ||
+              comparisonShapeFunction.x_values,
+            marker: {
+              color: "rgba(249, 115, 22, 0.45)",
+              line: { color: "#ea580c", width: 1 },
+            },
+            hovertemplate: `<b>%{customdata}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra>${t("shapeFunctions.comparison")}</extra>`,
+          }
+        : null;
 
-    data = hasEdits ? [originalTrace, editableTrace] : [editableTrace];
+    data = [
+      ...(hasEdits ? [originalTrace] : []),
+      editableTrace,
+      ...(comparisonTrace ? [comparisonTrace] : []),
+    ];
   }
 
   // No drag crosshair shapes for numeric dragging; highlight is shown directly on the line.
@@ -1051,7 +1091,7 @@ const EditableShapeFunctionChart = ({
     height: enlarged ? 520 : 280,
     dragmode: false,
     hovermode: "closest",
-    showlegend: hasEdits,
+    showlegend: hasEdits || Boolean(comparisonShapeFunction),
     legend: {
       orientation: "h",
       x: 0,
@@ -1578,6 +1618,7 @@ const FeatureChartSettingsModal = ({
 // Individual Feature Card with its own submit button
 const FeatureEditCard = ({
   shapeFunction,
+  comparisonShapeFunction = null,
   editedPoints,
   unsavedEditedPoints,
   onPointEdit,
@@ -1722,6 +1763,7 @@ const FeatureEditCard = ({
 
       <EditableShapeFunctionChart
         shapeFunction={shapeFunction}
+        comparisonShapeFunction={comparisonShapeFunction}
         editedPoints={editedPoints}
         onPointEdit={onPointEdit}
         isEditing={isEditing}
@@ -1810,6 +1852,7 @@ const FeatureEditCard = ({
                   )}
                 <EditableShapeFunctionChart
                   shapeFunction={shapeFunction}
+                  comparisonShapeFunction={comparisonShapeFunction}
                   editedPoints={editedPoints}
                   onPointEdit={onPointEdit}
                   isEditing={isEditing}
@@ -1867,6 +1910,7 @@ const FeatureEditCard = ({
 
 const EditableShapeFunctionsGrid = ({
   shapeFunctions,
+  comparisonShapeFunctions = [],
   loading,
   onShapeFunctionsEdit,
   onReset,
@@ -1886,6 +1930,13 @@ const EditableShapeFunctionsGrid = ({
   const [syncAxes, setSyncAxes] = useState(false);
   const [brushHardness, setBrushHardness] = useState(50);
   const [chartSettingsFeature, setChartSettingsFeature] = useState(null);
+  const comparisonShapeFunctionMap = useMemo(
+    () =>
+      new Map(
+        (comparisonShapeFunctions || []).map((sf) => [sf.feature_name, sf]),
+      ),
+    [comparisonShapeFunctions],
+  );
   const hasNumericCharts = useMemo(
     () =>
       Array.isArray(shapeFunctions) &&
@@ -2244,6 +2295,9 @@ const EditableShapeFunctionsGrid = ({
           <FeatureEditCard
             key={sf.feature_name || index}
             shapeFunction={sf}
+            comparisonShapeFunction={
+              comparisonShapeFunctionMap.get(sf.feature_name) || null
+            }
             editedPoints={getMergedEditedPoints(sf.feature_name)}
             unsavedEditedPoints={editedPoints[sf.feature_name] || []}
             onPointEdit={handlePointEdit}

@@ -8,6 +8,11 @@ const SuperadminPage = ({
   onResetDatabase,
   onExportModel,
   onImportModel,
+  onUploadComparisonDataset,
+  onLoadComparisonData,
+  onTrainComparisonModel,
+  modelStatus,
+  busy = false,
   language = "en",
 }) => {
   const t = createTranslator(language);
@@ -30,6 +35,22 @@ const SuperadminPage = ({
   const [exportingModel, setExportingModel] = useState(false);
   const [importingModel, setImportingModel] = useState(false);
   const importInputRef = useRef(null);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [comparisonFile, setComparisonFile] = useState(null);
+  const [comparisonUploading, setComparisonUploading] = useState(false);
+  const [comparisonPreview, setComparisonPreview] = useState(null);
+  const [comparisonTargetColumn, setComparisonTargetColumn] = useState("");
+  const [comparisonFeatureColumns, setComparisonFeatureColumns] = useState([]);
+  const [comparisonExpanded, setComparisonExpanded] = useState(false);
+
+  const resetComparisonModal = () => {
+    setComparisonFile(null);
+    setComparisonUploading(false);
+    setComparisonPreview(null);
+    setComparisonTargetColumn("");
+    setComparisonFeatureColumns([]);
+    setComparisonExpanded(false);
+  };
 
   const appBaseUrl = useMemo(() => {
     const configured = import.meta.env.VITE_PUBLIC_APP_URL;
@@ -194,6 +215,67 @@ const SuperadminPage = ({
     }
   };
 
+  const handleInspectComparisonUpload = async () => {
+    if (!comparisonFile || !onUploadComparisonDataset) {
+      setError(t("training.error.chooseCsvFirst"));
+      return;
+    }
+    setComparisonUploading(true);
+    setError(null);
+    try {
+      const preview = await onUploadComparisonDataset(comparisonFile);
+      const defaultTarget =
+        preview.default_target_column || preview.columns?.[0] || "";
+      setComparisonPreview(preview);
+      setComparisonTargetColumn(defaultTarget);
+      setComparisonFeatureColumns(
+        (preview.columns || []).filter((column) => column !== defaultTarget),
+      );
+    } catch (err) {
+      setError(err.message || t("superadmin.compareUploadError"));
+    } finally {
+      setComparisonUploading(false);
+    }
+  };
+
+  const handleLoadComparisonDataset = async () => {
+    if (
+      !comparisonPreview?.dataset_id ||
+      !comparisonTargetColumn ||
+      !comparisonFeatureColumns.length ||
+      !onLoadComparisonData
+    ) {
+      setError(t("training.error.uploadNeedsSelections"));
+      return;
+    }
+    setComparisonUploading(true);
+    setError(null);
+    try {
+      await onLoadComparisonData({
+        dataset_id: comparisonPreview.dataset_id,
+        dataset_name: comparisonPreview.original_filename,
+        target_column: comparisonTargetColumn,
+        feature_columns: comparisonFeatureColumns,
+      });
+      setShowCompareModal(false);
+      resetComparisonModal();
+    } catch (err) {
+      setError(err.message || t("superadmin.compareLoadError"));
+    } finally {
+      setComparisonUploading(false);
+    }
+  };
+
+  const handleTrainComparison = async () => {
+    if (!onTrainComparisonModel) return;
+    setError(null);
+    try {
+      await onTrainComparisonModel();
+    } catch (_) {
+      // parent already surfaces a formatted error
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
@@ -229,6 +311,16 @@ const SuperadminPage = ({
               {t("superadmin.openCombined")}
             </button>
             <button
+              onClick={() => {
+                setError(null);
+                setShowCompareModal(true);
+                resetComparisonModal();
+              }}
+              className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors"
+            >
+              {t("superadmin.compareDatasets")}
+            </button>
+            <button
               onClick={() => setShowCreateForm((prev) => !prev)}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
             >
@@ -251,6 +343,57 @@ const SuperadminPage = ({
             {modelTransferMessage}
           </div>
         )}
+
+        <section className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">
+                {t("superadmin.compareDatasets")}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {t("superadmin.compareDatasetsDescription")}
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setError(null);
+                  setShowCompareModal(true);
+                  resetComparisonModal();
+                }}
+                disabled={busy}
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
+              >
+                {t("superadmin.uploadAndSelectComparison")}
+              </button>
+              <button
+                onClick={handleTrainComparison}
+                disabled={
+                  busy ||
+                  !modelStatus?.comparison_data_loaded ||
+                  !modelStatus?.primary_n_estimators
+                }
+                className="px-4 py-2 bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 transition-colors disabled:opacity-50"
+              >
+                {t("superadmin.trainComparison")}
+              </button>
+            </div>
+          </div>
+          <div className="mt-4 space-y-2 text-sm text-gray-600">
+            <div>
+              {t("superadmin.primaryEstimators")}:{" "}
+              {modelStatus?.primary_n_estimators ?? t("common.no")}
+            </div>
+            <div>
+              {t("superadmin.comparisonDataset")}:{" "}
+              {modelStatus?.comparison_dataset_name || t("superadmin.noComparisonDataset")}
+            </div>
+            <div>
+              {t("superadmin.comparisonTrained")}:{" "}
+              {modelStatus?.comparison_is_trained ? t("common.yes") : t("common.no")}
+            </div>
+          </div>
+        </section>
 
         <section className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center justify-between gap-4 mb-4">
@@ -536,6 +679,158 @@ const SuperadminPage = ({
               >
                 {exportingModel ? t("superadmin.exporting") : t("superadmin.exportConfirmAction")}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCompareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-xl mx-4 w-full max-w-3xl p-6">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">
+                  {t("superadmin.compareDatasets")}
+                </h3>
+                <p className="text-sm text-slate-600">
+                  {t("superadmin.compareModalDescription")}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCompareModal(false);
+                  resetComparisonModal();
+                }}
+                className="px-3 py-2 border border-slate-300 rounded-lg hover:bg-slate-50"
+              >
+                {t("common.close")}
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t("training.csvFile")}
+                </label>
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  onChange={(e) => setComparisonFile(e.target.files?.[0] || null)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                />
+              </div>
+              <button
+                onClick={handleInspectComparisonUpload}
+                disabled={comparisonUploading}
+                className="px-4 py-2 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors disabled:opacity-50"
+              >
+                {comparisonUploading
+                  ? t("training.uploading")
+                  : t("training.uploadInspect")}
+              </button>
+
+              {comparisonPreview && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-4">
+                  <div className="text-sm text-slate-700">
+                    {t("training.columnsDetected")}: {comparisonPreview.columns?.length || 0}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {t("training.targetColumn")}
+                    </label>
+                    <select
+                      value={comparisonTargetColumn}
+                      onChange={(e) => {
+                        const nextTarget = e.target.value;
+                        setComparisonTargetColumn(nextTarget);
+                        setComparisonFeatureColumns((prev) =>
+                          prev.filter((column) => column !== nextTarget),
+                        );
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                    >
+                      {(comparisonPreview.columns || []).map((column) => (
+                        <option key={column} value={column}>
+                          {column}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        {t("training.featureColumns")}
+                      </label>
+                      <button
+                        onClick={() => setComparisonExpanded((prev) => !prev)}
+                        className="text-sm text-sky-700 hover:text-sky-800"
+                      >
+                        {comparisonExpanded
+                          ? t("training.collapseFeatureColumns")
+                          : t("training.expandFeatureColumns")}
+                      </button>
+                    </div>
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        onClick={() =>
+                          setComparisonFeatureColumns(
+                            (comparisonPreview.columns || []).filter(
+                              (column) => column !== comparisonTargetColumn,
+                            ),
+                          )
+                        }
+                        className="px-3 py-1 text-sm border rounded-lg hover:bg-white"
+                      >
+                        {t("training.selectAll")}
+                      </button>
+                      <button
+                        onClick={() => setComparisonFeatureColumns([])}
+                        className="px-3 py-1 text-sm border rounded-lg hover:bg-white"
+                      >
+                        {t("training.clearAll")}
+                      </button>
+                    </div>
+                    <div
+                      className={`grid grid-cols-1 sm:grid-cols-2 gap-2 ${
+                        comparisonExpanded ? "" : "max-h-40 overflow-y-auto"
+                      }`}
+                    >
+                      {(comparisonPreview.columns || [])
+                        .filter((column) => column !== comparisonTargetColumn)
+                        .map((column) => (
+                          <label
+                            key={column}
+                            className="flex items-center gap-2 text-sm text-slate-700"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={comparisonFeatureColumns.includes(column)}
+                              onChange={() =>
+                                setComparisonFeatureColumns((prev) =>
+                                  prev.includes(column)
+                                    ? prev.filter((item) => item !== column)
+                                    : [...prev, column],
+                                )
+                              }
+                            />
+                            <span>{column}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleLoadComparisonDataset}
+                    disabled={comparisonUploading}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                  >
+                    {comparisonUploading
+                      ? t("training.loadingDataset")
+                      : t("superadmin.loadComparisonDataset")}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
