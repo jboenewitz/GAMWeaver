@@ -236,6 +236,287 @@ const hasShapeFunctionDistribution = (distribution) => {
   return false;
 };
 
+const getFeatureProvenance = (featureSchemaEntry) =>
+  featureSchemaEntry?.feature_provenance || null;
+
+const getConstructionLabel = (constructionType, t) => {
+  switch (constructionType) {
+    case "item_mean":
+      return t("shapeFunctions.detailsItemMean");
+    case "iqb_scale":
+      return t("shapeFunctions.detailsIqbScale");
+    case "raw_source":
+      return t("shapeFunctions.detailsRawSource");
+    default:
+      return t("shapeFunctions.detailsUnknownConstruction");
+  }
+};
+
+const buildSourceRows = (provenance) => {
+  if (!provenance) return [];
+  if (Array.isArray(provenance.source_details) && provenance.source_details.length) {
+    return provenance.source_details.filter(
+      (row) => row && (row.variable || row.label),
+    );
+  }
+  const sourceVariables = Array.isArray(provenance.source_variables)
+    ? provenance.source_variables
+    : [];
+  const sourceLabels = Array.isArray(provenance.source_labels)
+    ? provenance.source_labels
+    : [];
+  const maxLength = Math.max(sourceVariables.length, sourceLabels.length);
+
+  return Array.from({ length: maxLength }, (_, index) => ({
+    variable: sourceVariables[index] || "",
+    label: sourceLabels[index] || "",
+  })).filter((row) => row.variable || row.label);
+};
+
+const FeatureDetailsDrawer = ({
+  isOpen,
+  featureName,
+  featureSchemaEntry,
+  onClose,
+  t,
+}) => {
+  const provenance = getFeatureProvenance(featureSchemaEntry);
+  const sourceRows = buildSourceRows(provenance);
+  const sourceVariables = Array.isArray(provenance?.source_variables)
+    ? provenance.source_variables
+    : [];
+  const sharedResponseOptions = Array.isArray(provenance?.response_options)
+    ? provenance.response_options
+    : [];
+  const hasMetadata = Boolean(provenance);
+  const constructionLabel = getConstructionLabel(
+    provenance?.construction_type,
+    t,
+  );
+
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1100] flex justify-end bg-slate-900/35 backdrop-blur-[1px]"
+      onClick={onClose}
+    >
+      <aside
+        className="flex h-full w-full max-w-xl flex-col overflow-hidden bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                {t("shapeFunctions.detailsDrawerTitle")}
+              </p>
+              <h3 className="mt-1 text-lg font-semibold text-slate-900">
+                {featureName}
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                {t("shapeFunctions.detailsSummary")}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+              title={t("common.close")}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {t("shapeFunctions.detailsConstruction")}
+              </div>
+              <div className="mt-1 text-sm font-medium text-slate-800">
+                {constructionLabel}
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {t("shapeFunctions.detailsCategory")}
+              </div>
+              <div className="mt-1 text-sm font-medium text-slate-800">
+                {provenance?.category ||
+                  featureSchemaEntry?.feature_type ||
+                  t("common.unknown")}
+              </div>
+            </div>
+          </div>
+
+          {provenance?.source_count > 0 && (
+            <div className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              {t("shapeFunctions.detailsSourceCount", {
+                count: provenance.source_count,
+              })}
+            </div>
+          )}
+
+          {!hasMetadata && (
+            <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              {t("shapeFunctions.detailsUnavailable")}
+            </div>
+          )}
+
+          {sourceVariables.length > 0 && (
+            <section className="mt-6">
+              <h4 className="text-sm font-semibold text-slate-800">
+                {t("shapeFunctions.detailsSourceVariables")}
+              </h4>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {sourceVariables.map((variable) => (
+                  <code
+                    key={variable}
+                    className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                  >
+                    {variable}
+                  </code>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {sharedResponseOptions.length > 0 && (
+            <section className="mt-6">
+              <h4 className="text-sm font-semibold text-slate-800">
+                {t("shapeFunctions.detailsAnswerScale")}
+              </h4>
+              <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <div className="space-y-2">
+                  {sharedResponseOptions.map((option, index) => (
+                    <div
+                      key={`${option?.value || "option"}-${index}`}
+                      className="flex items-start gap-3 text-sm text-slate-700"
+                    >
+                      <span className="min-w-[3rem] rounded-md bg-white px-2 py-1 text-center font-mono text-xs text-slate-600 shadow-sm">
+                        {option?.value || "?"}
+                      </span>
+                      <span className="pt-1">{option?.label || ""}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {sourceRows.length > 0 && (
+            <section className="mt-6">
+              <h4 className="text-sm font-semibold text-slate-800">
+                {t("shapeFunctions.detailsSourceQuestions")}
+              </h4>
+              <div className="mt-3 space-y-3">
+                {sourceRows.map((row, index) => (
+                  <div
+                    key={`${row.variable}-${index}`}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                  >
+                    {row.variable && (
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {row.variable}
+                      </div>
+                    )}
+                    <div className="mt-1 text-sm text-slate-800">
+                      {row.label || row.variable}
+                    </div>
+                    {sharedResponseOptions.length === 0 &&
+                      Array.isArray(row.response_options) &&
+                      row.response_options.length > 0 && (
+                        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            {t("shapeFunctions.detailsAnswerScale")}
+                          </div>
+                          {row.response_options.map((option, optionIndex) => (
+                            <div
+                              key={`${row.variable || index}-option-${optionIndex}`}
+                              className="flex items-start gap-3 text-sm text-slate-700"
+                            >
+                              <span className="min-w-[3rem] rounded-md bg-slate-100 px-2 py-1 text-center font-mono text-xs text-slate-600">
+                                {option?.value || "?"}
+                              </span>
+                              <span>{option?.label || ""}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {provenance?.transformation && (
+            <section className="mt-6">
+              <h4 className="text-sm font-semibold text-slate-800">
+                {t("shapeFunctions.detailsTransformation")}
+              </h4>
+              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                {provenance.transformation}
+              </p>
+            </section>
+          )}
+
+          {provenance?.missing_value_handling &&
+            provenance.missing_value_handling !== provenance.transformation && (
+              <section className="mt-6">
+                <h4 className="text-sm font-semibold text-slate-800">
+                  {t("shapeFunctions.detailsMissingHandling")}
+                </h4>
+                <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                  {provenance.missing_value_handling}
+                </p>
+              </section>
+            )}
+
+          {provenance?.selection_rationale && (
+            <section className="mt-6">
+              <h4 className="text-sm font-semibold text-slate-800">
+                {t("shapeFunctions.detailsRationale")}
+              </h4>
+              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                {provenance.selection_rationale}
+              </p>
+            </section>
+          )}
+        </div>
+      </aside>
+    </div>,
+    document.body,
+  );
+};
+
 const BrushHardnessControl = ({
   brushHardness,
   onChange,
@@ -1840,12 +2121,14 @@ const FeatureChartSettingsModal = ({
 const FeatureEditCard = ({
   shapeFunction,
   comparisonShapeFunction = null,
+  featureSchemaEntry = null,
   editedPoints,
   unsavedEditedPoints,
   onPointEdit,
   onFeatureSubmit,
   onFeatureReset,
   onOpenChartSettings,
+  onOpenDetails,
   onCycleChartType,
   isEditing,
   brushHardness = 50,
@@ -1873,6 +2156,7 @@ const FeatureEditCard = ({
     currentChartType === "categorical" && Boolean(chartConfig.can_be_numeric);
   const canCycleChartType = canToggleToCategorical || canToggleToNumeric;
   const canConfigureCategoricalChart = currentChartType === "categorical";
+  const hasFeatureDetails = Boolean(featureSchemaEntry);
 
   const handleCycleChartType = useCallback(async () => {
     if (!onCycleChartType || !canCycleChartType || isCyclingChartType) return;
@@ -1958,6 +2242,19 @@ const FeatureEditCard = ({
           {t("shapeFunctions.chartMappingButton")}
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => onOpenDetails(shapeFunction.feature_name)}
+        title={t("shapeFunctions.openFeatureDetails")}
+        disabled={!hasFeatureDetails}
+        className={`absolute top-2 right-11 z-10 h-7 px-2 border rounded-md shadow-sm transition-colors text-xs font-medium ${
+          hasFeatureDetails
+            ? "bg-white/90 hover:bg-gray-100 border-gray-300 text-gray-700"
+            : "bg-gray-100/90 border-gray-200 text-gray-400 cursor-not-allowed"
+        }`}
+      >
+        {t("shapeFunctions.detailsButton")}
+      </button>
       {/* Enlarge button */}
       <button
         onClick={() => setIsEnlarged(true)}
@@ -2038,26 +2335,40 @@ const FeatureEditCard = ({
                 <h3 className="text-lg font-semibold text-gray-800">
                   {shapeFunction.feature_name}
                 </h3>
-                <button
-                  onClick={() => setIsEnlarged(false)}
-                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
-                  title={t("common.close")}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetails(shapeFunction.feature_name)}
+                    disabled={!hasFeatureDetails}
+                    className={`h-9 rounded-lg border px-3 text-sm font-medium transition-colors ${
+                      hasFeatureDetails
+                        ? "border-slate-300 text-slate-700 hover:bg-slate-100"
+                        : "border-slate-200 text-slate-400 cursor-not-allowed"
+                    }`}
                   >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
+                    {t("shapeFunctions.detailsButton")}
+                  </button>
+                  <button
+                    onClick={() => setIsEnlarged(false)}
+                    className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
+                    title={t("common.close")}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               {/* Enlarged chart */}
               <div className="p-4">
@@ -2132,6 +2443,7 @@ const FeatureEditCard = ({
 const EditableShapeFunctionsGrid = ({
   shapeFunctions,
   comparisonShapeFunctions = [],
+  featureSchema = [],
   loading,
   onShapeFunctionsEdit,
   onReset,
@@ -2151,6 +2463,7 @@ const EditableShapeFunctionsGrid = ({
   const [syncAxes, setSyncAxes] = useState(false);
   const [brushHardness, setBrushHardness] = useState(50);
   const [chartSettingsFeature, setChartSettingsFeature] = useState(null);
+  const [detailsFeatureName, setDetailsFeatureName] = useState(null);
   const comparisonShapeFunctionMap = useMemo(
     () =>
       new Map(
@@ -2158,12 +2471,24 @@ const EditableShapeFunctionsGrid = ({
       ),
     [comparisonShapeFunctions],
   );
+  const featureSchemaMap = useMemo(
+    () =>
+      new Map(
+        (featureSchema || [])
+          .filter((entry) => entry && entry.name)
+          .map((entry) => [entry.name, entry]),
+      ),
+    [featureSchema],
+  );
   const hasNumericCharts = useMemo(
     () =>
       Array.isArray(shapeFunctions) &&
       shapeFunctions.some((sf) => sf?.feature_type === "numeric"),
     [shapeFunctions],
   );
+  const activeFeatureSchemaEntry = detailsFeatureName
+    ? featureSchemaMap.get(detailsFeatureName) || null
+    : null;
 
   // Compute global y-range across all features when syncAxes is enabled
   const globalYRange = useMemo(() => {
@@ -2198,6 +2523,12 @@ const EditableShapeFunctionsGrid = ({
       onUnsavedEditsChange(editedPoints);
     }
   }, [editedPoints, onUnsavedEditsChange]);
+
+  useEffect(() => {
+    if (detailsFeatureName && !featureSchemaMap.has(detailsFeatureName)) {
+      setDetailsFeatureName(null);
+    }
+  }, [detailsFeatureName, featureSchemaMap]);
 
   // Merge saved (initialEditedPoints) with unsaved (editedPoints) for chart display
   const getMergedEditedPoints = useCallback(
@@ -2363,6 +2694,14 @@ const EditableShapeFunctionsGrid = ({
     setChartSettingsFeature(null);
   }, []);
 
+  const handleOpenDetails = useCallback((featureName) => {
+    setDetailsFeatureName(featureName);
+  }, []);
+
+  const handleCloseDetails = useCallback(() => {
+    setDetailsFeatureName(null);
+  }, []);
+
   const handleSaveChartSettings = useCallback(
     async (featureName, payload) => {
       if (!onUpdateFeatureChartSettings) return;
@@ -2426,6 +2765,13 @@ const EditableShapeFunctionsGrid = ({
         shapeFunction={chartSettingsFeature}
         onClose={handleCloseChartSettings}
         onSave={handleSaveChartSettings}
+        t={t}
+      />
+      <FeatureDetailsDrawer
+        isOpen={Boolean(detailsFeatureName)}
+        featureName={detailsFeatureName || ""}
+        featureSchemaEntry={activeFeatureSchemaEntry}
+        onClose={handleCloseDetails}
         t={t}
       />
 
@@ -2519,12 +2865,14 @@ const EditableShapeFunctionsGrid = ({
             comparisonShapeFunction={
               comparisonShapeFunctionMap.get(sf.feature_name) || null
             }
+            featureSchemaEntry={featureSchemaMap.get(sf.feature_name) || null}
             editedPoints={getMergedEditedPoints(sf.feature_name)}
             unsavedEditedPoints={editedPoints[sf.feature_name] || []}
             onPointEdit={handlePointEdit}
             onFeatureSubmit={handleFeatureSubmit}
             onFeatureReset={handleFeatureReset}
             onOpenChartSettings={handleOpenChartSettings}
+            onOpenDetails={handleOpenDetails}
             onCycleChartType={handleCycleChartType}
             isEditing={isEditing}
             brushHardness={brushHardness}

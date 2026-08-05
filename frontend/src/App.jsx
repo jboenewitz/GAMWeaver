@@ -883,6 +883,7 @@ function App() {
             comparisonShapeFunctions={
               currentUser?.is_superadmin ? comparisonShapeFunctions : []
             }
+            featureSchema={modelStatus?.feature_schema || []}
             loading={chartLoading}
             onShapeFunctionsEdit={handleShapeFunctionsEdit}
             onReset={handleResetShapeFunctions}

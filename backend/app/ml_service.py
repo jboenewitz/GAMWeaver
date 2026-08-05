@@ -236,6 +236,8 @@ class MLService:
         self.active_dataset_path: Optional[str] = None
         self.active_dataset_name: Optional[str] = None
         self.feature_chart_settings: Dict[str, Dict[str, Any]] = {}
+        self._feature_dictionary_cache: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self._column_mapping_cache: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
         self._restore_active_dataset_metadata()
         self._auto_load_persisted_dataset()
@@ -420,6 +422,453 @@ class MLService:
             "columns": columns,
             "default_target_column": default_target,
         }
+
+    @staticmethod
+    def _split_dictionary_values(raw_value: Any) -> List[str]:
+        if raw_value is None:
+            return []
+        text = str(raw_value).strip()
+        if not text or text.lower() == "nan":
+            return []
+        return [part.strip() for part in text.split("|") if part.strip()]
+
+    @staticmethod
+    def _classify_feature_construction(
+        transformation: str,
+        source_labels: List[str],
+    ) -> str:
+        normalized_transformation = transformation.strip().lower()
+        normalized_labels = " ".join(source_labels).strip().lower()
+
+        if (
+            "mean across item battery" in normalized_transformation
+            or "itemmittelwert" in normalized_transformation
+            or "mittelwert aus" in normalized_transformation
+            or "row mean across item battery" in normalized_transformation
+        ):
+            return "item_mean"
+
+        if "scale" in normalized_labels and "imputiert" in normalized_labels:
+            return "iqb_scale"
+        if "skala" in normalized_labels and "imputiert" in normalized_labels:
+            return "iqb_scale"
+
+        return "raw_source"
+
+    @staticmethod
+    def _extract_missing_value_handling(transformation: str) -> str:
+        text = str(transformation or "").strip()
+        if not text:
+            return ""
+
+        parts = [part.strip() for part in text.split(";") if part.strip()]
+        if len(parts) > 1:
+            return "; ".join(parts[1:])
+
+        lower_text = text.lower()
+        if "missing codes replaced with na" in lower_text:
+            return "IQB special missing codes replaced with NA"
+        if "sonderfehlwerte" in lower_text:
+            return text
+
+        return ""
+
+    def _load_feature_provenance_from_path(
+        self,
+        dictionary_path: Path,
+    ) -> Dict[str, Dict[str, Any]]:
+        cache_key = str(dictionary_path)
+        cached = self._feature_dictionary_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            dictionary_df = pd.read_csv(dictionary_path, dtype=str, encoding="utf-8-sig")
+        except Exception:
+            self._feature_dictionary_cache[cache_key] = {}
+            return {}
+
+        required_columns = {
+            "output_column",
+            "role",
+            "category",
+            "source_variables",
+            "source_labels",
+            "transformation",
+            "selection_rationale",
+        }
+        if not required_columns.issubset(set(dictionary_df.columns)):
+            self._feature_dictionary_cache[cache_key] = {}
+            return {}
+
+        response_option_map = self._build_response_option_map_for_dictionary(
+            dictionary_path,
+        )
+        provenance_map: Dict[str, Dict[str, Any]] = {}
+        for _, row in dictionary_df.iterrows():
+            output_column = str(row.get("output_column", "") or "").strip()
+            if not output_column:
+                continue
+
+            source_variables = self._split_dictionary_values(row.get("source_variables"))
+            source_labels = self._split_dictionary_values(row.get("source_labels"))
+            transformation = str(row.get("transformation", "") or "").strip()
+            selection_rationale = str(row.get("selection_rationale", "") or "").strip()
+            source_details = []
+            common_response_options: Optional[List[Dict[str, Any]]] = None
+
+            for index, variable in enumerate(source_variables):
+                response_metadata = response_option_map.get(variable, {})
+                detail = {
+                    "variable": variable,
+                    "label": source_labels[index] if index < len(source_labels) else "",
+                    "response_options": _json_safe(
+                        response_metadata.get("response_options", [])
+                    ),
+                    "missing_response_options": _json_safe(
+                        response_metadata.get("missing_response_options", [])
+                    ),
+                }
+                source_details.append(detail)
+
+                substantive_options = detail["response_options"]
+                if not substantive_options:
+                    common_response_options = None
+                    continue
+
+                if common_response_options is None:
+                    common_response_options = substantive_options
+                elif common_response_options != substantive_options:
+                    common_response_options = []
+
+            provenance_map[output_column] = {
+                "role": str(row.get("role", "") or "").strip(),
+                "category": str(row.get("category", "") or "").strip(),
+                "source_variables": source_variables,
+                "source_labels": source_labels,
+                "source_details": source_details,
+                "transformation": transformation,
+                "selection_rationale": selection_rationale,
+                "construction_type": self._classify_feature_construction(
+                    transformation,
+                    source_labels,
+                ),
+                "response_options": common_response_options or [],
+                "missing_value_handling": self._extract_missing_value_handling(
+                    transformation,
+                ),
+                "source_count": max(len(source_variables), len(source_labels)),
+                "dictionary_path": str(dictionary_path),
+            }
+
+        self._feature_dictionary_cache[cache_key] = provenance_map
+        return provenance_map
+
+    def _find_feature_dictionary_path_by_feature_names(
+        self,
+        feature_names: List[str],
+    ) -> Optional[Path]:
+        normalized_feature_names = {
+            str(feature_name).strip()
+            for feature_name in feature_names
+            if str(feature_name).strip()
+        }
+        if not normalized_feature_names:
+            return None
+
+        repo_root = Path(__file__).resolve().parents[2]
+        search_roots = [repo_root, Path.home() / "Downloads"]
+        candidate_matches: List[Tuple[int, int, Path]] = []
+        seen_roots: set[str] = set()
+
+        for root in search_roots:
+            try:
+                resolved_root = root.resolve()
+            except Exception:
+                continue
+            if not resolved_root.exists() or not resolved_root.is_dir():
+                continue
+            root_key = str(resolved_root)
+            if root_key in seen_roots:
+                continue
+            seen_roots.add(root_key)
+
+            try:
+                dictionary_paths = list(resolved_root.rglob("*_feature_dictionary.csv"))
+            except Exception:
+                continue
+
+            for dictionary_path in dictionary_paths:
+                try:
+                    dictionary_df = pd.read_csv(
+                        dictionary_path,
+                        dtype=str,
+                        encoding="utf-8-sig",
+                        usecols=["output_column"],
+                    )
+                except Exception:
+                    continue
+
+                output_columns = {
+                    str(value).strip()
+                    for value in dictionary_df["output_column"].dropna().tolist()
+                    if str(value).strip()
+                }
+                if not normalized_feature_names.issubset(output_columns):
+                    continue
+
+                candidate_matches.append(
+                    (
+                        len(output_columns),
+                        len(dictionary_path.parts),
+                        dictionary_path,
+                    )
+                )
+
+        if not candidate_matches:
+            return None
+
+        candidate_matches.sort(key=lambda item: (item[0], item[1], str(item[2])))
+        return candidate_matches[0][2]
+
+    def _build_feature_provenance_map(
+        self,
+        dataset_name: Optional[str],
+        dataset_path: Optional[Path],
+        feature_names: Optional[List[str]] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        dictionary_path = self._find_feature_dictionary_path(dataset_name, dataset_path)
+        if dictionary_path is None and feature_names:
+            dictionary_path = self._find_feature_dictionary_path_by_feature_names(
+                feature_names,
+            )
+
+        if dictionary_path is None:
+            cache_key = f"missing::{dataset_name or ''}::{','.join(feature_names or [])}"
+            cached_missing = self._feature_dictionary_cache.get(cache_key)
+            if cached_missing is not None:
+                return cached_missing
+            self._feature_dictionary_cache[cache_key] = {}
+            return {}
+
+        return self._load_feature_provenance_from_path(dictionary_path)
+
+    @staticmethod
+    def _parse_value_label_options(raw_value_labels: Any) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        raw_parts = MLService._split_dictionary_values(raw_value_labels)
+        substantive_options: List[Dict[str, Any]] = []
+        missing_options: List[Dict[str, Any]] = []
+
+        for part in raw_parts:
+            if "=" in part:
+                raw_value, raw_label = part.split("=", 1)
+                value = raw_value.strip()
+                label = raw_label.strip()
+            else:
+                value = ""
+                label = part.strip()
+
+            option = {
+                "value": value,
+                "label": label,
+            }
+            if MLService._is_missing_response_option(value, label):
+                missing_options.append(option)
+            else:
+                substantive_options.append(option)
+
+        return substantive_options, missing_options
+
+    @staticmethod
+    def _is_missing_response_option(value: str, label: str) -> bool:
+        normalized_value = str(value).strip()
+        normalized_label = str(label).strip().lower()
+
+        try:
+            numeric_value = float(normalized_value)
+        except Exception:
+            numeric_value = None
+
+        if numeric_value is not None and numeric_value < 0:
+            return True
+
+        missing_markers = [
+            "auslassen",
+            "unklare beantwortung",
+            "fragebogenrotation",
+            "kein fragebogen",
+            "fehlend",
+            "missing",
+            "nicht kalkulierbar",
+            "ungueltig",
+        ]
+        return any(marker in normalized_label for marker in missing_markers)
+
+    def _load_column_mapping_from_path(
+        self,
+        column_mapping_path: Path,
+    ) -> Dict[str, Dict[str, Any]]:
+        cache_key = str(column_mapping_path)
+        cached = self._column_mapping_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            mapping_df = pd.read_csv(
+                column_mapping_path,
+                dtype=str,
+                encoding="utf-8-sig",
+            )
+        except Exception:
+            self._column_mapping_cache[cache_key] = {}
+            return {}
+
+        required_columns = {
+            "original_spss_variable",
+            "description",
+            "value_labels",
+        }
+        if not required_columns.issubset(set(mapping_df.columns)):
+            self._column_mapping_cache[cache_key] = {}
+            return {}
+
+        mapping: Dict[str, Dict[str, Any]] = {}
+        for _, row in mapping_df.iterrows():
+            variable_name = str(row.get("original_spss_variable", "") or "").strip()
+            if not variable_name:
+                continue
+
+            response_options, missing_response_options = self._parse_value_label_options(
+                row.get("value_labels"),
+            )
+            mapping[variable_name] = {
+                "description": str(row.get("description", "") or "").strip(),
+                "response_options": response_options,
+                "missing_response_options": missing_response_options,
+            }
+
+        self._column_mapping_cache[cache_key] = mapping
+        return mapping
+
+    def _find_readable_column_mapping_path(
+        self,
+        dictionary_path: Path,
+    ) -> Optional[Path]:
+        direct_candidates = sorted(
+            dictionary_path.parent.glob("*_readable_v1_column_mapping.csv")
+        )
+        if direct_candidates:
+            return direct_candidates[0]
+
+        repo_root = Path(__file__).resolve().parents[2]
+        search_roots = [repo_root, Path.home() / "Downloads"]
+        seen: set[str] = set()
+
+        for root in search_roots:
+            try:
+                resolved_root = root.resolve()
+            except Exception:
+                continue
+            if not resolved_root.exists() or not resolved_root.is_dir():
+                continue
+            root_key = str(resolved_root)
+            if root_key in seen:
+                continue
+            seen.add(root_key)
+            try:
+                matches = list(
+                    resolved_root.rglob("*_readable_v1_column_mapping.csv")
+                )
+            except Exception:
+                continue
+            if matches:
+                matches.sort(key=lambda path: len(path.parts))
+                return matches[0]
+
+        return None
+
+    def _build_response_option_map_for_dictionary(
+        self,
+        dictionary_path: Path,
+    ) -> Dict[str, Dict[str, Any]]:
+        column_mapping_path = self._find_readable_column_mapping_path(dictionary_path)
+        if column_mapping_path is None:
+            return {}
+        return self._load_column_mapping_from_path(column_mapping_path)
+
+    def _find_feature_dictionary_path(
+        self,
+        dataset_name: Optional[str],
+        dataset_path: Optional[Path],
+    ) -> Optional[Path]:
+        normalized_dataset_name = str(dataset_name or "").strip()
+        if not normalized_dataset_name:
+            return None
+
+        expected_name = (
+            f"{normalized_dataset_name[:-4]}_feature_dictionary.csv"
+            if normalized_dataset_name.lower().endswith(".csv")
+            else f"{normalized_dataset_name}_feature_dictionary.csv"
+        )
+
+        direct_candidates: List[Path] = []
+        if dataset_path is not None:
+            direct_candidates.append(dataset_path.parent / expected_name)
+        direct_candidates.append(self.datasets_dir / expected_name)
+
+        for candidate in direct_candidates:
+            if candidate.is_file():
+                return candidate
+
+        repo_root = Path(__file__).resolve().parents[2]
+        search_roots = [repo_root, Path.home() / "Downloads"]
+        seen: set[str] = set()
+
+        for root in search_roots:
+            try:
+                resolved_root = root.resolve()
+            except Exception:
+                continue
+            if not resolved_root.exists() or not resolved_root.is_dir():
+                continue
+            root_key = str(resolved_root)
+            if root_key in seen:
+                continue
+            seen.add(root_key)
+            try:
+                matches = list(resolved_root.rglob(expected_name))
+            except Exception:
+                continue
+            if matches:
+                matches.sort(key=lambda path: len(path.parts))
+                return matches[0]
+
+        return None
+
+    def _enrich_feature_schema_with_provenance(
+        self,
+        feature_schema: List[Dict[str, Any]],
+        *,
+        dataset_name: Optional[str],
+        dataset_path: Optional[Path],
+    ) -> List[Dict[str, Any]]:
+        provenance_map = self._build_feature_provenance_map(
+            dataset_name,
+            dataset_path,
+            [str(item.get("name", "") or "").strip() for item in feature_schema],
+        )
+        if not provenance_map:
+            return feature_schema
+
+        enriched_schema: List[Dict[str, Any]] = []
+        for item in feature_schema:
+            enriched_item = dict(item)
+            feature_name = str(enriched_item.get("name", "") or "").strip()
+            provenance = provenance_map.get(feature_name)
+            if provenance:
+                enriched_item["feature_provenance"] = provenance
+            enriched_schema.append(enriched_item)
+        return enriched_schema
 
     @staticmethod
     def _stringify_chart_value(value: Any) -> str:
@@ -1555,6 +2004,19 @@ class MLService:
             public_frame,
             numeric_fill_values,
         )
+        effective_dataset_name = (
+            Path(str(dataset_name)).name
+            if dataset_name
+            else (
+                self.active_dataset_name
+                or (Path(resolved_path_str).name if resolved_path_str else None)
+            )
+        )
+        rebuilt_feature_schema = self._enrich_feature_schema_with_provenance(
+            rebuilt_feature_schema,
+            dataset_name=effective_dataset_name,
+            dataset_path=resolved_path,
+        )
         rebuilt_feature_schema_map = {item["name"]: item for item in rebuilt_feature_schema}
 
         if existing_model_source == "imported" and existing_model is not None and self.is_trained:
@@ -1616,10 +2078,10 @@ class MLService:
 
         self.active_dataset_id = resolved_dataset_id
         self.active_dataset_path = resolved_path_str
-        if dataset_name:
-            self.active_dataset_name = Path(str(dataset_name)).name
-        else:
-            self.active_dataset_name = Path(self.active_dataset_path).name if self.active_dataset_path else None
+        self.active_dataset_name = (
+            effective_dataset_name
+            or (Path(self.active_dataset_path).name if self.active_dataset_path else None)
+        )
         self._persist_active_dataset_metadata()
 
         self._clear_comparison_state()
@@ -1760,6 +2222,16 @@ class MLService:
             public_frame,
             comparison_numeric_fill_values,
         )
+        comparison_dataset_name = (
+            Path(str(dataset_name)).name
+            if dataset_name
+            else Path(str(resolved_path)).name
+        )
+        rebuilt_feature_schema = self._enrich_feature_schema_with_provenance(
+            rebuilt_feature_schema,
+            dataset_name=comparison_dataset_name,
+            dataset_path=resolved_path,
+        )
         self._validate_comparison_feature_schema(rebuilt_feature_schema)
 
         self.comparison_model = None
@@ -1785,11 +2257,7 @@ class MLService:
         self.comparison_numeric_missing_fill_values = comparison_numeric_fill_values
         self.comparison_dataset_id = resolved_dataset_id
         self.comparison_dataset_path = str(resolved_path)
-        self.comparison_dataset_name = (
-            Path(str(dataset_name)).name
-            if dataset_name
-            else Path(str(resolved_path)).name
-        )
+        self.comparison_dataset_name = comparison_dataset_name
 
         return {
             "total_records": len(df_loaded),

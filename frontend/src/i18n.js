@@ -243,6 +243,26 @@ const translations = {
     "shapeFunctions.hideDistribution": "Hide distribution",
     "shapeFunctions.countAxisLabel": "Count",
     "shapeFunctions.distributionEmpty": "No distribution data available.",
+    "shapeFunctions.openFeatureDetails": "Open feature details",
+    "shapeFunctions.detailsButton": "Details",
+    "shapeFunctions.detailsDrawerTitle": "Feature Details",
+    "shapeFunctions.detailsSummary":
+      "Shows how this feature was constructed in the dataset.",
+    "shapeFunctions.detailsUnavailable":
+      "No feature provenance metadata is available for this feature.",
+    "shapeFunctions.detailsCategory": "Category",
+    "shapeFunctions.detailsConstruction": "Construction",
+    "shapeFunctions.detailsSourceVariables": "Source variables",
+    "shapeFunctions.detailsSourceQuestions": "Source questions",
+    "shapeFunctions.detailsAnswerScale": "Answer scale",
+    "shapeFunctions.detailsTransformation": "Transformation",
+    "shapeFunctions.detailsMissingHandling": "Missing values",
+    "shapeFunctions.detailsRationale": "Why this feature was selected",
+    "shapeFunctions.detailsSourceCount": "{count} source questions",
+    "shapeFunctions.detailsRawSource": "Raw source value",
+    "shapeFunctions.detailsItemMean": "Item mean",
+    "shapeFunctions.detailsIqbScale": "IQB scale",
+    "shapeFunctions.detailsUnknownConstruction": "Derived feature",
 
     "predictionComparison.title": "Prediction Comparison",
     "predictionComparison.empty":
@@ -691,6 +711,27 @@ const translations = {
     "shapeFunctions.hideDistribution": "Verteilung ausblenden",
     "shapeFunctions.countAxisLabel": "Anzahl",
     "shapeFunctions.distributionEmpty": "Keine Verteilungsdaten verfuegbar.",
+    "shapeFunctions.openFeatureDetails": "Feature-Details oeffnen",
+    "shapeFunctions.detailsButton": "Details",
+    "shapeFunctions.detailsDrawerTitle": "Feature-Details",
+    "shapeFunctions.detailsSummary":
+      "Zeigt, wie dieses Feature im Datensatz konstruiert wurde.",
+    "shapeFunctions.detailsUnavailable":
+      "Fuer dieses Feature sind keine Metadaten zur Herkunft verfuegbar.",
+    "shapeFunctions.detailsCategory": "Kategorie",
+    "shapeFunctions.detailsConstruction": "Konstruktion",
+    "shapeFunctions.detailsSourceVariables": "Quellvariablen",
+    "shapeFunctions.detailsSourceQuestions": "Quellfragen",
+    "shapeFunctions.detailsAnswerScale": "Antwortskala",
+    "shapeFunctions.detailsTransformation": "Transformation",
+    "shapeFunctions.detailsMissingHandling": "Fehlende Werte",
+    "shapeFunctions.detailsRationale":
+      "Warum dieses Feature ausgewaehlt wurde",
+    "shapeFunctions.detailsSourceCount": "{count} Quellfragen",
+    "shapeFunctions.detailsRawSource": "Direkter Quellwert",
+    "shapeFunctions.detailsItemMean": "Itemmittelwert",
+    "shapeFunctions.detailsIqbScale": "IQB-Skalenwert",
+    "shapeFunctions.detailsUnknownConstruction": "Abgeleitetes Feature",
 
     "predictionComparison.title": "Vorhersagevergleich",
     "predictionComparison.empty":
