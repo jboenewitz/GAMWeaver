@@ -1,7 +1,31 @@
 """Pydantic models for API request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
+
+
+class ShapeFunctionDistributionBin(BaseModel):
+    """A single numeric distribution bin."""
+    x0: float
+    x1: float
+    count: int
+    center: float
+
+
+class ShapeFunctionDistributionCount(BaseModel):
+    """A single categorical distribution count."""
+    x_value: Any
+    label: str
+    count: int
+
+
+class ShapeFunctionDistribution(BaseModel):
+    """Distribution metadata shown below an interactive shape function."""
+    chart_type: str  # 'numeric' or 'categorical'
+    total_count: int
+    bin_count: int
+    bins: List[ShapeFunctionDistributionBin] = Field(default_factory=list)
+    counts: List[ShapeFunctionDistributionCount] = Field(default_factory=list)
 
 
 class PredictionInput(BaseModel):
@@ -35,9 +59,18 @@ class ModelMetrics(BaseModel):
 class ShapeFunctionData(BaseModel):
     """Shape function data for a single feature."""
     feature_name: str
-    x_values: List[float]
+    x_values: List[Any]
     y_values: List[float]
     feature_type: str  # 'numeric' or 'categorical'
+    x_tick_labels: Optional[List[str]] = None
+    chart_config: Optional[Dict[str, Any]] = None
+    distribution: Optional[ShapeFunctionDistribution] = None
+
+
+class ShapeFunctionsResponse(BaseModel):
+    """Response with primary and comparison shape function data."""
+    shape_functions: List[ShapeFunctionData]
+    comparison_shape_functions: List[ShapeFunctionData]
 
 
 class DataSummary(BaseModel):

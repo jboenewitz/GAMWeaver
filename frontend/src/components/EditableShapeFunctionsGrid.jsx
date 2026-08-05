@@ -225,6 +225,17 @@ const buildDragHighlightSegments = (
   return segments;
 };
 
+const hasShapeFunctionDistribution = (distribution) => {
+  if (!distribution || typeof distribution !== "object") return false;
+  if (distribution.chart_type === "numeric") {
+    return Array.isArray(distribution.bins) && distribution.bins.length > 0;
+  }
+  if (distribution.chart_type === "categorical") {
+    return Array.isArray(distribution.counts) && distribution.counts.length > 0;
+  }
+  return false;
+};
+
 const BrushHardnessControl = ({
   brushHardness,
   onChange,
@@ -305,6 +316,7 @@ const EditableShapeFunctionChart = ({
   // Precise value entry modal state
   const [preciseEntry, setPreciseEntry] = useState(null);
   const [preciseValue, setPreciseValue] = useState("");
+  const [isDistributionOpen, setIsDistributionOpen] = useState(false);
 
   // Refs for drag handling
   const yAxisRangeRef = useRef({ min: -10, max: 10 });
@@ -411,6 +423,11 @@ const EditableShapeFunctionChart = ({
       );
       return idx !== -1 && Math.abs(y_values[idx] - p.y_value) > 0.001;
     });
+  const distribution = shapeFunction?.distribution || null;
+  const hasDistribution = useMemo(
+    () => hasShapeFunctionDistribution(distribution),
+    [distribution],
+  );
 
   // Calculate y-axis range
   const allYValues = isNumeric
@@ -428,6 +445,16 @@ const EditableShapeFunctionChart = ({
   const xDataMax = isNumeric ? Math.max(...numXVals) : 1;
   const xPad = isNumeric ? Math.max((xDataMax - xDataMin) * 0.05, 0.1) : 0;
   const xRange = [xDataMin - xPad, xDataMax + xPad];
+
+  useEffect(() => {
+    setIsDistributionOpen(false);
+  }, [feature_name]);
+
+  useEffect(() => {
+    if (!hasDistribution) {
+      setIsDistributionOpen(false);
+    }
+  }, [hasDistribution]);
 
   // Update axis range refs
   useEffect(() => {
@@ -1111,6 +1138,148 @@ const EditableShapeFunctionChart = ({
     doubleClick: false,
   };
 
+  const distributionPlot = useMemo(() => {
+    if (!hasDistribution) return null;
+
+    if (distribution.chart_type === "numeric") {
+      const bins = (distribution.bins || []).filter(
+        (bin) =>
+          Number.isFinite(Number(bin?.center)) &&
+          Number.isFinite(Number(bin?.count)) &&
+          Number.isFinite(Number(bin?.x0)) &&
+          Number.isFinite(Number(bin?.x1)),
+      );
+      if (bins.length === 0) return null;
+
+      const numericRange = isNumeric
+        ? xRange
+        : [
+            Math.min(...bins.map((bin) => Number(bin.x0))),
+            Math.max(...bins.map((bin) => Number(bin.x1))),
+          ];
+
+      return {
+        data: [
+          {
+            x: bins.map((bin) => Number(bin.center)),
+            y: bins.map((bin) => Number(bin.count)),
+            width: bins.map((bin) =>
+              Math.max(Number(bin.x1) - Number(bin.x0), 0.001),
+            ),
+            customdata: bins.map((bin) => [Number(bin.x0), Number(bin.x1)]),
+            type: "bar",
+            marker: {
+              color: "rgba(148, 163, 184, 0.65)",
+              line: { color: "rgba(100, 116, 139, 0.45)", width: 1 },
+            },
+            hovertemplate: `<b>x</b>: %{customdata[0]:.3f} - %{customdata[1]:.3f}<br>${t("shapeFunctions.countAxisLabel")}: %{y}<extra></extra>`,
+          },
+        ],
+        layout: {
+          margin: enlarged
+            ? { l: 56, r: 20, t: 10, b: 42 }
+            : { l: 46, r: 12, t: 8, b: 36 },
+          height: enlarged ? 210 : 150,
+          paper_bgcolor: "rgba(0,0,0,0)",
+          plot_bgcolor: "rgba(255,255,255,0.65)",
+          bargap: 0,
+          showlegend: false,
+          hovermode: "closest",
+          dragmode: false,
+          xaxis: {
+            range: numericRange,
+            fixedrange: true,
+            gridcolor: "#e2e8f0",
+            zeroline: false,
+            tickfont: { size: enlarged ? 11 : 10 },
+          },
+          yaxis: {
+            title: {
+              text: t("shapeFunctions.countAxisLabel"),
+              font: { size: enlarged ? 12 : 11 },
+            },
+            fixedrange: true,
+            gridcolor: "#e2e8f0",
+            rangemode: "tozero",
+            tickfont: { size: enlarged ? 11 : 10 },
+          },
+        },
+      };
+    }
+
+    if (distribution.chart_type === "categorical") {
+      const counts = (distribution.counts || []).filter(
+        (entry) => entry && entry.x_value !== undefined && entry.label !== undefined,
+      );
+      if (counts.length === 0) return null;
+
+      const categoryValues = counts.map((entry) => String(entry.x_value));
+      const categoryLabels = counts.map((entry) => String(entry.label));
+
+      return {
+        data: [
+          {
+            x: categoryValues,
+            y: counts.map((entry) => Number(entry.count) || 0),
+            customdata: categoryLabels,
+            type: "bar",
+            marker: {
+              color: "rgba(148, 163, 184, 0.72)",
+              line: { color: "rgba(100, 116, 139, 0.5)", width: 1 },
+            },
+            hovertemplate: `<b>%{customdata}</b><br>${t("shapeFunctions.countAxisLabel")}: %{y}<extra></extra>`,
+          },
+        ],
+        layout: {
+          margin: enlarged
+            ? { l: 56, r: 20, t: 10, b: 54 }
+            : { l: 46, r: 12, t: 8, b: 48 },
+          height: enlarged ? 210 : 150,
+          paper_bgcolor: "rgba(0,0,0,0)",
+          plot_bgcolor: "rgba(255,255,255,0.65)",
+          bargap: 0.2,
+          showlegend: false,
+          hovermode: "closest",
+          dragmode: false,
+          xaxis: {
+            fixedrange: true,
+            gridcolor: "#e2e8f0",
+            categoryorder: "array",
+            categoryarray: categoryValues,
+            tickmode: "array",
+            tickvals: categoryValues,
+            ticktext: categoryLabels,
+            tickangle: -20,
+            tickfont: { size: enlarged ? 11 : 10 },
+          },
+          yaxis: {
+            title: {
+              text: t("shapeFunctions.countAxisLabel"),
+              font: { size: enlarged ? 12 : 11 },
+            },
+            fixedrange: true,
+            gridcolor: "#e2e8f0",
+            rangemode: "tozero",
+            tickfont: { size: enlarged ? 11 : 10 },
+          },
+        },
+      };
+    }
+
+    return null;
+  }, [distribution, hasDistribution, isNumeric, xRange, enlarged, t]);
+
+  const distributionConfig = useMemo(
+    () => ({
+      responsive: true,
+      displayModeBar: false,
+      scrollZoom: false,
+      doubleClick: false,
+      staticPlot: false,
+    }),
+    [],
+  );
+
   // Determine cursor style
   let cursorStyle = "default";
   if (isEditing) {
@@ -1296,6 +1465,58 @@ const EditableShapeFunctionChart = ({
         }}
         className="w-full"
       />
+      {hasDistribution && (
+        <div className="border-t border-slate-200 bg-slate-50">
+          <button
+            type="button"
+            onClick={() => setIsDistributionOpen((open) => !open)}
+            className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors hover:bg-slate-100"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-medium text-slate-700">
+                {t("shapeFunctions.dataDistribution")}
+              </div>
+              <div className="text-xs text-slate-500">
+                {isDistributionOpen
+                  ? t("shapeFunctions.hideDistribution")
+                  : t("shapeFunctions.showDistribution")}
+              </div>
+            </div>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`shrink-0 text-slate-500 transition-transform ${
+                isDistributionOpen ? "rotate-180" : ""
+              }`}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+          {isDistributionOpen && (
+            <div className="border-t border-slate-200 px-3 py-3">
+              {distributionPlot ? (
+                <Plot
+                  data={distributionPlot.data}
+                  layout={distributionPlot.layout}
+                  config={distributionConfig}
+                  className="w-full"
+                />
+              ) : (
+                <p className="text-sm text-slate-500">
+                  {t("shapeFunctions.distributionEmpty")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

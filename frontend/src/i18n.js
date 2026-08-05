@@ -238,6 +238,11 @@ const translations = {
     "shapeFunctions.chartMappingButton": "Chart Mapping",
     "shapeFunctions.enlargeChart": "Enlarge chart",
     "shapeFunctions.submitFeature": "Submit {feature}",
+    "shapeFunctions.dataDistribution": "Data Distribution",
+    "shapeFunctions.showDistribution": "Show distribution",
+    "shapeFunctions.hideDistribution": "Hide distribution",
+    "shapeFunctions.countAxisLabel": "Count",
+    "shapeFunctions.distributionEmpty": "No distribution data available.",
 
     "predictionComparison.title": "Prediction Comparison",
     "predictionComparison.empty":
@@ -681,6 +686,11 @@ const translations = {
     "shapeFunctions.chartMappingButton": "Diagrammzuordnung",
     "shapeFunctions.enlargeChart": "Diagramm vergroessern",
     "shapeFunctions.submitFeature": "{feature} senden",
+    "shapeFunctions.dataDistribution": "Datenverteilung",
+    "shapeFunctions.showDistribution": "Verteilung anzeigen",
+    "shapeFunctions.hideDistribution": "Verteilung ausblenden",
+    "shapeFunctions.countAxisLabel": "Anzahl",
+    "shapeFunctions.distributionEmpty": "Keine Verteilungsdaten verfuegbar.",
 
     "predictionComparison.title": "Vorhersagevergleich",
     "predictionComparison.empty":

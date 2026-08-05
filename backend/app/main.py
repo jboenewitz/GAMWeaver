@@ -35,6 +35,7 @@ from .models import (
     UserPreferencesResponse,
     FeatureChartSettingsRequest,
     FeatureChartSettingsResponse,
+    ShapeFunctionsResponse,
 )
 from .ml_service import ml_service
 from .db_service import db_service
@@ -388,7 +389,7 @@ async def get_model_metrics():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/api/model/shape-functions")
+@app.get("/api/model/shape-functions", response_model=ShapeFunctionsResponse)
 async def get_shape_functions():
     """Get shape function data for all features."""
     try:

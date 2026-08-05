@@ -19,6 +19,7 @@ from .data_processing import prepare_training_data
 
 DATA_FILE_NAME = "bike.csv"
 MAX_PREVIEW_ROWS = 500
+SHAPE_DISTRIBUTION_DEFAULT_BIN_COUNT = 20
 MODEL_ARTIFACT_VERSION = "1.0"
 MODEL_ARTIFACT_VERSION_WITH_EDITS = "1.1"
 SUPPORTED_MODEL_ARTIFACT_VERSIONS = {
@@ -1850,7 +1851,7 @@ class MLService:
 
     # ==================== Shape functions ====================
 
-    def get_shape_functions(self) -> List[Dict[str, Any]]:
+    def get_shape_functions(self, include_distribution: bool = True) -> List[Dict[str, Any]]:
         """Get shape function data for all features."""
         if not self.is_trained:
             raise ValueError("Model not trained yet")
@@ -1860,7 +1861,11 @@ class MLService:
         shape_functions = []
         for idx, feature_name in enumerate(self.feature_names):
             try:
-                shape_data = self._extract_shape_function(feature_name, idx)
+                shape_data = self._extract_shape_function(
+                    feature_name,
+                    idx,
+                    include_distribution=include_distribution,
+                )
                 shape_functions.append(shape_data)
                 self.original_shape_functions[feature_name] = shape_data
             except Exception as exc:
@@ -1905,7 +1910,7 @@ class MLService:
             self.imported_artifact_version = None
             self.analytics_available = False
 
-            shape_functions = self.get_shape_functions()
+            shape_functions = self.get_shape_functions(include_distribution=False)
             self.comparison_original_shape_functions = {
                 shape_function["feature_name"]: shape_function
                 for shape_function in shape_functions
@@ -1924,7 +1929,202 @@ class MLService:
             baseline[cat_feat] = str(mode.iloc[0]) if not mode.empty else "Unknown"
         return baseline
 
-    def _extract_shape_function(self, feature_name: str, feature_idx: int) -> Dict[str, Any]:
+    def _build_numeric_distribution_bins(
+        self,
+        values: pd.Series,
+        x_values: List[Any],
+    ) -> Optional[Dict[str, Any]]:
+        numeric_values = pd.to_numeric(values, errors="coerce").dropna()
+        if numeric_values.empty:
+            return None
+
+        displayed_domain = [
+            float(value)
+            for value in x_values
+            if value is not None and np.isfinite(pd.to_numeric(value, errors="coerce"))
+        ]
+        if displayed_domain:
+            domain_min = float(min(displayed_domain))
+            domain_max = float(max(displayed_domain))
+        else:
+            domain_min = float(numeric_values.min())
+            domain_max = float(numeric_values.max())
+
+        unique_count = int(numeric_values.nunique(dropna=True))
+        if unique_count <= 1 or abs(domain_max - domain_min) < 1e-12:
+            center = float(numeric_values.iloc[0])
+            half_width = 0.5
+            return {
+                "chart_type": "numeric",
+                "total_count": int(len(numeric_values)),
+                "bin_count": 1,
+                "bins": [
+                    {
+                        "x0": float(center - half_width),
+                        "x1": float(center + half_width),
+                        "count": int(len(numeric_values)),
+                        "center": center,
+                    }
+                ],
+                "counts": [],
+            }
+
+        edges = np.linspace(
+            domain_min,
+            domain_max,
+            SHAPE_DISTRIBUTION_DEFAULT_BIN_COUNT + 1,
+        )
+        counts, _ = np.histogram(numeric_values.to_numpy(dtype=float), bins=edges)
+        bins = []
+        for idx, count in enumerate(counts.tolist()):
+            x0 = float(edges[idx])
+            x1 = float(edges[idx + 1])
+            bins.append(
+                {
+                    "x0": x0,
+                    "x1": x1,
+                    "count": int(count),
+                    "center": float((x0 + x1) / 2),
+                }
+            )
+
+        return {
+            "chart_type": "numeric",
+            "total_count": int(len(numeric_values)),
+            "bin_count": len(bins),
+            "bins": bins,
+            "counts": [],
+        }
+
+    def _build_numeric_distribution_for_categorical_feature(
+        self,
+        feature_name: str,
+    ) -> Optional[Dict[str, Any]]:
+        if self.X_train is None or feature_name not in self.X_train.columns:
+            return None
+
+        numeric_pairs = self._get_numeric_chart_values_for_categorical_feature(feature_name)
+        if not numeric_pairs:
+            return None
+
+        counts_map = (
+            self.X_train[feature_name]
+            .dropna()
+            .astype(str)
+            .value_counts()
+            .to_dict()
+        )
+        centers = [float(numeric_x) for _, numeric_x in numeric_pairs]
+        if len(centers) == 1:
+            edges = [centers[0] - 0.5, centers[0] + 0.5]
+        else:
+            edges = [centers[0] - ((centers[1] - centers[0]) / 2)]
+            for idx in range(len(centers) - 1):
+                edges.append((centers[idx] + centers[idx + 1]) / 2)
+            edges.append(centers[-1] + ((centers[-1] - centers[-2]) / 2))
+
+        bins = []
+        total_count = 0
+        for idx, (raw_value, numeric_x) in enumerate(numeric_pairs):
+            count = int(counts_map.get(str(raw_value), 0))
+            total_count += count
+            bins.append(
+                {
+                    "x0": float(edges[idx]),
+                    "x1": float(edges[idx + 1]),
+                    "count": count,
+                    "center": float(numeric_x),
+                }
+            )
+
+        return {
+            "chart_type": "numeric",
+            "total_count": total_count,
+            "bin_count": len(bins),
+            "bins": bins,
+            "counts": [],
+        }
+
+    def _build_categorical_distribution(
+        self,
+        feature_name: str,
+        x_values: List[Any],
+        x_tick_labels: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if self.X_train is None or feature_name not in self.X_train.columns:
+            return None
+
+        raw_series = self.X_train[feature_name].dropna()
+        if raw_series.empty:
+            return None
+
+        if feature_name in self.num_features:
+            normalized_series = raw_series.map(self._stringify_chart_value)
+        else:
+            normalized_series = raw_series.astype(str)
+
+        counts_map = normalized_series.value_counts().to_dict()
+        ordered_counts = []
+        total_count = 0
+        labels = (
+            list(x_tick_labels)
+            if isinstance(x_tick_labels, list) and len(x_tick_labels) == len(x_values)
+            else None
+        )
+
+        for idx, raw_value in enumerate(x_values):
+            normalized_value = self._stringify_chart_value(raw_value)
+            count = int(counts_map.get(normalized_value, 0))
+            total_count += count
+            ordered_counts.append(
+                {
+                    "x_value": raw_value,
+                    "label": labels[idx] if labels is not None else normalized_value,
+                    "count": count,
+                }
+            )
+
+        return {
+            "chart_type": "categorical",
+            "total_count": total_count,
+            "bin_count": len(ordered_counts),
+            "bins": [],
+            "counts": ordered_counts,
+        }
+
+    def _build_shape_function_distribution(
+        self,
+        feature_name: str,
+        feature_type: str,
+        x_values: List[Any],
+        x_tick_labels: Optional[List[str]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if self.X_train is None or feature_name not in self.X_train.columns:
+            return None
+
+        if feature_type == "categorical":
+            return self._build_categorical_distribution(
+                feature_name,
+                x_values,
+                x_tick_labels=x_tick_labels,
+            )
+
+        if feature_name in self.cat_features:
+            return self._build_numeric_distribution_for_categorical_feature(
+                feature_name,
+            )
+
+        return self._build_numeric_distribution_bins(
+            self.X_train[feature_name],
+            x_values,
+        )
+
+    def _extract_shape_function(
+        self,
+        feature_name: str,
+        feature_idx: int,
+        include_distribution: bool = True,
+    ) -> Dict[str, Any]:
         """Extract shape function data for a single feature."""
         chart_setting = self.get_feature_chart_setting(feature_name)
         is_categorical = chart_setting.get("chart_feature_type") == "categorical"
@@ -1970,7 +2170,7 @@ class MLService:
                     for raw_value in effective_x_values
                 ]
 
-                return {
+                result = {
                     "feature_name": feature_name,
                     "x_values": effective_x_values,
                     "x_tick_labels": x_tick_labels,
@@ -1978,6 +2178,14 @@ class MLService:
                     "feature_type": "categorical",
                     "chart_config": chart_setting,
                 }
+                if include_distribution:
+                    result["distribution"] = self._build_shape_function_distribution(
+                        feature_name,
+                        "categorical",
+                        effective_x_values,
+                        x_tick_labels=x_tick_labels,
+                    )
+                return result
 
         if feature_name in self.cat_features:
             numeric_pairs = self._get_numeric_chart_values_for_categorical_feature(
@@ -2004,13 +2212,20 @@ class MLService:
                 mean_val = np.mean(shape_values)
                 shape_values = [value - mean_val for value in shape_values]
 
-                return {
+                result = {
                     "feature_name": feature_name,
                     "x_values": x_values_numeric,
                     "y_values": shape_values,
                     "feature_type": "numeric",
                     "chart_config": chart_setting,
                 }
+                if include_distribution:
+                    result["distribution"] = self._build_shape_function_distribution(
+                        feature_name,
+                        "numeric",
+                        x_values_numeric,
+                    )
+                return result
 
         min_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").min())
         max_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").max())
@@ -2037,13 +2252,20 @@ class MLService:
         mean_val = np.mean(shape_values)
         shape_values = [value - mean_val for value in shape_values]
 
-        return {
+        result = {
             "feature_name": feature_name,
             "x_values": x_range.tolist(),
             "y_values": shape_values,
             "feature_type": "numeric",
             "chart_config": chart_setting,
         }
+        if include_distribution:
+            result["distribution"] = self._build_shape_function_distribution(
+                feature_name,
+                "numeric",
+                x_range.tolist(),
+            )
+        return result
 
     # ==================== Dataset analytics ====================
 
