@@ -44,14 +44,15 @@ def _looks_like_integer_categorical(series: pd.Series, column_name: str) -> bool
         return False
 
     unique_count = int(values.nunique(dropna=True))
-    unique_ratio = unique_count / max(len(values), 1)
     normalized_name = str(column_name).strip().lower()
 
     if normalized_name in _CATEGORICAL_NAME_HINTS:
         return True
 
     # General heuristic for low-cardinality integer columns.
-    return unique_count <= 12 or (unique_count <= 24 and unique_ratio <= 0.05)
+    # Keep this strict so numeric features do not flip between numeric/categorical
+    # across dataset subsets just because the row count changes.
+    return unique_count <= 13
 
 
 def _resolve_target_column(df: pd.DataFrame, target_column: Optional[str]) -> str:

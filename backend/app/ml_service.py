@@ -448,8 +448,7 @@ class MLService:
             return False
 
         unique_count = int(series.nunique(dropna=True))
-        unique_ratio = unique_count / max(len(series), 1)
-        return unique_count <= 12 or (unique_count <= 24 and unique_ratio <= 0.05)
+        return unique_count <= 13
 
     def _feature_can_be_numeric(self, feature_name: str) -> bool:
         """Whether a feature can safely be treated as numeric for charts."""
