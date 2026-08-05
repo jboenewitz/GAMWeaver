@@ -15,7 +15,10 @@ import pandas as pd
 from igann import IGANN
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
-from .data_processing import prepare_training_data
+from .data_processing import (
+    MISSING_CATEGORY_VALUE,
+    prepare_training_data,
+)
 
 DATA_FILE_NAME = "bike.csv"
 MAX_PREVIEW_ROWS = 500
@@ -186,6 +189,8 @@ class MLService:
 
         self.feature_schema: List[Dict[str, Any]] = []
         self.feature_schema_map: Dict[str, Dict[str, Any]] = {}
+        self.missing_indicator_map: Dict[str, str] = {}
+        self.numeric_missing_fill_values: Dict[str, float] = {}
         self.model_source: str = "trained"
         self.imported_artifact_version: Optional[str] = None
         self.analytics_available = False
@@ -211,6 +216,8 @@ class MLService:
         self.comparison_target_column: Optional[str] = None
         self.comparison_feature_schema: List[Dict[str, Any]] = []
         self.comparison_feature_schema_map: Dict[str, Dict[str, Any]] = {}
+        self.comparison_missing_indicator_map: Dict[str, str] = {}
+        self.comparison_numeric_missing_fill_values: Dict[str, float] = {}
         self.comparison_original_shape_functions: Dict[str, Dict[str, Any]] = {}
         self.comparison_shape_function_offsets: Dict[str, Dict[Any, float]] = {}
         self.comparison_dataset_id: Optional[str] = None
@@ -249,6 +256,8 @@ class MLService:
         self.comparison_target_column = None
         self.comparison_feature_schema = []
         self.comparison_feature_schema_map = {}
+        self.comparison_missing_indicator_map = {}
+        self.comparison_numeric_missing_fill_values = {}
         self.comparison_original_shape_functions = {}
         self.comparison_shape_function_offsets = {}
         self.comparison_dataset_id = None
@@ -272,6 +281,8 @@ class MLService:
             "target_column": self.target_column,
             "feature_schema": list(self.feature_schema),
             "feature_schema_map": dict(self.feature_schema_map),
+            "missing_indicator_map": dict(self.missing_indicator_map),
+            "numeric_missing_fill_values": dict(self.numeric_missing_fill_values),
             "original_shape_functions": dict(self.original_shape_functions),
             "shape_function_offsets": {
                 feature: dict(offsets)
@@ -441,10 +452,7 @@ class MLService:
         """Whether a feature can safely be treated as categorical for charts."""
         if feature_name in self.cat_features:
             return True
-        if self.X_train is None or feature_name not in self.X_train.columns:
-            return False
-
-        series = pd.to_numeric(self.X_train[feature_name], errors="coerce").dropna()
+        series = pd.to_numeric(self._get_public_training_series(feature_name), errors="coerce").dropna()
         if series.empty or not self._is_integer_like_numeric(series):
             return False
 
@@ -455,10 +463,7 @@ class MLService:
         """Whether a feature can safely be treated as numeric for charts."""
         if feature_name in self.num_features:
             return True
-        if self.X_train is None or feature_name not in self.X_train.columns:
-            return False
-
-        series = self.X_train[feature_name]
+        series = self._get_public_training_series(feature_name)
         non_null = series.dropna()
         if non_null.empty:
             return False
@@ -504,7 +509,8 @@ class MLService:
         treat_as_categorical: Optional[bool] = None,
     ) -> List[str]:
         """Get raw x-axis values that should be used for a categorical chart."""
-        if self.X_train is None or feature_name not in self.X_train.columns:
+        series = self._get_public_training_series(feature_name)
+        if series.empty and feature_name not in self.feature_schema_map:
             return []
 
         if treat_as_categorical is None:
@@ -513,11 +519,11 @@ class MLService:
         if not treat_as_categorical:
             return []
 
-        if feature_name in self.cat_features:
+        if str(self.feature_schema_map.get(feature_name, {}).get("feature_type")) == "categorical":
             options = self.feature_schema_map.get(feature_name, {}).get("categorical_options", [])
             base_values = [self._stringify_chart_value(v) for v in options]
         else:
-            numeric_series = pd.to_numeric(self.X_train[feature_name], errors="coerce").dropna()
+            numeric_series = pd.to_numeric(series, errors="coerce").dropna()
             uniques = sorted(numeric_series.unique().tolist())
             base_values = [self._stringify_chart_value(v) for v in uniques]
 
@@ -567,10 +573,12 @@ class MLService:
 
     def get_feature_chart_setting(self, feature_name: str) -> Dict[str, Any]:
         """Return effective chart settings for one feature."""
-        if feature_name not in self.feature_names:
+        if feature_name not in self._public_feature_names():
             raise ValueError(f"Unknown feature: {feature_name}")
 
-        base_feature_type = "categorical" if feature_name in self.cat_features else "numeric"
+        base_feature_type = str(
+            self.feature_schema_map.get(feature_name, {}).get("feature_type", "numeric")
+        )
         can_be_categorical = self._feature_can_be_categorical(feature_name)
         can_be_numeric = self._feature_can_be_numeric(feature_name)
         stored = self._get_feature_chart_setting(feature_name)
@@ -762,6 +770,78 @@ class MLService:
 
     def _build_feature_schema(self, X_all: pd.DataFrame) -> List[Dict[str, Any]]:
         return self._build_feature_schema_for(self.feature_names, self.num_features, X_all)
+
+    def _build_public_feature_schema(
+        self,
+        selected_features: List[str],
+        public_numeric_features: List[str],
+        public_frame: pd.DataFrame,
+        numeric_fill_values: Dict[str, float],
+    ) -> List[Dict[str, Any]]:
+        """Build the public-facing schema from the original selected features only."""
+        schema: List[Dict[str, Any]] = []
+        public_numeric_set = set(public_numeric_features)
+
+        for feature_name in selected_features:
+            if feature_name in public_numeric_set:
+                numeric_series = pd.to_numeric(public_frame[feature_name], errors="coerce")
+                valid_numeric_series = numeric_series.dropna()
+                fill_value = float(numeric_fill_values.get(feature_name, 0.0))
+
+                if valid_numeric_series.empty:
+                    min_val = fill_value
+                    max_val = fill_value
+                    default_val = fill_value
+                else:
+                    min_val = float(valid_numeric_series.min())
+                    max_val = float(valid_numeric_series.max())
+                    default_val = fill_value
+                    if default_val < min_val:
+                        default_val = min_val
+                    elif default_val > max_val:
+                        default_val = max_val
+
+                schema.append(
+                    {
+                        "name": feature_name,
+                        "feature_type": "numeric",
+                        "default_value": round(float(default_val), 2),
+                        "min_value": min_val,
+                        "max_value": max_val,
+                    }
+                )
+                continue
+
+            cat_series = (
+                public_frame[feature_name]
+                .astype(object)
+                .where(public_frame[feature_name].notna(), MISSING_CATEGORY_VALUE)
+                .astype(str)
+            )
+            unique_values = [str(v) for v in pd.unique(cat_series)]
+            unique_values = sorted(unique_values)
+            if not unique_values:
+                unique_values = [MISSING_CATEGORY_VALUE]
+
+            observed_counts = cat_series[cat_series != MISSING_CATEGORY_VALUE].value_counts()
+            if not observed_counts.empty:
+                default_val = str(observed_counts.index[0])
+            else:
+                default_val = unique_values[0]
+
+            if default_val not in unique_values:
+                default_val = unique_values[0]
+
+            schema.append(
+                {
+                    "name": feature_name,
+                    "feature_type": "categorical",
+                    "default_value": default_val,
+                    "categorical_options": unique_values,
+                }
+            )
+
+        return schema
 
     def _has_analytics_data(self) -> bool:
         return (
@@ -1213,6 +1293,8 @@ class MLService:
         self.target_column = validated["target_column"]
         self.feature_schema = list(validated["feature_schema"])
         self.feature_schema_map = dict(validated["feature_schema_map"])
+        self.missing_indicator_map = {}
+        self.numeric_missing_fill_values = {}
         self.feature_chart_settings = dict(validated["feature_chart_settings"])
         self.original_shape_functions = {
             shape_function["feature_name"]: shape_function
@@ -1288,7 +1370,7 @@ class MLService:
         return {
             "is_trained": self.is_trained,
             "data_loaded": self.X_train is not None,
-            "features": self.feature_names if self.feature_names else [],
+            "features": self.selected_feature_columns if self.selected_feature_columns else [],
             "feature_schema": self.feature_schema if self.feature_schema else [],
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns if self.selected_feature_columns else [],
@@ -1333,6 +1415,8 @@ class MLService:
         self.num_features = []
         self.feature_schema = []
         self.feature_schema_map = {}
+        self.missing_indicator_map = {}
+        self.numeric_missing_fill_values = {}
         self.model_source = "trained"
         self.imported_artifact_version = None
         self.analytics_available = False
@@ -1412,6 +1496,8 @@ class MLService:
             "target_column": self.target_column,
             "feature_schema": list(self.feature_schema),
             "feature_schema_map": dict(self.feature_schema_map),
+            "missing_indicator_map": dict(self.missing_indicator_map),
+            "numeric_missing_fill_values": dict(self.numeric_missing_fill_values),
             "model_source": self.model_source,
             "imported_artifact_version": self.imported_artifact_version,
             "analytics_available": self.analytics_available,
@@ -1443,17 +1529,31 @@ class MLService:
             selected_features,
             cat_features,
             num_features,
+            feature_processing_metadata,
         ) = prepare_training_data(
             csv_path=str(resolved_path),
             target_column=target_column,
             feature_columns=feature_columns,
         )
 
-        X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
-        rebuilt_feature_schema = self._build_feature_schema_for(
-            list(X_train.columns),
-            list(num_features),
-            X_all,
+        public_numeric_features = list(
+            feature_processing_metadata.get("public_numeric_features", [])
+        )
+        missing_indicator_map = dict(
+            feature_processing_metadata.get("missing_indicator_map", {})
+        )
+        numeric_fill_values = {
+            str(key): float(value)
+            for key, value in (
+                feature_processing_metadata.get("numeric_fill_values", {}) or {}
+            ).items()
+        }
+        public_frame = df_loaded.loc[:, list(selected_features)].copy()
+        rebuilt_feature_schema = self._build_public_feature_schema(
+            list(selected_features),
+            public_numeric_features,
+            public_frame,
+            numeric_fill_values,
         )
         rebuilt_feature_schema_map = {item["name"]: item for item in rebuilt_feature_schema}
 
@@ -1493,7 +1593,7 @@ class MLService:
             self.feature_chart_settings = {
                 feature: setting
                 for feature, setting in existing_chart_settings.items()
-                if feature in self.feature_names
+                if feature in self.selected_feature_columns
             }
         else:
             # Any dataset load invalidates a trained local model and shape offsets.
@@ -1504,13 +1604,15 @@ class MLService:
             self.analytics_available = False
             self.original_shape_functions = {}
             self.shape_function_offsets = {}
-            self.feature_schema = rebuilt_feature_schema
-            self.feature_schema_map = rebuilt_feature_schema_map
-            self.feature_chart_settings = {
-                feature: setting
-                for feature, setting in self.feature_chart_settings.items()
-                if feature in self.feature_names
-            }
+        self.feature_schema = rebuilt_feature_schema
+        self.feature_schema_map = rebuilt_feature_schema_map
+        self.missing_indicator_map = missing_indicator_map
+        self.numeric_missing_fill_values = numeric_fill_values
+        self.feature_chart_settings = {
+            feature: setting
+            for feature, setting in self.feature_chart_settings.items()
+            if feature in self.selected_feature_columns
+        }
 
         self.active_dataset_id = resolved_dataset_id
         self.active_dataset_path = resolved_path_str
@@ -1532,7 +1634,7 @@ class MLService:
             "total_records": len(self.df),
             "train_size": len(self.X_train),
             "test_size": len(self.X_test),
-            "features": self.feature_names,
+            "features": self.selected_feature_columns,
             "feature_schema": self.feature_schema,
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns,
@@ -1626,6 +1728,7 @@ class MLService:
             selected_features,
             cat_features,
             num_features,
+            feature_processing_metadata,
         ) = prepare_training_data(
             csv_path=str(resolved_path),
             target_column=target_column,
@@ -1638,11 +1741,24 @@ class MLService:
             feature_columns=selected_features,
         )
 
-        X_all = pd.concat([X_train, X_test], axis=0, ignore_index=True)
-        rebuilt_feature_schema = self._build_feature_schema_for(
-            list(X_train.columns),
-            list(num_features),
-            X_all,
+        public_numeric_features = list(
+            feature_processing_metadata.get("public_numeric_features", [])
+        )
+        comparison_missing_indicator_map = dict(
+            feature_processing_metadata.get("missing_indicator_map", {})
+        )
+        comparison_numeric_fill_values = {
+            str(key): float(value)
+            for key, value in (
+                feature_processing_metadata.get("numeric_fill_values", {}) or {}
+            ).items()
+        }
+        public_frame = df_loaded.loc[:, list(selected_features)].copy()
+        rebuilt_feature_schema = self._build_public_feature_schema(
+            list(selected_features),
+            public_numeric_features,
+            public_frame,
+            comparison_numeric_fill_values,
         )
         self._validate_comparison_feature_schema(rebuilt_feature_schema)
 
@@ -1665,6 +1781,8 @@ class MLService:
         self.comparison_feature_schema_map = {
             item["name"]: item for item in rebuilt_feature_schema
         }
+        self.comparison_missing_indicator_map = comparison_missing_indicator_map
+        self.comparison_numeric_missing_fill_values = comparison_numeric_fill_values
         self.comparison_dataset_id = resolved_dataset_id
         self.comparison_dataset_path = str(resolved_path)
         self.comparison_dataset_name = (
@@ -1677,7 +1795,7 @@ class MLService:
             "total_records": len(df_loaded),
             "train_size": len(X_train),
             "test_size": len(X_test),
-            "features": list(X_train.columns),
+            "features": selected_features,
             "target_column": resolved_target,
             "selected_feature_columns": selected_features,
             "dataset_id": self.comparison_dataset_id,
@@ -1750,13 +1868,82 @@ class MLService:
 
     # ==================== Prediction helpers ====================
 
+    def _public_feature_names(self) -> List[str]:
+        return (
+            list(self.selected_feature_columns)
+            if self.selected_feature_columns
+            else list(self.feature_schema_map.keys())
+        )
+
+    def _missing_indicator_feature_name(self, feature_name: str) -> Optional[str]:
+        return self.missing_indicator_map.get(feature_name)
+
+    def _is_missing_category_value(self, value: Any) -> bool:
+        return str(value) == MISSING_CATEGORY_VALUE
+
+    def _is_missing_numeric_feature_in_row(
+        self,
+        feature_name: str,
+        row: Any,
+    ) -> bool:
+        indicator_name = self._missing_indicator_feature_name(feature_name)
+        if not indicator_name:
+            return False
+        try:
+            indicator_value = row[indicator_name]
+        except Exception:
+            try:
+                indicator_value = row.get(indicator_name)
+            except Exception:
+                indicator_value = None
+        return self._is_missing_category_value(indicator_value)
+
+    def _get_public_training_series(self, feature_name: str) -> pd.Series:
+        if (
+            self.df is None
+            or self.X_train is None
+            or feature_name not in self.selected_feature_columns
+            or feature_name not in self.df.columns
+        ):
+            return pd.Series(dtype=object)
+        return self.df.loc[self.X_train.index, feature_name]
+
+    def _build_model_row_from_public_features(
+        self,
+        normalized_public_features: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        row: Dict[str, Any] = {}
+        for feature_name in self._public_feature_names():
+            schema = self.feature_schema_map.get(feature_name, {})
+            feature_type = schema.get("feature_type")
+            value = normalized_public_features.get(feature_name)
+
+            if feature_type == "numeric":
+                indicator_name = self._missing_indicator_feature_name(feature_name)
+                if value is None:
+                    row[feature_name] = float(
+                        self.numeric_missing_fill_values.get(feature_name, 0.0)
+                    )
+                    if indicator_name:
+                        row[indicator_name] = MISSING_CATEGORY_VALUE
+                else:
+                    row[feature_name] = float(value)
+                    if indicator_name:
+                        row[indicator_name] = "Observed"
+            else:
+                row[feature_name] = (
+                    MISSING_CATEGORY_VALUE if value is None else str(value)
+                )
+
+        return row
+
     def _validate_and_normalize_features(self, features: Dict[str, Any]) -> Dict[str, Any]:
         """Validate prediction payload against loaded feature schema."""
         if not self.feature_schema_map:
             raise ValueError("Feature schema is not available yet")
 
         provided_keys = set(features.keys())
-        expected_keys = set(self.feature_names)
+        expected_keys = set(self._public_feature_names())
         missing = sorted(expected_keys - provided_keys)
         extra = sorted(provided_keys - expected_keys)
         if missing or extra:
@@ -1768,17 +1955,27 @@ class MLService:
             raise ValueError(f"Prediction features do not match dataset schema ({', '.join(details)})")
 
         normalized: Dict[str, Any] = {}
-        for feature_name in self.feature_names:
+        for feature_name in self._public_feature_names():
             value = features[feature_name]
             schema = self.feature_schema_map.get(feature_name, {})
             feature_type = schema.get("feature_type")
 
             if feature_type == "numeric":
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    normalized[feature_name] = None
+                    continue
                 try:
-                    normalized[feature_name] = float(value)
+                    numeric_value = float(value)
                 except (TypeError, ValueError) as exc:
                     raise ValueError(f"Feature '{feature_name}' must be numeric") from exc
+                if not np.isfinite(numeric_value):
+                    normalized[feature_name] = None
+                    continue
+                normalized[feature_name] = numeric_value
             else:
+                if value is None or (isinstance(value, str) and not value.strip()):
+                    normalized[feature_name] = None
+                    continue
                 value_str = str(value)
                 valid_options = schema.get("categorical_options") or []
                 if valid_options and value_str not in valid_options:
@@ -1792,9 +1989,7 @@ class MLService:
     def _build_input_df(self, features: Dict[str, Any]) -> pd.DataFrame:
         """Build a single-row DataFrame from dynamic prediction features."""
         normalized = self._validate_and_normalize_features(features)
-        input_df = pd.DataFrame(
-            [{feature_name: normalized[feature_name] for feature_name in self.feature_names}]
-        )
+        input_df = pd.DataFrame([self._build_model_row_from_public_features(normalized)])
         for cat_feature in self.cat_features:
             if cat_feature in input_df.columns:
                 input_df[cat_feature] = input_df[cat_feature].astype(str)
@@ -1802,6 +1997,19 @@ class MLService:
             if num_feature in input_df.columns:
                 input_df[num_feature] = pd.to_numeric(input_df[num_feature], errors="coerce")
         return input_df
+
+    def _get_offset_for_row(self, feature_name: str, row: Any) -> float:
+        """Get a feature offset for one row, skipping numeric offsets on missing values."""
+        if self._is_missing_numeric_feature_in_row(feature_name, row):
+            return 0.0
+        try:
+            value = row[feature_name]
+        except Exception:
+            try:
+                value = row.get(feature_name)
+            except Exception:
+                return 0.0
+        return self._get_offset_for_value(feature_name, value)
 
     # ==================== Prediction APIs ====================
 
@@ -1816,8 +2024,7 @@ class MLService:
         total_offset = 0.0
         for feature_name in self.shape_function_offsets:
             if feature_name in input_df.columns:
-                value = input_df[feature_name].iloc[0]
-                total_offset += self._get_offset_for_value(feature_name, value)
+                total_offset += self._get_offset_for_row(feature_name, input_df.iloc[0])
 
         return base_prediction + total_offset
 
@@ -1839,8 +2046,7 @@ class MLService:
         total_offset = 0.0
         for feature_name in offsets:
             if feature_name in input_df.columns:
-                value = input_df[feature_name].iloc[0]
-                total_offset += self._get_offset_for_value(feature_name, value)
+                total_offset += self._get_offset_for_row(feature_name, input_df.iloc[0])
 
         self.shape_function_offsets = original_offsets
         return base_prediction + total_offset
@@ -1859,7 +2065,7 @@ class MLService:
             return list(self.original_shape_functions.values())
 
         shape_functions = []
-        for idx, feature_name in enumerate(self.feature_names):
+        for idx, feature_name in enumerate(self._public_feature_names()):
             try:
                 shape_data = self._extract_shape_function(
                     feature_name,
@@ -1899,6 +2105,10 @@ class MLService:
             self.target_column = self.comparison_target_column
             self.feature_schema = list(self.comparison_feature_schema)
             self.feature_schema_map = dict(self.comparison_feature_schema_map)
+            self.missing_indicator_map = dict(self.comparison_missing_indicator_map)
+            self.numeric_missing_fill_values = dict(
+                self.comparison_numeric_missing_fill_values
+            )
             self.original_shape_functions = dict(
                 self.comparison_original_shape_functions
             )
@@ -2000,15 +2210,12 @@ class MLService:
         self,
         feature_name: str,
     ) -> Optional[Dict[str, Any]]:
-        if self.X_train is None or feature_name not in self.X_train.columns:
-            return None
-
         numeric_pairs = self._get_numeric_chart_values_for_categorical_feature(feature_name)
         if not numeric_pairs:
             return None
 
         counts_map = (
-            self.X_train[feature_name]
+            self._get_public_training_series(feature_name)
             .dropna()
             .astype(str)
             .value_counts()
@@ -2051,17 +2258,15 @@ class MLService:
         x_values: List[Any],
         x_tick_labels: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
-        if self.X_train is None or feature_name not in self.X_train.columns:
-            return None
-
-        raw_series = self.X_train[feature_name].dropna()
-        if raw_series.empty:
-            return None
-
-        if feature_name in self.num_features:
+        raw_series = self._get_public_training_series(feature_name)
+        if str(self.feature_schema_map.get(feature_name, {}).get("feature_type")) == "numeric":
             normalized_series = raw_series.map(self._stringify_chart_value)
         else:
-            normalized_series = raw_series.astype(str)
+            normalized_series = (
+                raw_series.astype(object)
+                .where(raw_series.notna(), MISSING_CATEGORY_VALUE)
+                .astype(str)
+            )
 
         counts_map = normalized_series.value_counts().to_dict()
         ordered_counts = []
@@ -2099,7 +2304,7 @@ class MLService:
         x_values: List[Any],
         x_tick_labels: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
-        if self.X_train is None or feature_name not in self.X_train.columns:
+        if feature_name not in self._public_feature_names():
             return None
 
         if feature_type == "categorical":
@@ -2115,7 +2320,7 @@ class MLService:
             )
 
         return self._build_numeric_distribution_bins(
-            self.X_train[feature_name],
+            self._get_public_training_series(feature_name),
             x_values,
         )
 
@@ -2145,6 +2350,9 @@ class MLService:
                         sample_data[feature_name] = float(raw_value)
                     except (TypeError, ValueError):
                         continue
+                    indicator_name = self._missing_indicator_feature_name(feature_name)
+                    if indicator_name:
+                        sample_data[indicator_name] = "Observed"
                 else:
                     sample_data[feature_name] = raw_value
                 sample = pd.DataFrame([sample_data])[self.feature_names]
@@ -2227,8 +2435,15 @@ class MLService:
                     )
                 return result
 
-        min_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").min())
-        max_val = float(pd.to_numeric(self.X_train[feature_name], errors="coerce").max())
+        public_numeric_series = pd.to_numeric(
+            self._get_public_training_series(feature_name),
+            errors="coerce",
+        ).dropna()
+        if public_numeric_series.empty:
+            raise ValueError(f"No observed numeric values available for '{feature_name}'")
+
+        min_val = float(public_numeric_series.min())
+        max_val = float(public_numeric_series.max())
         if min_val == max_val:
             x_range = np.array([min_val])
         else:
@@ -2238,6 +2453,9 @@ class MLService:
         for x_val in x_range:
             sample_data = baseline.copy()
             sample_data[feature_name] = float(x_val)
+            indicator_name = self._missing_indicator_feature_name(feature_name)
+            if indicator_name:
+                sample_data[indicator_name] = "Observed"
             sample = pd.DataFrame([sample_data])[self.feature_names]
 
             for cat_feat in self.cat_features:
@@ -2290,9 +2508,17 @@ class MLService:
         target_values = pd.to_numeric(self.df[self.target_column], errors="coerce")
         return {
             "total_records": len(self.df),
-            "features": self.feature_names,
-            "numeric_features": self.num_features,
-            "categorical_features": self.cat_features,
+            "features": self.selected_feature_columns,
+            "numeric_features": [
+                feature["name"]
+                for feature in self.feature_schema
+                if feature.get("feature_type") == "numeric"
+            ],
+            "categorical_features": [
+                feature["name"]
+                for feature in self.feature_schema
+                if feature.get("feature_type") == "categorical"
+            ],
             "target_column": self.target_column,
             "target_stats": {
                 "mean": float(target_values.mean()),
@@ -2308,8 +2534,22 @@ class MLService:
             raise ValueError("Data not loaded yet")
 
         distributions: Dict[str, Any] = {}
-        for feature in self.num_features:
-            values = pd.to_numeric(self.X_train[feature], errors="coerce").dropna().tolist()
+        numeric_features = [
+            feature["name"]
+            for feature in self.feature_schema
+            if feature.get("feature_type") == "numeric"
+        ]
+        categorical_features = [
+            feature["name"]
+            for feature in self.feature_schema
+            if feature.get("feature_type") == "categorical"
+        ]
+
+        for feature in numeric_features:
+            values = pd.to_numeric(
+                self._get_public_training_series(feature),
+                errors="coerce",
+            ).dropna().tolist()
             distributions[feature] = {
                 "type": "numeric",
                 "values": values[:1000],
@@ -2317,8 +2557,15 @@ class MLService:
                 "std": float(np.std(values)) if values else 0.0,
             }
 
-        for feature in self.cat_features:
-            value_counts = self.X_train[feature].astype(str).value_counts().to_dict()
+        for feature in categorical_features:
+            raw_series = self._get_public_training_series(feature)
+            value_counts = (
+                raw_series.astype(object)
+                .where(raw_series.notna(), MISSING_CATEGORY_VALUE)
+                .astype(str)
+                .value_counts()
+                .to_dict()
+            )
             distributions[feature] = {
                 "type": "categorical",
                 "counts": {str(key): int(value) for key, value in value_counts.items()},
@@ -2744,8 +2991,8 @@ class MLService:
 
         for feature_name in self.shape_function_offsets:
             if feature_name in X.columns:
-                for idx, value in enumerate(X[feature_name].values):
-                    offsets[idx] += self._get_offset_for_value(feature_name, value)
+                for idx, (_, row) in enumerate(X.iterrows()):
+                    offsets[idx] += self._get_offset_for_row(feature_name, row)
 
         return base_predictions + offsets
 

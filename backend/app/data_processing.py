@@ -1,19 +1,19 @@
 """Data processing utilities for generic tabular regression datasets."""
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
 
 # Determine the project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 DATA_FILE = PROJECT_ROOT / "bike.csv"
+MISSING_CATEGORY_VALUE = "(Missing)"
+MISSING_INDICATOR_SUFFIX = " [missing]"
 
 # Numeric columns with these names are commonly integer-encoded categories.
 _CATEGORICAL_NAME_HINTS = {
@@ -115,6 +115,54 @@ def _infer_feature_types(X: pd.DataFrame) -> Tuple[List[str], List[str]]:
     return categorical_features, numeric_features
 
 
+def _missing_indicator_name(feature_name: str) -> str:
+    return f"{feature_name}{MISSING_INDICATOR_SUFFIX}"
+
+
+def _prepare_missing_aware_features(
+    X: pd.DataFrame,
+    categorical_features: List[str],
+    numeric_features: List[str],
+) -> Tuple[pd.DataFrame, List[str], List[str], Dict[str, str], Dict[str, float]]:
+    """Encode missingness explicitly without imputing learned values."""
+    processed = pd.DataFrame(index=X.index)
+    missing_indicator_map: Dict[str, str] = {}
+    numeric_fill_values: Dict[str, float] = {}
+
+    for column in numeric_features:
+        series = pd.to_numeric(X[column], errors="coerce")
+        observed = series.dropna()
+        fill_value = float(observed.median()) if not observed.empty else 0.0
+        numeric_fill_values[column] = fill_value
+        processed[column] = series.fillna(fill_value)
+        if series.isna().any():
+            indicator_name = _missing_indicator_name(column)
+            processed[indicator_name] = np.where(
+                series.isna(),
+                MISSING_CATEGORY_VALUE,
+                "Observed",
+            )
+            missing_indicator_map[column] = indicator_name
+
+    for column in categorical_features:
+        series = X[column].astype(object)
+        processed[column] = (
+            series.where(series.notna(), MISSING_CATEGORY_VALUE).astype(str)
+        )
+
+    internal_categorical_features = list(categorical_features) + list(
+        missing_indicator_map.values()
+    )
+    internal_numeric_features = list(numeric_features)
+    return (
+        processed,
+        internal_categorical_features,
+        internal_numeric_features,
+        missing_indicator_map,
+        numeric_fill_values,
+    )
+
+
 def load_dataset(csv_path: Optional[str] = None) -> pd.DataFrame:
     """Load raw dataset from CSV path."""
     resolved_path = Path(csv_path or DATA_FILE)
@@ -132,20 +180,16 @@ def get_preprocessor(
     categorical_features: Optional[List[str]] = None,
     numeric_features: Optional[List[str]] = None,
 ):
-    """Create and return a preprocessing pipeline with type-specific imputers."""
+    """Create and return a preprocessing pipeline without imputing missing values."""
     if categorical_features is None or numeric_features is None:
         categorical_features, numeric_features = _infer_feature_types(X)
 
     transformers = []
     if numeric_features:
-        num_transformer = Pipeline([("num_imputer", SimpleImputer(strategy="mean"))])
-        transformers.append(("num", num_transformer, numeric_features))
+        transformers.append(("num", "passthrough", numeric_features))
 
     if categorical_features:
-        cat_transformer = Pipeline(
-            [("cat_imputer", SimpleImputer(strategy="most_frequent"))]
-        )
-        transformers.append(("cat", cat_transformer, categorical_features))
+        transformers.append(("cat", "passthrough", categorical_features))
 
     if not transformers:
         raise ValueError("No usable features found after preprocessing setup")
@@ -209,10 +253,22 @@ def prepare_training_data(
     for column in numeric_features:
         X[column] = pd.to_numeric(X[column], errors="coerce")
 
-    X_processed, preprocessor = preprocess_data(
+    (
+        X_missing_aware,
+        internal_categorical_features,
+        internal_numeric_features,
+        missing_indicator_map,
+        numeric_fill_values,
+    ) = _prepare_missing_aware_features(
         X,
+        categorical_features,
+        numeric_features,
+    )
+
+    X_processed, preprocessor = preprocess_data(
+        X_missing_aware,
         preprocessor=None,
-        categorical_features=categorical_features,
+        categorical_features=internal_categorical_features,
     )
 
     y = pd.DataFrame({resolved_target: y_series})
@@ -233,6 +289,12 @@ def prepare_training_data(
         df,
         resolved_target,
         selected_features,
-        categorical_features,
-        numeric_features,
+        internal_categorical_features,
+        internal_numeric_features,
+        {
+            "public_categorical_features": list(categorical_features),
+            "public_numeric_features": list(numeric_features),
+            "missing_indicator_map": dict(missing_indicator_map),
+            "numeric_fill_values": dict(numeric_fill_values),
+        },
     )
