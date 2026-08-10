@@ -19,6 +19,7 @@ const NUMERIC_BRUSH_SMOOTHING_WINDOW = 5;
 const UNSYNCED_Y_PADDING_RATIO = 0.15;
 const UNSYNCED_Y_MIN_PADDING = 0.2;
 const FLAT_Y_MIN_HALF_SPAN = 0.5;
+const MISSING_CATEGORY_VALUE = "(Missing)";
 
 const roundNumericX = (x) =>
   Math.round(Number(x) * 10 ** NUMERIC_X_PRECISION) / 10 ** NUMERIC_X_PRECISION;
@@ -113,6 +114,42 @@ const computeDynamicYRange = (values) => {
     UNSYNCED_Y_MIN_PADDING,
   );
   return [yMin - padding, yMax + padding];
+};
+
+const buildNumericMissingBucketLayout = (xValues, missingBucket) => {
+  if (
+    !missingBucket ||
+    !Number.isFinite(Number(missingBucket?.count)) ||
+    Number(missingBucket.count) <= 0
+  ) {
+    return null;
+  }
+
+  const numericXValues = (xValues || [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+  if (numericXValues.length === 0) return null;
+
+  const observedMin = Math.min(...numericXValues);
+  const observedMax = Math.max(...numericXValues);
+  const span = observedMax - observedMin;
+  const scaleBase =
+    span > 1e-9 ? span : Math.max(Math.abs(observedMin), Math.abs(observedMax), 1);
+  const gap = Math.max(scaleBase * 0.14, 0.6);
+  const width = Math.max(scaleBase * 0.12, 0.45);
+  const anchor = observedMin - gap * 1.9;
+  const dividerX = observedMin - gap * 0.8;
+  const rangeMin = anchor - width * 1.1;
+  const interactionCutoffX = observedMin - gap * 1.15;
+
+  return {
+    anchor,
+    width,
+    dividerX,
+    rangeMin,
+    interactionCutoffX,
+    label: String(missingBucket.label || MISSING_CATEGORY_VALUE),
+  };
 };
 
 const applyMovingAverageInWindow = (points, centerIndex, windowSize) => {
@@ -250,6 +287,47 @@ const getConstructionLabel = (constructionType, t) => {
     default:
       return t("shapeFunctions.detailsUnknownConstruction");
   }
+};
+
+const getDistributionCountSummary = (distribution) => {
+  if (!distribution || typeof distribution !== "object") return null;
+
+  if (distribution.chart_type === "numeric") {
+    const totalCount = Number(distribution.total_count) || 0;
+    const missingCount = Number(distribution.missing_count) || 0;
+    if (missingCount > 0) {
+      return {
+        totalCount,
+        missingCount,
+        answeredCount: Math.max(0, totalCount - missingCount),
+        includesMissing: true,
+      };
+    }
+  }
+
+  if (distribution.chart_type === "categorical") {
+    const counts = Array.isArray(distribution.counts) ? distribution.counts : [];
+    const missingEntry = counts.find(
+      (entry) => String(entry?.x_value) === MISSING_CATEGORY_VALUE,
+    );
+    if (missingEntry) {
+      const missingCount = Number(missingEntry.count) || 0;
+      const totalCount = Number(distribution.total_count) || 0;
+      return {
+        totalCount,
+        missingCount,
+        answeredCount: Math.max(0, totalCount - missingCount),
+        includesMissing: true,
+      };
+    }
+  }
+
+  return {
+    totalCount: Number(distribution.total_count) || 0,
+    missingCount: 0,
+    answeredCount: Number(distribution.total_count) || 0,
+    includesMissing: false,
+  };
 };
 
 const buildSourceRows = (provenance) => {
@@ -574,6 +652,7 @@ const EditableShapeFunctionChart = ({
   const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
     shapeFunction;
   const isNumeric = feature_type === "numeric";
+  const missingBucket = shapeFunction?.missing_bucket || null;
   const xTickLabels =
     Array.isArray(x_tick_labels) && x_tick_labels.length === x_values.length
       ? x_tick_labels
@@ -709,6 +788,11 @@ const EditableShapeFunctionChart = ({
     () => hasShapeFunctionDistribution(distribution),
     [distribution],
   );
+  const numericMissingLayout = useMemo(
+    () =>
+      isNumeric ? buildNumericMissingBucketLayout(x_values, missingBucket) : null,
+    [isNumeric, x_values, missingBucket],
+  );
 
   // Calculate y-axis range
   const allYValues = isNumeric
@@ -716,6 +800,13 @@ const EditableShapeFunctionChart = ({
         ...y_values,
         ...(mergedLineData?.y || []),
         ...(dragYValue !== null ? [dragYValue] : []),
+        ...(missingBucket && Number.isFinite(Number(missingBucket.y_value))
+          ? [Number(missingBucket.y_value)]
+          : []),
+        ...(comparisonShapeFunction?.missing_bucket &&
+        Number.isFinite(Number(comparisonShapeFunction.missing_bucket.y_value))
+          ? [Number(comparisonShapeFunction.missing_bucket.y_value)]
+          : []),
       ]
     : [...y_values, ...currentYValues];
   const yRange = sharedYRange || computeDynamicYRange(allYValues);
@@ -725,7 +816,15 @@ const EditableShapeFunctionChart = ({
   const xDataMin = isNumeric ? Math.min(...numXVals) : 0;
   const xDataMax = isNumeric ? Math.max(...numXVals) : 1;
   const xPad = isNumeric ? Math.max((xDataMax - xDataMin) * 0.05, 0.1) : 0;
-  const xRange = [xDataMin - xPad, xDataMax + xPad];
+  const xRange = isNumeric
+    ? [
+        Math.min(
+          xDataMin - xPad,
+          numericMissingLayout ? numericMissingLayout.rangeMin : xDataMin - xPad,
+        ),
+        xDataMax + xPad,
+      ]
+    : [xDataMin - xPad, xDataMax + xPad];
 
   useEffect(() => {
     setIsDistributionOpen(false);
@@ -1104,6 +1203,12 @@ const EditableShapeFunctionChart = ({
       const rawX = clientXToDataX(e.clientX);
       const rawY = clientYToDataY(e.clientY);
       if (rawX === null || rawY === null) return;
+      if (
+        numericMissingLayout &&
+        rawX <= Number(numericMissingLayout.interactionCutoffX)
+      ) {
+        return;
+      }
 
       const clampedX = roundNumericX(clampX(rawX));
       const now = Date.now();
@@ -1174,6 +1279,7 @@ const EditableShapeFunctionChart = ({
     stopDragInteraction,
     shapeFunction,
     editedPoints,
+    numericMissingLayout,
   ]);
 
   // Build traces
@@ -1225,6 +1331,42 @@ const EditableShapeFunctionChart = ({
             hovertemplate: `<b>%{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra>${t("shapeFunctions.comparison")}</extra>`,
           }
         : null;
+    const missingTrace =
+      numericMissingLayout &&
+      missingBucket &&
+      Number(missingBucket.count) > 0 &&
+      Number.isFinite(Number(missingBucket.y_value))
+        ? {
+            x: [numericMissingLayout.anchor],
+            y: [Number(missingBucket.y_value)],
+            width: [numericMissingLayout.width],
+            type: "bar",
+            name: t("shapeFunctions.missing"),
+            marker: {
+              color: "rgba(244, 63, 94, 0.68)",
+              line: { color: "rgba(190, 24, 93, 0.9)", width: 1.2 },
+            },
+            hovertemplate: `<b>${numericMissingLayout.label}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<br>${t("shapeFunctions.countAxisLabel")}: ${Number(missingBucket.count) || 0}<extra></extra>`,
+          }
+        : null;
+    const comparisonMissingTrace =
+      numericMissingLayout &&
+      comparisonShapeFunction?.missing_bucket &&
+      Number(comparisonShapeFunction.missing_bucket.count) > 0 &&
+      Number.isFinite(Number(comparisonShapeFunction.missing_bucket.y_value))
+        ? {
+            x: [numericMissingLayout.anchor + numericMissingLayout.width * 0.28],
+            y: [Number(comparisonShapeFunction.missing_bucket.y_value)],
+            width: [numericMissingLayout.width * 0.55],
+            type: "bar",
+            name: `${t("shapeFunctions.comparison")} ${t("shapeFunctions.missing")}`,
+            marker: {
+              color: "rgba(249, 115, 22, 0.5)",
+              line: { color: "#ea580c", width: 1.1 },
+            },
+            hovertemplate: `<b>${numericMissingLayout.label}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<br>${t("shapeFunctions.countAxisLabel")}: ${Number(comparisonShapeFunction.missing_bucket.count) || 0}<extra>${t("shapeFunctions.comparison")}</extra>`,
+          }
+        : null;
 
     const dragHighlightTraces =
       isDragging && dragXValue !== null && dragCurvePoints.length > 1
@@ -1273,8 +1415,10 @@ const EditableShapeFunctionChart = ({
 
     data = [
       ...(hasEdits ? [originalTrace] : []),
+      ...(missingTrace ? [missingTrace] : []),
       currentTrace,
       ...(comparisonTrace ? [comparisonTrace] : []),
+      ...(comparisonMissingTrace ? [comparisonMissingTrace] : []),
       ...dragHighlightTraces,
       ...(editMarkersTrace ? [editMarkersTrace] : []),
     ];
@@ -1348,6 +1492,31 @@ const EditableShapeFunctionChart = ({
 
   // No drag crosshair shapes for numeric dragging; highlight is shown directly on the line.
   const layoutShapes = [];
+  const layoutAnnotations = [];
+  if (isNumeric && numericMissingLayout) {
+    layoutShapes.push({
+      type: "line",
+      x0: numericMissingLayout.dividerX,
+      x1: numericMissingLayout.dividerX,
+      y0: yRange[0],
+      y1: yRange[1],
+      line: {
+        color: "rgba(148, 163, 184, 0.85)",
+        width: 1,
+        dash: "dot",
+      },
+    });
+    layoutAnnotations.push({
+      x: numericMissingLayout.anchor,
+      y: 1.04,
+      xref: "x",
+      yref: "paper",
+      text: t("shapeFunctions.missing"),
+      showarrow: false,
+      font: { size: enlarged ? 12 : 10, color: "#475569" },
+      align: "center",
+    });
+  }
 
   const layout = {
     title: {
@@ -1409,6 +1578,7 @@ const EditableShapeFunctionChart = ({
       font: { size: 10 },
       bgcolor: "rgba(255,255,255,0.8)",
     },
+    annotations: layoutAnnotations,
     shapes: layoutShapes,
   };
 
@@ -1438,9 +1608,25 @@ const EditableShapeFunctionChart = ({
             Math.min(...bins.map((bin) => Number(bin.x0))),
             Math.max(...bins.map((bin) => Number(bin.x1))),
           ];
+      const missingCount = Number(distribution.missing_count) || 0;
+      const distributionMissingTrace =
+        numericMissingLayout && missingCount > 0
+          ? {
+              x: [numericMissingLayout.anchor],
+              y: [missingCount],
+              width: [numericMissingLayout.width],
+              type: "bar",
+              marker: {
+                color: "rgba(244, 63, 94, 0.58)",
+                line: { color: "rgba(190, 24, 93, 0.82)", width: 1 },
+              },
+              hovertemplate: `<b>${t("shapeFunctions.missing")}</b><br>${t("shapeFunctions.countAxisLabel")}: %{y}<extra></extra>`,
+            }
+          : null;
 
       return {
         data: [
+          ...(distributionMissingTrace ? [distributionMissingTrace] : []),
           {
             x: bins.map((bin) => Number(bin.center)),
             y: bins.map((bin) => Number(bin.count)),
@@ -1484,6 +1670,39 @@ const EditableShapeFunctionChart = ({
             rangemode: "tozero",
             tickfont: { size: enlarged ? 11 : 10 },
           },
+          annotations:
+            distributionMissingTrace && numericMissingLayout
+              ? [
+                  {
+                    x: numericMissingLayout.anchor,
+                    y: 1.05,
+                    xref: "x",
+                    yref: "paper",
+                    text: t("shapeFunctions.missing"),
+                    showarrow: false,
+                    font: { size: enlarged ? 11 : 10, color: "#475569" },
+                  },
+                ]
+              : [],
+          shapes:
+            distributionMissingTrace && numericMissingLayout
+              ? [
+                  {
+                    type: "line",
+                    x0: numericMissingLayout.dividerX,
+                    x1: numericMissingLayout.dividerX,
+                    y0: 0,
+                    y1: 1,
+                    xref: "x",
+                    yref: "paper",
+                    line: {
+                      color: "rgba(148, 163, 184, 0.85)",
+                      width: 1,
+                      dash: "dot",
+                    },
+                  },
+                ]
+              : [],
         },
       };
     }
@@ -1548,7 +1767,15 @@ const EditableShapeFunctionChart = ({
     }
 
     return null;
-  }, [distribution, hasDistribution, isNumeric, xRange, enlarged, t]);
+  }, [
+    distribution,
+    hasDistribution,
+    isNumeric,
+    xRange,
+    enlarged,
+    numericMissingLayout,
+    t,
+  ]);
 
   const distributionConfig = useMemo(
     () => ({
@@ -1559,6 +1786,10 @@ const EditableShapeFunctionChart = ({
       staticPlot: false,
     }),
     [],
+  );
+  const distributionCountSummary = useMemo(
+    () => getDistributionCountSummary(distribution),
+    [distribution],
   );
 
   // Determine cursor style
@@ -1783,12 +2014,39 @@ const EditableShapeFunctionChart = ({
           {isDistributionOpen && (
             <div className="border-t border-slate-200 px-3 py-3">
               {distributionPlot ? (
-                <Plot
-                  data={distributionPlot.data}
-                  layout={distributionPlot.layout}
-                  config={distributionConfig}
-                  className="w-full"
-                />
+                <>
+                  <Plot
+                    data={distributionPlot.data}
+                    layout={distributionPlot.layout}
+                    config={distributionConfig}
+                    className="w-full"
+                  />
+                  {distributionCountSummary?.includesMissing ? (
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                      <p>
+                        {t("shapeFunctions.distributionAnsweredCount", {
+                          count: distributionCountSummary.answeredCount,
+                        })}
+                      </p>
+                      <p>
+                        {t("shapeFunctions.distributionMissingCount", {
+                          count: distributionCountSummary.missingCount,
+                        })}
+                      </p>
+                      <p>
+                        {t("shapeFunctions.distributionRepresentedCount", {
+                          count: distributionCountSummary.totalCount,
+                        })}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-slate-500">
+                      {t("shapeFunctions.distributionTotalCount", {
+                        count: distributionCountSummary?.totalCount || 0,
+                      })}
+                    </p>
+                  )}
+                </>
               ) : (
                 <p className="text-sm text-slate-500">
                   {t("shapeFunctions.distributionEmpty")}
@@ -2497,6 +2755,9 @@ const EditableShapeFunctionsGrid = ({
     const allY = [];
     shapeFunctions.forEach((sf) => {
       allY.push(...sf.y_values);
+      if (Number.isFinite(Number(sf?.missing_bucket?.y_value))) {
+        allY.push(Number(sf.missing_bucket.y_value));
+      }
       (initialEditedPoints[sf.feature_name] || []).forEach((p) =>
         allY.push(p.y_value),
       );
@@ -2504,12 +2765,23 @@ const EditableShapeFunctionsGrid = ({
         allY.push(p.y_value),
       );
     });
+    (comparisonShapeFunctions || []).forEach((sf) => {
+      if (Number.isFinite(Number(sf?.missing_bucket?.y_value))) {
+        allY.push(Number(sf.missing_bucket.y_value));
+      }
+    });
     if (allY.length === 0) return null;
     const yMin = Math.min(...allY);
     const yMax = Math.max(...allY);
     const yPadding = Math.max((yMax - yMin) * 0.3, 5);
     return [yMin - yPadding, yMax + yPadding];
-  }, [syncAxes, shapeFunctions, initialEditedPoints, editedPoints]);
+  }, [
+    syncAxes,
+    shapeFunctions,
+    comparisonShapeFunctions,
+    initialEditedPoints,
+    editedPoints,
+  ]);
 
   // Only reset unsaved edits when a completely new model is trained
   useEffect(() => {

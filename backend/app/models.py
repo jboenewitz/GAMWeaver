@@ -26,6 +26,15 @@ class ShapeFunctionDistribution(BaseModel):
     bin_count: int
     bins: List[ShapeFunctionDistributionBin] = Field(default_factory=list)
     counts: List[ShapeFunctionDistributionCount] = Field(default_factory=list)
+    missing_count: int = 0
+    missing_label: Optional[str] = None
+
+
+class ShapeFunctionMissingBucket(BaseModel):
+    """Dedicated missing-value bar shown alongside a numeric shape function."""
+    label: str
+    count: int
+    y_value: float
 
 
 class PredictionInput(BaseModel):
@@ -65,6 +74,7 @@ class ShapeFunctionData(BaseModel):
     x_tick_labels: Optional[List[str]] = None
     chart_config: Optional[Dict[str, Any]] = None
     distribution: Optional[ShapeFunctionDistribution] = None
+    missing_bucket: Optional[ShapeFunctionMissingBucket] = None
 
 
 class ShapeFunctionsResponse(BaseModel):

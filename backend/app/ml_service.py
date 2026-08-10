@@ -190,7 +190,7 @@ class MLService:
         self.feature_schema: List[Dict[str, Any]] = []
         self.feature_schema_map: Dict[str, Dict[str, Any]] = {}
         self.missing_indicator_map: Dict[str, str] = {}
-        self.numeric_missing_fill_values: Dict[str, float] = {}
+        self.numeric_missing_placeholder_values: Dict[str, float] = {}
         self.model_source: str = "trained"
         self.imported_artifact_version: Optional[str] = None
         self.analytics_available = False
@@ -217,7 +217,7 @@ class MLService:
         self.comparison_feature_schema: List[Dict[str, Any]] = []
         self.comparison_feature_schema_map: Dict[str, Dict[str, Any]] = {}
         self.comparison_missing_indicator_map: Dict[str, str] = {}
-        self.comparison_numeric_missing_fill_values: Dict[str, float] = {}
+        self.comparison_numeric_missing_placeholder_values: Dict[str, float] = {}
         self.comparison_original_shape_functions: Dict[str, Dict[str, Any]] = {}
         self.comparison_shape_function_offsets: Dict[str, Dict[Any, float]] = {}
         self.comparison_dataset_id: Optional[str] = None
@@ -259,7 +259,7 @@ class MLService:
         self.comparison_feature_schema = []
         self.comparison_feature_schema_map = {}
         self.comparison_missing_indicator_map = {}
-        self.comparison_numeric_missing_fill_values = {}
+        self.comparison_numeric_missing_placeholder_values = {}
         self.comparison_original_shape_functions = {}
         self.comparison_shape_function_offsets = {}
         self.comparison_dataset_id = None
@@ -284,7 +284,9 @@ class MLService:
             "feature_schema": list(self.feature_schema),
             "feature_schema_map": dict(self.feature_schema_map),
             "missing_indicator_map": dict(self.missing_indicator_map),
-            "numeric_missing_fill_values": dict(self.numeric_missing_fill_values),
+            "numeric_missing_placeholder_values": dict(
+                self.numeric_missing_placeholder_values
+            ),
             "original_shape_functions": dict(self.original_shape_functions),
             "shape_function_offsets": {
                 feature: dict(offsets)
@@ -975,6 +977,8 @@ class MLService:
             numeric_series = pd.to_numeric(series, errors="coerce").dropna()
             uniques = sorted(numeric_series.unique().tolist())
             base_values = [self._stringify_chart_value(v) for v in uniques]
+            if self._get_public_missing_count(feature_name) > 0:
+                base_values.append(MISSING_CATEGORY_VALUE)
 
         deduped: List[str] = []
         seen = set()
@@ -1225,7 +1229,6 @@ class MLService:
         selected_features: List[str],
         public_numeric_features: List[str],
         public_frame: pd.DataFrame,
-        numeric_fill_values: Dict[str, float],
     ) -> List[Dict[str, Any]]:
         """Build the public-facing schema from the original selected features only."""
         schema: List[Dict[str, Any]] = []
@@ -1235,20 +1238,15 @@ class MLService:
             if feature_name in public_numeric_set:
                 numeric_series = pd.to_numeric(public_frame[feature_name], errors="coerce")
                 valid_numeric_series = numeric_series.dropna()
-                fill_value = float(numeric_fill_values.get(feature_name, 0.0))
 
                 if valid_numeric_series.empty:
-                    min_val = fill_value
-                    max_val = fill_value
-                    default_val = fill_value
+                    min_val = 0.0
+                    max_val = 0.0
+                    default_val = 0.0
                 else:
                     min_val = float(valid_numeric_series.min())
                     max_val = float(valid_numeric_series.max())
-                    default_val = fill_value
-                    if default_val < min_val:
-                        default_val = min_val
-                    elif default_val > max_val:
-                        default_val = max_val
+                    default_val = float(valid_numeric_series.median())
 
                 schema.append(
                     {
@@ -1743,7 +1741,7 @@ class MLService:
         self.feature_schema = list(validated["feature_schema"])
         self.feature_schema_map = dict(validated["feature_schema_map"])
         self.missing_indicator_map = {}
-        self.numeric_missing_fill_values = {}
+        self.numeric_missing_placeholder_values = {}
         self.feature_chart_settings = dict(validated["feature_chart_settings"])
         self.original_shape_functions = {
             shape_function["feature_name"]: shape_function
@@ -1865,7 +1863,7 @@ class MLService:
         self.feature_schema = []
         self.feature_schema_map = {}
         self.missing_indicator_map = {}
-        self.numeric_missing_fill_values = {}
+        self.numeric_missing_placeholder_values = {}
         self.model_source = "trained"
         self.imported_artifact_version = None
         self.analytics_available = False
@@ -1946,7 +1944,9 @@ class MLService:
             "feature_schema": list(self.feature_schema),
             "feature_schema_map": dict(self.feature_schema_map),
             "missing_indicator_map": dict(self.missing_indicator_map),
-            "numeric_missing_fill_values": dict(self.numeric_missing_fill_values),
+            "numeric_missing_placeholder_values": dict(
+                self.numeric_missing_placeholder_values
+            ),
             "model_source": self.model_source,
             "imported_artifact_version": self.imported_artifact_version,
             "analytics_available": self.analytics_available,
@@ -1991,10 +1991,13 @@ class MLService:
         missing_indicator_map = dict(
             feature_processing_metadata.get("missing_indicator_map", {})
         )
-        numeric_fill_values = {
+        numeric_missing_placeholder_values = {
             str(key): float(value)
             for key, value in (
-                feature_processing_metadata.get("numeric_fill_values", {}) or {}
+                feature_processing_metadata.get(
+                    "numeric_missing_placeholder_values", {}
+                )
+                or {}
             ).items()
         }
         public_frame = df_loaded.loc[:, list(selected_features)].copy()
@@ -2002,7 +2005,6 @@ class MLService:
             list(selected_features),
             public_numeric_features,
             public_frame,
-            numeric_fill_values,
         )
         effective_dataset_name = (
             Path(str(dataset_name)).name
@@ -2069,7 +2071,7 @@ class MLService:
         self.feature_schema = rebuilt_feature_schema
         self.feature_schema_map = rebuilt_feature_schema_map
         self.missing_indicator_map = missing_indicator_map
-        self.numeric_missing_fill_values = numeric_fill_values
+        self.numeric_missing_placeholder_values = numeric_missing_placeholder_values
         self.feature_chart_settings = {
             feature: setting
             for feature, setting in self.feature_chart_settings.items()
@@ -2209,10 +2211,13 @@ class MLService:
         comparison_missing_indicator_map = dict(
             feature_processing_metadata.get("missing_indicator_map", {})
         )
-        comparison_numeric_fill_values = {
+        comparison_numeric_missing_placeholder_values = {
             str(key): float(value)
             for key, value in (
-                feature_processing_metadata.get("numeric_fill_values", {}) or {}
+                feature_processing_metadata.get(
+                    "numeric_missing_placeholder_values", {}
+                )
+                or {}
             ).items()
         }
         public_frame = df_loaded.loc[:, list(selected_features)].copy()
@@ -2220,7 +2225,6 @@ class MLService:
             list(selected_features),
             public_numeric_features,
             public_frame,
-            comparison_numeric_fill_values,
         )
         comparison_dataset_name = (
             Path(str(dataset_name)).name
@@ -2254,7 +2258,9 @@ class MLService:
             item["name"]: item for item in rebuilt_feature_schema
         }
         self.comparison_missing_indicator_map = comparison_missing_indicator_map
-        self.comparison_numeric_missing_fill_values = comparison_numeric_fill_values
+        self.comparison_numeric_missing_placeholder_values = (
+            comparison_numeric_missing_placeholder_values
+        )
         self.comparison_dataset_id = resolved_dataset_id
         self.comparison_dataset_path = str(resolved_path)
         self.comparison_dataset_name = comparison_dataset_name
@@ -2376,6 +2382,84 @@ class MLService:
             return pd.Series(dtype=object)
         return self.df.loc[self.X_train.index, feature_name]
 
+    def _get_public_missing_count(self, feature_name: str) -> int:
+        raw_series = self._get_public_training_series(feature_name)
+        if raw_series.empty:
+            return 0
+        if feature_name in self.num_features:
+            return int(pd.to_numeric(raw_series, errors="coerce").isna().sum())
+        return int(raw_series.isna().sum())
+
+    def _normalize_public_series_for_categorical_chart(
+        self,
+        feature_name: str,
+    ) -> pd.Series:
+        raw_series = self._get_public_training_series(feature_name)
+        if raw_series.empty:
+            return pd.Series(dtype=object)
+        if feature_name in self.num_features:
+            numeric = pd.to_numeric(raw_series, errors="coerce")
+            return numeric.map(
+                lambda value: (
+                    MISSING_CATEGORY_VALUE
+                    if pd.isna(value)
+                    else self._stringify_chart_value(value)
+                )
+            )
+        return (
+            raw_series.astype(object)
+            .where(raw_series.notna(), MISSING_CATEGORY_VALUE)
+            .astype(str)
+        )
+
+    def _predict_shape_function_sample(self, sample_data: Dict[str, Any]) -> float:
+        sample = pd.DataFrame([sample_data])[self.feature_names]
+
+        for cat_feat in self.cat_features:
+            sample[cat_feat] = sample[cat_feat].astype(str)
+        for num_feat in self.num_features:
+            sample[num_feat] = sample[num_feat].astype(float)
+
+        pred = self.model.predict(sample)
+        return float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
+
+    def _build_numeric_chart_missing_bucket(
+        self,
+        feature_name: str,
+        baseline: Dict[str, Any],
+        centered_mean: float,
+    ) -> Optional[Dict[str, Any]]:
+        missing_count = self._get_public_missing_count(feature_name)
+        if missing_count <= 0:
+            return None
+
+        sample_data = baseline.copy()
+        if feature_name in self.num_features:
+            indicator_name = self._missing_indicator_feature_name(feature_name)
+            if not indicator_name:
+                return None
+            sample_data[feature_name] = float(
+                self.numeric_missing_placeholder_values.get(
+                    feature_name,
+                    self.feature_schema_map.get(feature_name, {}).get(
+                        "default_value",
+                        0.0,
+                    ),
+                )
+            )
+            sample_data[indicator_name] = MISSING_CATEGORY_VALUE
+        elif feature_name in self.cat_features:
+            sample_data[feature_name] = MISSING_CATEGORY_VALUE
+        else:
+            return None
+
+        prediction = self._predict_shape_function_sample(sample_data)
+        return {
+            "label": MISSING_CATEGORY_VALUE,
+            "count": missing_count,
+            "y_value": prediction - centered_mean,
+        }
+
     def _build_model_row_from_public_features(
         self,
         normalized_public_features: Dict[str, Any],
@@ -2390,7 +2474,7 @@ class MLService:
                 indicator_name = self._missing_indicator_feature_name(feature_name)
                 if value is None:
                     row[feature_name] = float(
-                        self.numeric_missing_fill_values.get(feature_name, 0.0)
+                        self.numeric_missing_placeholder_values.get(feature_name, 0.0)
                     )
                     if indicator_name:
                         row[indicator_name] = MISSING_CATEGORY_VALUE
@@ -2601,7 +2685,16 @@ class MLService:
     def _build_shape_baseline(self) -> Dict[str, Any]:
         baseline: Dict[str, Any] = {}
         for num_feat in self.num_features:
-            baseline[num_feat] = float(pd.to_numeric(self.X_train[num_feat], errors="coerce").mean())
+            numeric_series = pd.to_numeric(
+                self._get_public_training_series(num_feat),
+                errors="coerce",
+            ).dropna()
+            if numeric_series.empty:
+                baseline[num_feat] = float(
+                    self.feature_schema_map.get(num_feat, {}).get("default_value", 0.0)
+                )
+            else:
+                baseline[num_feat] = float(numeric_series.mean())
         for cat_feat in self.cat_features:
             mode = self.X_train[cat_feat].astype(str).mode()
             baseline[cat_feat] = str(mode.iloc[0]) if not mode.empty else "Unknown"
@@ -2611,6 +2704,7 @@ class MLService:
         self,
         values: pd.Series,
         x_values: List[Any],
+        missing_count: int = 0,
     ) -> Optional[Dict[str, Any]]:
         numeric_values = pd.to_numeric(values, errors="coerce").dropna()
         if numeric_values.empty:
@@ -2634,7 +2728,7 @@ class MLService:
             half_width = 0.5
             return {
                 "chart_type": "numeric",
-                "total_count": int(len(numeric_values)),
+                "total_count": int(len(numeric_values) + missing_count),
                 "bin_count": 1,
                 "bins": [
                     {
@@ -2645,6 +2739,10 @@ class MLService:
                     }
                 ],
                 "counts": [],
+                "missing_count": int(missing_count),
+                "missing_label": (
+                    MISSING_CATEGORY_VALUE if missing_count > 0 else None
+                ),
             }
 
         edges = np.linspace(
@@ -2668,10 +2766,14 @@ class MLService:
 
         return {
             "chart_type": "numeric",
-            "total_count": int(len(numeric_values)),
+            "total_count": int(len(numeric_values) + missing_count),
             "bin_count": len(bins),
             "bins": bins,
             "counts": [],
+            "missing_count": int(missing_count),
+            "missing_label": (
+                MISSING_CATEGORY_VALUE if missing_count > 0 else None
+            ),
         }
 
     def _build_numeric_distribution_for_categorical_feature(
@@ -2682,13 +2784,11 @@ class MLService:
         if not numeric_pairs:
             return None
 
-        counts_map = (
-            self._get_public_training_series(feature_name)
-            .dropna()
-            .astype(str)
-            .value_counts()
-            .to_dict()
+        normalized_series = self._normalize_public_series_for_categorical_chart(
+            feature_name,
         )
+        counts_map = normalized_series.value_counts().to_dict()
+        missing_count = int(counts_map.get(MISSING_CATEGORY_VALUE, 0))
         centers = [float(numeric_x) for _, numeric_x in numeric_pairs]
         if len(centers) == 1:
             edges = [centers[0] - 0.5, centers[0] + 0.5]
@@ -2714,10 +2814,14 @@ class MLService:
 
         return {
             "chart_type": "numeric",
-            "total_count": total_count,
+            "total_count": total_count + missing_count,
             "bin_count": len(bins),
             "bins": bins,
             "counts": [],
+            "missing_count": missing_count,
+            "missing_label": (
+                MISSING_CATEGORY_VALUE if missing_count > 0 else None
+            ),
         }
 
     def _build_categorical_distribution(
@@ -2726,15 +2830,9 @@ class MLService:
         x_values: List[Any],
         x_tick_labels: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
-        raw_series = self._get_public_training_series(feature_name)
-        if str(self.feature_schema_map.get(feature_name, {}).get("feature_type")) == "numeric":
-            normalized_series = raw_series.map(self._stringify_chart_value)
-        else:
-            normalized_series = (
-                raw_series.astype(object)
-                .where(raw_series.notna(), MISSING_CATEGORY_VALUE)
-                .astype(str)
-            )
+        normalized_series = self._normalize_public_series_for_categorical_chart(
+            feature_name,
+        )
 
         counts_map = normalized_series.value_counts().to_dict()
         ordered_counts = []
@@ -2763,6 +2861,8 @@ class MLService:
             "bin_count": len(ordered_counts),
             "bins": [],
             "counts": ordered_counts,
+            "missing_count": int(counts_map.get(MISSING_CATEGORY_VALUE, 0)),
+            "missing_label": MISSING_CATEGORY_VALUE,
         }
 
     def _build_shape_function_distribution(
@@ -2790,6 +2890,7 @@ class MLService:
         return self._build_numeric_distribution_bins(
             self._get_public_training_series(feature_name),
             x_values,
+            missing_count=self._get_public_missing_count(feature_name),
         )
 
     def _extract_shape_function(
@@ -2814,24 +2915,30 @@ class MLService:
             for raw_value in raw_x_values:
                 sample_data = baseline.copy()
                 if feature_name in self.num_features:
-                    try:
-                        sample_data[feature_name] = float(raw_value)
-                    except (TypeError, ValueError):
-                        continue
                     indicator_name = self._missing_indicator_feature_name(feature_name)
-                    if indicator_name:
-                        sample_data[indicator_name] = "Observed"
+                    if raw_value == MISSING_CATEGORY_VALUE:
+                        if not indicator_name:
+                            continue
+                        sample_data[feature_name] = float(
+                            self.numeric_missing_placeholder_values.get(
+                                feature_name,
+                                self.feature_schema_map.get(
+                                    feature_name,
+                                    {},
+                                ).get("default_value", 0.0),
+                            )
+                        )
+                        sample_data[indicator_name] = MISSING_CATEGORY_VALUE
+                    else:
+                        try:
+                            sample_data[feature_name] = float(raw_value)
+                        except (TypeError, ValueError):
+                            continue
+                        if indicator_name:
+                            sample_data[indicator_name] = "Observed"
                 else:
                     sample_data[feature_name] = raw_value
-                sample = pd.DataFrame([sample_data])[self.feature_names]
-
-                for cat_feat in self.cat_features:
-                    sample[cat_feat] = sample[cat_feat].astype(str)
-                for num_feat in self.num_features:
-                    sample[num_feat] = sample[num_feat].astype(float)
-
-                pred = self.model.predict(sample)
-                pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
+                pred_val = self._predict_shape_function_sample(sample_data)
                 shape_values.append(pred_val)
                 effective_x_values.append(raw_value)
 
@@ -2873,20 +2980,17 @@ class MLService:
                 for raw_value, numeric_x in numeric_pairs:
                     sample_data = baseline.copy()
                     sample_data[feature_name] = raw_value
-                    sample = pd.DataFrame([sample_data])[self.feature_names]
-
-                    for cat_feat in self.cat_features:
-                        sample[cat_feat] = sample[cat_feat].astype(str)
-                    for num_feat in self.num_features:
-                        sample[num_feat] = sample[num_feat].astype(float)
-
-                    pred = self.model.predict(sample)
-                    pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
+                    pred_val = self._predict_shape_function_sample(sample_data)
                     shape_values.append(pred_val)
                     x_values_numeric.append(float(numeric_x))
 
                 mean_val = np.mean(shape_values)
                 shape_values = [value - mean_val for value in shape_values]
+                missing_bucket = self._build_numeric_chart_missing_bucket(
+                    feature_name,
+                    baseline,
+                    mean_val,
+                )
 
                 result = {
                     "feature_name": feature_name,
@@ -2894,6 +2998,7 @@ class MLService:
                     "y_values": shape_values,
                     "feature_type": "numeric",
                     "chart_config": chart_setting,
+                    "missing_bucket": missing_bucket,
                 }
                 if include_distribution:
                     result["distribution"] = self._build_shape_function_distribution(
@@ -2924,19 +3029,16 @@ class MLService:
             indicator_name = self._missing_indicator_feature_name(feature_name)
             if indicator_name:
                 sample_data[indicator_name] = "Observed"
-            sample = pd.DataFrame([sample_data])[self.feature_names]
-
-            for cat_feat in self.cat_features:
-                sample[cat_feat] = sample[cat_feat].astype(str)
-            for num_feat in self.num_features:
-                sample[num_feat] = sample[num_feat].astype(float)
-
-            pred = self.model.predict(sample)
-            pred_val = float(pred[0]) if hasattr(pred, "__iter__") else float(pred)
+            pred_val = self._predict_shape_function_sample(sample_data)
             shape_values.append(pred_val)
 
         mean_val = np.mean(shape_values)
         shape_values = [value - mean_val for value in shape_values]
+        missing_bucket = self._build_numeric_chart_missing_bucket(
+            feature_name,
+            baseline,
+            mean_val,
+        )
 
         result = {
             "feature_name": feature_name,
@@ -2944,6 +3046,7 @@ class MLService:
             "y_values": shape_values,
             "feature_type": "numeric",
             "chart_config": chart_setting,
+            "missing_bucket": missing_bucket,
         }
         if include_distribution:
             result["distribution"] = self._build_shape_function_distribution(

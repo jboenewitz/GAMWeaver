@@ -182,6 +182,7 @@ const translations = {
     "shapeFunctions.edited": "Edited",
     "shapeFunctions.current": "Current",
     "shapeFunctions.comparison": "Comparison",
+    "shapeFunctions.missing": "Missing",
     "shapeFunctions.editPoints": "Edit points",
     "shapeFunctions.effect": "Effect",
     "shapeFunctions.draggingSuffix": "(dragging...)",
@@ -242,6 +243,13 @@ const translations = {
     "shapeFunctions.showDistribution": "Show distribution",
     "shapeFunctions.hideDistribution": "Hide distribution",
     "shapeFunctions.countAxisLabel": "Count",
+    "shapeFunctions.distributionTotalCount":
+      "Non-missing datapoints used: {count}",
+    "shapeFunctions.distributionAnsweredCount":
+      "Answered / non-missing: {count}",
+    "shapeFunctions.distributionMissingCount": "Missing: {count}",
+    "shapeFunctions.distributionRepresentedCount":
+      "Total rows represented: {count}",
     "shapeFunctions.distributionEmpty": "No distribution data available.",
     "shapeFunctions.openFeatureDetails": "Open feature details",
     "shapeFunctions.detailsButton": "Details",
@@ -641,6 +649,7 @@ const translations = {
     "shapeFunctions.edited": "Bearbeitet",
     "shapeFunctions.current": "Aktuell",
     "shapeFunctions.comparison": "Vergleich",
+    "shapeFunctions.missing": "Fehlend",
     "shapeFunctions.editPoints": "Punkte bearbeiten",
     "shapeFunctions.effect": "Effekt",
     "shapeFunctions.draggingSuffix": "(wird gezogen...)",
@@ -710,6 +719,13 @@ const translations = {
     "shapeFunctions.showDistribution": "Verteilung anzeigen",
     "shapeFunctions.hideDistribution": "Verteilung ausblenden",
     "shapeFunctions.countAxisLabel": "Anzahl",
+    "shapeFunctions.distributionTotalCount":
+      "Verwendete Datenpunkte ohne fehlende Werte: {count}",
+    "shapeFunctions.distributionAnsweredCount":
+      "Beantwortet / ohne fehlende Werte: {count}",
+    "shapeFunctions.distributionMissingCount": "Fehlend: {count}",
+    "shapeFunctions.distributionRepresentedCount":
+      "Insgesamt dargestellte Zeilen: {count}",
     "shapeFunctions.distributionEmpty": "Keine Verteilungsdaten verfuegbar.",
     "shapeFunctions.openFeatureDetails": "Feature-Details oeffnen",
     "shapeFunctions.detailsButton": "Details",
