@@ -1,12 +1,14 @@
 import React from "react";
 import Plot from "react-plotly.js";
 import { createTranslator } from "../i18n";
+import { getShapeFunctionDisplayName } from "../utils/featureDisplay";
 
 const ShapeFunctionChart = ({ shapeFunction, t }) => {
   if (!shapeFunction) return null;
 
   const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
     shapeFunction;
+  const displayName = getShapeFunctionDisplayName(shapeFunction);
 
   const isNumeric = feature_type === "numeric";
   const xTickLabels =
@@ -41,11 +43,11 @@ const ShapeFunctionChart = ({ shapeFunction, t }) => {
 
   const layout = {
     title: {
-      text: feature_name,
+      text: displayName,
       font: { size: 14, color: "#374151" },
     },
     xaxis: {
-      title: feature_name,
+      title: displayName,
       gridcolor: "#e5e7eb",
       tickfont: { size: 10 },
       ...(!isNumeric && xTickLabels

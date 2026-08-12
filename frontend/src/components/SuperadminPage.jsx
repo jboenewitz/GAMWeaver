@@ -293,6 +293,24 @@ const SuperadminPage = ({
     }
   };
 
+  const handleToggleCompetenceLevels = async () => {
+    if (!onUpdateChartDisplaySettings) return;
+    setUpdatingChartDisplay(true);
+    setError(null);
+    try {
+      await onUpdateChartDisplaySettings({
+        show_missing_bars: Boolean(modelStatus?.show_missing_bars),
+        show_competence_levels: !Boolean(modelStatus?.show_competence_levels),
+      });
+    } catch (err) {
+      setError(
+        err?.message || t("superadmin.error.updateChartDisplaySettings"),
+      );
+    } finally {
+      setUpdatingChartDisplay(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
@@ -364,21 +382,38 @@ const SuperadminPage = ({
                 {t("superadmin.chartDisplayDescription")}
               </p>
             </div>
-            <button
-              onClick={handleToggleMissingBars}
-              disabled={busy || updatingChartDisplay}
-              className={`px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-                modelStatus?.show_missing_bars
-                  ? "bg-rose-600 hover:bg-rose-700"
-                  : "bg-slate-700 hover:bg-slate-800"
-              }`}
-            >
-              {updatingChartDisplay
-                ? t("superadmin.updatingChartDisplay")
-                : modelStatus?.show_missing_bars
-                  ? t("superadmin.hideMissingBars")
-                  : t("superadmin.showMissingBars")}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={handleToggleMissingBars}
+                disabled={busy || updatingChartDisplay}
+                className={`px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                  modelStatus?.show_missing_bars
+                    ? "bg-rose-600 hover:bg-rose-700"
+                    : "bg-slate-700 hover:bg-slate-800"
+                }`}
+              >
+                {updatingChartDisplay
+                  ? t("superadmin.updatingChartDisplay")
+                  : modelStatus?.show_missing_bars
+                    ? t("superadmin.hideMissingBars")
+                    : t("superadmin.showMissingBars")}
+              </button>
+              <button
+                onClick={handleToggleCompetenceLevels}
+                disabled={busy || updatingChartDisplay}
+                className={`px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                  modelStatus?.show_competence_levels
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-slate-700 hover:bg-slate-800"
+                }`}
+              >
+                {updatingChartDisplay
+                  ? t("superadmin.updatingChartDisplay")
+                  : modelStatus?.show_competence_levels
+                    ? t("superadmin.hideCompetenceLevels")
+                    : t("superadmin.showCompetenceLevels")}
+              </button>
+            </div>
           </div>
         </section>
 

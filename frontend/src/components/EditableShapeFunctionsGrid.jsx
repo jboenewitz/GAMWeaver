@@ -8,6 +8,11 @@ import React, {
 import { createPortal } from "react-dom";
 import Plot from "react-plotly.js";
 import { createTranslator } from "../i18n";
+import {
+  getChartDisplayTitle,
+  getFeatureDisplayName,
+  getShapeFunctionDisplayName,
+} from "../utils/featureDisplay";
 
 const NUMERIC_X_PRECISION = 6;
 const NUMERIC_BRUSH_SIGMA_RATIO = 0.08;
@@ -16,6 +21,7 @@ const NUMERIC_BRUSH_SOFT_MULTIPLIER = 1.8;
 const NUMERIC_BRUSH_HARD_MULTIPLIER = 0.1;
 const NUMERIC_BRUSH_RADIUS_MULTIPLIER = 3.0;
 const NUMERIC_BRUSH_SMOOTHING_WINDOW = 5;
+const NUMERIC_DRAG_Y_AXIS_LIMIT = 150;
 const UNSYNCED_Y_PADDING_RATIO = 0.15;
 const UNSYNCED_Y_MIN_PADDING = 0.2;
 const FLAT_Y_MIN_HALF_SPAN = 0.5;
@@ -90,7 +96,9 @@ const toEditedPointsFormat = (curvePoints) =>
     y_value: point.y,
   }));
 
-const computeDynamicYRange = (values) => {
+const UNSYNCED_Y_FIXED_PADDING = 20;
+
+const computeDynamicYRange = (values, maxHalfSpan = null) => {
   const finiteValues = (values || []).filter((value) => Number.isFinite(value));
   if (finiteValues.length === 0) {
     return [-1, 1];
@@ -98,22 +106,19 @@ const computeDynamicYRange = (values) => {
 
   const yMin = Math.min(...finiteValues);
   const yMax = Math.max(...finiteValues);
-  const span = yMax - yMin;
+  let lowerBound = yMin - UNSYNCED_Y_FIXED_PADDING;
+  let upperBound = yMax + UNSYNCED_Y_FIXED_PADDING;
 
-  if (span < 1e-8) {
-    const center = yMin;
-    const halfSpan = Math.max(
-      Math.abs(center) * UNSYNCED_Y_PADDING_RATIO,
-      FLAT_Y_MIN_HALF_SPAN,
-    );
-    return [center - halfSpan, center + halfSpan];
+  if (maxHalfSpan !== null) {
+    lowerBound = Math.max(lowerBound, -maxHalfSpan);
+    upperBound = Math.min(upperBound, maxHalfSpan);
   }
 
-  const padding = Math.max(
-    span * UNSYNCED_Y_PADDING_RATIO,
-    UNSYNCED_Y_MIN_PADDING,
-  );
-  return [yMin - padding, yMax + padding];
+  if (lowerBound >= upperBound) {
+    return [-FLAT_Y_MIN_HALF_SPAN, FLAT_Y_MIN_HALF_SPAN];
+  }
+
+  return [lowerBound, upperBound];
 };
 
 const buildNumericMissingBucketLayout = (xValues, missingBucket) => {
@@ -134,7 +139,9 @@ const buildNumericMissingBucketLayout = (xValues, missingBucket) => {
   const observedMax = Math.max(...numericXValues);
   const span = observedMax - observedMin;
   const scaleBase =
-    span > 1e-9 ? span : Math.max(Math.abs(observedMin), Math.abs(observedMax), 1);
+    span > 1e-9
+      ? span
+      : Math.max(Math.abs(observedMin), Math.abs(observedMax), 1);
   const gap = Math.max(scaleBase * 0.14, 0.6);
   const width = Math.max(scaleBase * 0.12, 0.45);
   const anchor = observedMin - gap * 1.9;
@@ -289,10 +296,7 @@ const getConstructionLabel = (constructionType, t) => {
   }
 };
 
-const getDistributionCountSummary = (
-  distribution,
-  showMissingBars = false,
-) => {
+const getDistributionCountSummary = (distribution, showMissingBars = false) => {
   if (!distribution || typeof distribution !== "object") return null;
 
   if (!showMissingBars && distribution.chart_type === "numeric") {
@@ -321,7 +325,9 @@ const getDistributionCountSummary = (
   }
 
   if (distribution.chart_type === "categorical") {
-    const counts = Array.isArray(distribution.counts) ? distribution.counts : [];
+    const counts = Array.isArray(distribution.counts)
+      ? distribution.counts
+      : [];
     const missingEntry = counts.find(
       (entry) => String(entry?.x_value) === MISSING_CATEGORY_VALUE,
     );
@@ -347,7 +353,10 @@ const getDistributionCountSummary = (
 
 const buildSourceRows = (provenance) => {
   if (!provenance) return [];
-  if (Array.isArray(provenance.source_details) && provenance.source_details.length) {
+  if (
+    Array.isArray(provenance.source_details) &&
+    provenance.source_details.length
+  ) {
     return provenance.source_details.filter(
       (row) => row && (row.variable || row.label),
     );
@@ -374,6 +383,8 @@ const FeatureDetailsDrawer = ({
   t,
 }) => {
   const provenance = getFeatureProvenance(featureSchemaEntry);
+  const featureDisplayName =
+    getFeatureDisplayName(featureSchemaEntry) || featureName;
   const sourceRows = buildSourceRows(provenance);
   const sourceVariables = Array.isArray(provenance?.source_variables)
     ? provenance.source_variables
@@ -418,7 +429,7 @@ const FeatureDetailsDrawer = ({
                 {t("shapeFunctions.detailsDrawerTitle")}
               </p>
               <h3 className="mt-1 text-lg font-semibold text-slate-900">
-                {featureName}
+                {featureDisplayName}
               </h3>
               <p className="mt-1 text-sm text-slate-500">
                 {t("shapeFunctions.detailsSummary")}
@@ -669,26 +680,26 @@ const EditableShapeFunctionChart = ({
   const chartConfig = shapeFunction?.chart_config || {};
   const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
     shapeFunction;
+  const displayName = getShapeFunctionDisplayName(shapeFunction);
   const isNumeric = feature_type === "numeric";
   const missingBucket = shapeFunction?.missing_bucket || null;
   const xTickLabels =
     Array.isArray(x_tick_labels) && x_tick_labels.length === x_values.length
       ? x_tick_labels
       : null;
-  const numericCustomTicks =
-    isNumeric
-      ? Object.entries(chartConfig.numeric_tick_labels || {}).reduce(
-          (acc, [rawValue, rawLabel]) => {
-            const tickValue = Number(rawValue);
-            const label = String(rawLabel ?? "").trim();
-            if (Number.isFinite(tickValue) && label) {
-              acc.push({ value: tickValue, label });
-            }
-            return acc;
-          },
-          [],
-        )
-      : [];
+  const numericCustomTicks = isNumeric
+    ? Object.entries(chartConfig.numeric_tick_labels || {}).reduce(
+        (acc, [rawValue, rawLabel]) => {
+          const tickValue = Number(rawValue);
+          const label = String(rawLabel ?? "").trim();
+          if (Number.isFinite(tickValue) && label) {
+            acc.push({ value: tickValue, label });
+          }
+          return acc;
+        },
+        [],
+      )
+    : [];
   const numericAxisTicks =
     isNumeric && numericCustomTicks.length > 0
       ? numericCustomTicks
@@ -845,7 +856,9 @@ const EditableShapeFunctionChart = ({
   );
   const numericMissingLayout = useMemo(
     () =>
-      isNumeric ? buildNumericMissingBucketLayout(x_values, missingBucket) : null,
+      isNumeric
+        ? buildNumericMissingBucketLayout(x_values, missingBucket)
+        : null,
     [isNumeric, x_values, missingBucket],
   );
 
@@ -864,16 +877,23 @@ const EditableShapeFunctionChart = ({
           : []),
       ]
     : [...y_values, ...currentYValues];
-  const yRange = sharedYRange || computeDynamicYRange(allYValues);
+  const numericDragYRangeCap =
+    isNumeric && isDragging && !sharedYRange ? NUMERIC_DRAG_Y_AXIS_LIMIT : null;
+  const yRange =
+    sharedYRange || computeDynamicYRange(allYValues, numericDragYRangeCap);
 
   // Calculate x-axis range (numeric only, explicit for coordinate conversion)
   const numXVals = isNumeric ? x_values.map(Number) : [];
   const xDataMin = isNumeric ? Math.min(...numXVals) : 0;
   const xDataMax = isNumeric ? Math.max(...numXVals) : 1;
-  const numericDomainMin = Number.isFinite(Number(chartConfig.numeric_domain_min))
+  const numericDomainMin = Number.isFinite(
+    Number(chartConfig.numeric_domain_min),
+  )
     ? Number(chartConfig.numeric_domain_min)
     : null;
-  const numericDomainMax = Number.isFinite(Number(chartConfig.numeric_domain_max))
+  const numericDomainMax = Number.isFinite(
+    Number(chartConfig.numeric_domain_max),
+  )
     ? Number(chartConfig.numeric_domain_max)
     : null;
   const xPad = isNumeric ? Math.max((xDataMax - xDataMin) * 0.05, 0.1) : 0;
@@ -1369,9 +1389,7 @@ const EditableShapeFunctionChart = ({
       y: merged.y,
       type: "scatter",
       mode: "lines",
-      name: hasEdits
-        ? t("shapeFunctions.edited")
-        : t("shapeFunctions.current"),
+      name: hasEdits ? t("shapeFunctions.edited") : t("shapeFunctions.current"),
       line: { color: hasEdits ? "#10b981" : "#3b82f6", width: 2.5 },
       fill: "tozeroy",
       fillcolor: hasEdits
@@ -1418,7 +1436,9 @@ const EditableShapeFunctionChart = ({
       Number(comparisonShapeFunction.missing_bucket.count) > 0 &&
       Number.isFinite(Number(comparisonShapeFunction.missing_bucket.y_value))
         ? {
-            x: [numericMissingLayout.anchor + numericMissingLayout.width * 0.28],
+            x: [
+              numericMissingLayout.anchor + numericMissingLayout.width * 0.28,
+            ],
             y: [Number(comparisonShapeFunction.missing_bucket.y_value)],
             width: [numericMissingLayout.width * 0.55],
             type: "bar",
@@ -1471,8 +1491,7 @@ const EditableShapeFunctionChart = ({
               line: { color: "#065f46", width: 1.5 },
             },
             showlegend: false,
-            hovertemplate:
-              `<b>x: %{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra>${t("shapeFunctions.edited")}</extra>`,
+            hovertemplate: `<b>x: %{x:.3f}</b><br>${t("shapeFunctions.effect")}: %{y:.3f}<extra>${t("shapeFunctions.edited")}</extra>`,
           }
         : null;
 
@@ -1514,9 +1533,7 @@ const EditableShapeFunctionChart = ({
       x: x_values,
       y: currentYValues,
       type: "bar",
-      name: hasEdits
-        ? t("shapeFunctions.edited")
-        : t("shapeFunctions.current"),
+      name: hasEdits ? t("shapeFunctions.edited") : t("shapeFunctions.current"),
       customdata: xTickLabels || x_values,
       marker: {
         color: markerColors,
@@ -1584,7 +1601,7 @@ const EditableShapeFunctionChart = ({
   const layout = {
     title: {
       text:
-        feature_name +
+        displayName +
         (isDragging
           ? ` ${t("shapeFunctions.draggingSuffix")}`
           : hasEdits
@@ -1596,7 +1613,7 @@ const EditableShapeFunctionChart = ({
       },
     },
     xaxis: {
-      title: { text: feature_name, font: { size: enlarged ? 14 : 12 } },
+      title: { text: displayName, font: { size: enlarged ? 14 : 12 } },
       gridcolor: "#e5e7eb",
       tickfont: { size: enlarged ? 12 : 10 },
       fixedrange: true,
@@ -1786,7 +1803,8 @@ const EditableShapeFunctionChart = ({
 
     if (distribution.chart_type === "categorical") {
       const counts = (distribution.counts || []).filter(
-        (entry) => entry && entry.x_value !== undefined && entry.label !== undefined,
+        (entry) =>
+          entry && entry.x_value !== undefined && entry.label !== undefined,
       );
       if (counts.length === 0) return null;
 
@@ -1914,7 +1932,7 @@ const EditableShapeFunctionChart = ({
               {t("shapeFunctions.setEffectValue")}
             </h4>
             <p className="text-sm text-gray-500 mb-4">
-              {feature_name} = {preciseEntry.displayX}
+              {displayName} = {preciseEntry.displayX}
             </p>
             <input
               type="number"
@@ -1994,12 +2012,6 @@ const EditableShapeFunctionChart = ({
                   {t("shapeFunctions.brushingAtX", {
                     value:
                       dragXValue != null ? Number(dragXValue).toFixed(3) : "",
-                  })}
-                </span>
-                <span className="text-red-500">|</span>
-                <span>
-                  {t("shapeFunctions.releaseToApply", {
-                    value: dragYValue != null ? dragYValue.toFixed(3) : "",
                   })}
                 </span>
               </>
@@ -2256,6 +2268,7 @@ const FeatureChartSettingsModal = ({
   t,
 }) => {
   const [selectedChartType, setSelectedChartType] = useState("numeric");
+  const [displayTitle, setDisplayTitle] = useState("");
   const [categoricalValueLabels, setCategoricalValueLabels] = useState({});
   const [numericTickLabels, setNumericTickLabels] = useState({});
   const [saving, setSaving] = useState(false);
@@ -2263,6 +2276,7 @@ const FeatureChartSettingsModal = ({
 
   const chartConfig = shapeFunction?.chart_config || {};
   const featureName = shapeFunction?.feature_name || "";
+  const featureDisplayName = getShapeFunctionDisplayName(shapeFunction);
   const baseFeatureType =
     chartConfig.base_feature_type ||
     (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
@@ -2318,8 +2332,11 @@ const FeatureChartSettingsModal = ({
   useEffect(() => {
     if (!isOpen || !shapeFunction) return;
     setSelectedChartType(currentChartType);
+    setDisplayTitle(getChartDisplayTitle(chartConfig));
     setCategoricalValueLabels({
-      ...(chartConfig.categorical_value_labels || chartConfig.value_labels || {}),
+      ...(chartConfig.categorical_value_labels ||
+        chartConfig.value_labels ||
+        {}),
     });
     setNumericTickLabels({ ...(chartConfig.numeric_tick_labels || {}) });
     setSaving(false);
@@ -2395,9 +2412,14 @@ const FeatureChartSettingsModal = ({
 
       await onSave(featureName, {
         treat_as_categorical:
-          baseFeatureType === "numeric" ? selectedChartType === "categorical" : false,
+          baseFeatureType === "numeric"
+            ? selectedChartType === "categorical"
+            : false,
         treat_as_numeric:
-          baseFeatureType === "categorical" ? selectedChartType === "numeric" : false,
+          baseFeatureType === "categorical"
+            ? selectedChartType === "numeric"
+            : false,
+        display_title: displayTitle.trim(),
         categorical_value_labels: normalizeLabels(
           availableCategoricalValues,
           categoricalValueLabels,
@@ -2426,7 +2448,9 @@ const FeatureChartSettingsModal = ({
       >
         <div className="px-5 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800">
-            {t("shapeFunctions.chartMappingTitle", { feature: featureName })}
+            {t("shapeFunctions.chartMappingTitle", {
+              feature: featureDisplayName,
+            })}
           </h3>
           <p className="text-sm text-gray-500 mt-1">
             {t("shapeFunctions.chartMappingDescription")}
@@ -2434,6 +2458,23 @@ const FeatureChartSettingsModal = ({
         </div>
 
         <div className="px-5 py-4 space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <label className="block text-sm font-medium text-slate-700">
+              {t("shapeFunctions.displayTitleLabel")}
+            </label>
+            <p className="mt-1 text-xs text-slate-500">
+              {t("shapeFunctions.displayTitleHint")}
+            </p>
+            <input
+              type="text"
+              value={displayTitle}
+              onChange={(e) => setDisplayTitle(e.target.value)}
+              placeholder={featureName}
+              disabled={saving}
+              className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
             <div className="text-sm font-medium text-slate-700">
               {t("shapeFunctions.chartType")}
@@ -2532,7 +2573,9 @@ const FeatureChartSettingsModal = ({
             disabled={saving}
             className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
           >
-            {saving ? t("shapeFunctions.saving") : t("shapeFunctions.saveMapping")}
+            {saving
+              ? t("shapeFunctions.saving")
+              : t("shapeFunctions.saveMapping")}
           </button>
         </div>
       </div>
@@ -2565,7 +2608,7 @@ const FeatureEditCard = ({
 
   // Show Submit only when there are genuinely new unsaved edits
   const hasUnsavedEdits = unsavedEditedPoints && unsavedEditedPoints.length > 0;
-  const chartConfig = shapeFunction?.chart_config || {};
+  const featureDisplayName = getShapeFunctionDisplayName(shapeFunction);
   const hasFeatureDetails = Boolean(featureSchemaEntry);
 
   return (
@@ -2655,7 +2698,7 @@ const FeatureEditCard = ({
             <span>✓</span>
             <span>
               {t("shapeFunctions.submitFeature", {
-                feature: shapeFunction.feature_name,
+                feature: featureDisplayName,
               })}
             </span>
           </button>
@@ -2677,7 +2720,7 @@ const FeatureEditCard = ({
               {/* Modal header */}
               <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
                 <h3 className="text-lg font-semibold text-gray-800">
-                  {shapeFunction.feature_name}
+                  {featureDisplayName}
                 </h3>
                 <div className="flex items-center gap-2">
                   <button
@@ -2764,7 +2807,7 @@ const FeatureEditCard = ({
                       <span>✓</span>
                       <span>
                         {t("shapeFunctions.submitFeature", {
-                          feature: shapeFunction.feature_name,
+                          feature: featureDisplayName,
                         })}
                       </span>
                     </button>
@@ -2835,6 +2878,14 @@ const EditableShapeFunctionsGrid = ({
   const activeFeatureSchemaEntry = detailsFeatureName
     ? featureSchemaMap.get(detailsFeatureName) || null
     : null;
+  const pendingShapeFunction = pendingFeatureSubmit
+    ? shapeFunctions.find(
+        (shapeFunction) => shapeFunction.feature_name === pendingFeatureSubmit,
+      ) || null
+    : null;
+  const pendingFeatureDisplayName = pendingShapeFunction
+    ? getShapeFunctionDisplayName(pendingShapeFunction)
+    : pendingFeatureSubmit || "";
 
   // Compute global y-range across all features when syncAxes is enabled
   const globalYRange = useMemo(() => {
@@ -3104,7 +3155,9 @@ const EditableShapeFunctionsGrid = ({
         <p className="text-gray-500 text-center py-8">
           {t("shapeFunctions.interactiveEmptyDescription")}
           <br />
-          <span className="text-sm">{t("shapeFunctions.sharedDescription")}</span>
+          <span className="text-sm">
+            {t("shapeFunctions.sharedDescription")}
+          </span>
         </p>
       </div>
     );
@@ -3116,7 +3169,7 @@ const EditableShapeFunctionsGrid = ({
         isOpen={showSurenessModal}
         onClose={handleSurenessModalClose}
         onConfirm={handleSurenessConfirm}
-        featureName={pendingFeatureSubmit || ""}
+        featureName={pendingFeatureDisplayName}
         t={t}
       />
       <FeatureChartSettingsModal
@@ -3203,7 +3256,9 @@ const EditableShapeFunctionsGrid = ({
 
       {isEditing && (
         <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-700">{t("shapeFunctions.editHelp")}</p>
+          <p className="text-sm text-blue-700">
+            {t("shapeFunctions.editHelp")}
+          </p>
         </div>
       )}
 

@@ -148,6 +148,9 @@ const translations = {
     "prediction.predicting": "Predicting...",
     "prediction.predictTarget": "Predict {target}",
     "prediction.predictedTarget": "Predicted {target}",
+    "prediction.competenceLevel": "Competence Level",
+    "prediction.scoreValue": "Score",
+    "prediction.assignment": "Assignment",
 
     "shapeFunctions.title": "Shape Functions",
     "shapeFunctions.emptyDescription":
@@ -215,6 +218,9 @@ const translations = {
     "shapeFunctions.chartMappingTitle": "Chart Mapping: {feature}",
     "shapeFunctions.chartMappingDescription":
       "Configure chart type and x-axis labels for all users.",
+    "shapeFunctions.displayTitleLabel": "Display Title",
+    "shapeFunctions.displayTitleHint":
+      "Cosmetic only. Charts and UI labels use this title, but exports keep the original feature name.",
     "shapeFunctions.chartType": "Chart Type",
     "shapeFunctions.numericChartType": "Numeric",
     "shapeFunctions.categoricalChartType": "Categorical",
@@ -438,9 +444,11 @@ const translations = {
       "Generate an invite link to allow new registrations.",
     "superadmin.chartDisplayTitle": "Chart Display",
     "superadmin.chartDisplayDescription":
-      "Control whether dedicated missing-value bars are shown in shape-function charts.",
+      "Control global display options for shape-function charts and prediction results.",
     "superadmin.showMissingBars": "Show missing bars",
     "superadmin.hideMissingBars": "Hide missing bars",
+    "superadmin.showCompetenceLevels": "Show competence table",
+    "superadmin.hideCompetenceLevels": "Hide competence table",
     "superadmin.updatingChartDisplay": "Updating chart display...",
     "superadmin.error.updateChartDisplaySettings":
       "Chart display settings could not be updated",
@@ -635,6 +643,9 @@ const translations = {
     "prediction.predicting": "Vorhersage läuft...",
     "prediction.predictTarget": "{target} vorhersagen",
     "prediction.predictedTarget": "Vorhergesagtes {target}",
+    "prediction.competenceLevel": "Kompetenzstufe",
+    "prediction.scoreValue": "Punktwert",
+    "prediction.assignment": "Zuordnung",
 
     "shapeFunctions.title": "Shape-Funktionen",
     "shapeFunctions.emptyDescription":
@@ -709,6 +720,9 @@ const translations = {
       "Diagrammzuordnung: {feature}",
     "shapeFunctions.chartMappingDescription":
       "Konfiguriere Diagrammtyp und X-Achsen-Beschriftungen für alle Benutzer.",
+    "shapeFunctions.displayTitleLabel": "Anzeigetitel",
+    "shapeFunctions.displayTitleHint":
+      "Nur kosmetisch. Diagramme und UI-Beschriftungen nutzen diesen Titel, Exporte behalten jedoch den ursprünglichen Featurenamen.",
     "shapeFunctions.chartType": "Diagrammtyp",
     "shapeFunctions.numericChartType": "Numerisch",
     "shapeFunctions.categoricalChartType": "Kategorial",
@@ -938,9 +952,11 @@ const translations = {
       "Lade einen zweiten Datensatz hoch, trainiere ihn mit der Estimator-Anzahl des primären Modells und lege seine Shape-Funktionen über die interaktiven Diagramme.",
     "superadmin.chartDisplayTitle": "Diagrammanzeige",
     "superadmin.chartDisplayDescription":
-      "Steuere, ob eigene Balken für fehlende Werte in Shape-Funktionsdiagrammen angezeigt werden.",
+      "Steuere globale Anzeigeoptionen fuer Shape-Funktionsdiagramme und Vorhersageergebnisse.",
     "superadmin.showMissingBars": "Fehlend-Balken anzeigen",
     "superadmin.hideMissingBars": "Fehlend-Balken ausblenden",
+    "superadmin.showCompetenceLevels": "Kompetenztabelle anzeigen",
+    "superadmin.hideCompetenceLevels": "Kompetenztabelle ausblenden",
     "superadmin.updatingChartDisplay":
       "Diagrammanzeige wird aktualisiert...",
     "superadmin.error.updateChartDisplaySettings":

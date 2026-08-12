@@ -569,6 +569,7 @@ async def update_feature_chart_settings(
             feature_name=feature_name,
             treat_as_categorical=request.treat_as_categorical,
             treat_as_numeric=request.treat_as_numeric,
+            display_title=request.display_title,
             categorical_value_labels=request.categorical_value_labels,
             numeric_tick_labels=request.numeric_tick_labels,
             value_labels=request.value_labels,
@@ -608,6 +609,7 @@ async def update_chart_display_settings(
         _require_superadmin(http_request)
         payload = ml_service.update_chart_display_settings(
             show_missing_bars=request.show_missing_bars,
+            show_competence_levels=request.show_competence_levels,
         )
         return ChartDisplaySettingsResponse(**payload)
     except HTTPException:

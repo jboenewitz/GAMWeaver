@@ -2,6 +2,10 @@ import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
 import { createTranslator, getDateLocale } from "../i18n";
+import {
+  getFeatureDisplayName,
+  getShapeFunctionDisplayName,
+} from "../utils/featureDisplay";
 
 const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
 
@@ -139,7 +143,7 @@ const CombinedPredictionForm = ({
           {(featureSchema || []).map((feature) => (
             <div key={feature.name}>
               <label className="mb-1 block text-sm font-medium text-slate-700">
-                {feature.name}
+                {getFeatureDisplayName(feature)}
               </label>
               {feature.feature_type === "categorical" ? (
                 <select
@@ -241,6 +245,13 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   const [deleteReason, setDeleteReason] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const featureDisplayNameMap = Object.fromEntries(
+    (modelStatus?.feature_schema || [])
+      .filter((feature) => feature?.name)
+      .map((feature) => [feature.name, getFeatureDisplayName(feature)]),
+  );
+  const getDisplayNameForFeature = (featureName) =>
+    featureDisplayNameMap[featureName] || featureName;
 
   useEffect(() => {
     fetchData();
@@ -923,7 +934,7 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
               >
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-medium text-slate-700">
-                    {sf.feature_name}
+                    {getShapeFunctionDisplayName(sf)}
                   </h4>
                   {hasChanges && (
                     <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
@@ -939,7 +950,10 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                       height: 200,
                       margin: { l: 55, r: 70, t: 10, b: 40 },
                       xaxis: {
-                        title: { text: sf.feature_name, font: { size: 10 } },
+                        title: {
+                          text: getShapeFunctionDisplayName(sf),
+                          font: { size: 10 },
+                        },
                         tickangle: isNumeric ? 0 : -45,
                         tickfont: { size: 9 },
                         ...(!isNumeric && xTickLabels
@@ -1122,7 +1136,7 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                 >
                   <div>
                     <h4 className="font-medium text-slate-700">
-                      {feature.feature_name}
+                      {getDisplayNameForFeature(feature.feature_name)}
                     </h4>
                     <span className="text-sm text-slate-500">
                       {submissionCount}{" "}
@@ -1559,7 +1573,7 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
             <p className="mb-4 text-xs text-slate-500">
               {t("combined.feature")}:{" "}
               <span className="font-mono">
-                {editToDelete.feature_name || "—"}
+                {getDisplayNameForFeature(editToDelete.feature_name || "") || "—"}
               </span>{" "}
               • {t("combined.points")}:{" "}
               <span className="font-mono">

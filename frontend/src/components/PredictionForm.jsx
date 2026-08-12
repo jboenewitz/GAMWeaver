@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createTranslator } from "../i18n";
+import CompetenceLevelsTable from "./CompetenceLevelsTable";
+import { getFeatureDisplayName } from "../utils/featureDisplay";
 
 const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
 
@@ -46,6 +48,7 @@ const PredictionForm = ({
   modelTrained,
   featureSchema = [],
   targetColumn,
+  showCompetenceLevels = false,
   language = "en",
 }) => {
   const [formData, setFormData] = useState({});
@@ -111,7 +114,7 @@ const PredictionForm = ({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {featureSchema.map((feature) => (
             <div key={feature.name}>
-              <label className="label">{feature.name}</label>
+              <label className="label">{getFeatureDisplayName(feature)}</label>
               {feature.feature_type === "categorical" ? (
                 <select
                   value={formData[feature.name] ?? ""}
@@ -153,18 +156,24 @@ const PredictionForm = ({
       </form>
 
       {prediction !== null && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
-          <div className="text-center">
-            <div className="text-sm text-gray-600">
-              {t("prediction.predictedTarget", {
-                target: targetColumn || t("common.target"),
-              })}
-            </div>
-            <div className="text-4xl font-bold text-primary-600 mt-1">
-              {Math.round(prediction)}
+        <>
+          <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg">
+            <div className="text-center">
+              <div className="text-sm text-gray-600">
+                {t("prediction.predictedTarget", {
+                  target: targetColumn || t("common.target"),
+                })}
+              </div>
+              <div className="text-4xl font-bold text-primary-600 mt-1">
+                {Math.round(prediction)}
+              </div>
             </div>
           </div>
-        </div>
+
+          {showCompetenceLevels && (
+            <CompetenceLevelsTable language={language} />
+          )}
+        </>
       )}
     </div>
   );

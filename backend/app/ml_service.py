@@ -203,6 +203,7 @@ class MLService:
         self.missing_indicator_map: Dict[str, str] = {}
         self.numeric_missing_placeholder_values: Dict[str, float] = {}
         self.show_missing_bars = False
+        self.show_competence_levels = False
         self.model_source: str = "trained"
         self.imported_artifact_version: Optional[str] = None
         self.analytics_available = False
@@ -300,6 +301,7 @@ class MLService:
                 self.numeric_missing_placeholder_values
             ),
             "show_missing_bars": bool(self.show_missing_bars),
+            "show_competence_levels": bool(self.show_competence_levels),
             "original_shape_functions": dict(self.original_shape_functions),
             "shape_function_offsets": {
                 feature: dict(offsets)
@@ -331,6 +333,7 @@ class MLService:
         dataset_name = data.get("dataset_name")
         feature_chart_settings = data.get("feature_chart_settings")
         show_missing_bars = data.get("show_missing_bars")
+        show_competence_levels = data.get("show_competence_levels")
         if dataset_path:
             self.active_dataset_path = str(Path(dataset_path))
         if target_column:
@@ -350,6 +353,8 @@ class MLService:
             self.feature_chart_settings = sanitized
         if show_missing_bars is not None:
             self.show_missing_bars = bool(show_missing_bars)
+        if show_competence_levels is not None:
+            self.show_competence_levels = bool(show_competence_levels)
 
     def _persist_active_dataset_metadata(self) -> None:
         payload = {
@@ -360,6 +365,7 @@ class MLService:
             "selected_feature_columns": self.selected_feature_columns,
             "feature_chart_settings": self.feature_chart_settings,
             "show_missing_bars": bool(self.show_missing_bars),
+            "show_competence_levels": bool(self.show_competence_levels),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.active_dataset_file.write_text(
@@ -993,6 +999,7 @@ class MLService:
     ) -> Dict[str, Any]:
         if not isinstance(raw_setting, dict):
             return {}
+        display_title = str(raw_setting.get("display_title", "") or "").strip()
         categorical_value_labels = cls._sanitize_chart_label_map(
             raw_setting.get("categorical_value_labels", raw_setting.get("value_labels")),
         )
@@ -1000,6 +1007,7 @@ class MLService:
             raw_setting.get("numeric_tick_labels"),
         )
         return {
+            "display_title": display_title,
             "treat_as_categorical": bool(raw_setting.get("treat_as_categorical")),
             "treat_as_numeric": bool(raw_setting.get("treat_as_numeric")),
             "categorical_value_labels": categorical_value_labels,
@@ -1012,12 +1020,28 @@ class MLService:
         )
         if not normalized:
             return {
+                "display_title": "",
                 "treat_as_categorical": False,
                 "treat_as_numeric": False,
                 "categorical_value_labels": {},
                 "numeric_tick_labels": {},
             }
         return normalized
+
+    def _get_feature_display_title(self, feature_name: str) -> str:
+        stored = self._get_feature_chart_setting(feature_name)
+        display_title = str(stored.get("display_title", "") or "").strip()
+        return display_title or feature_name
+
+    def _with_feature_display_name(
+        self,
+        feature_schema_entry: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        enriched = _json_safe(feature_schema_entry)
+        feature_name = str(enriched.get("name", "") or "").strip()
+        if feature_name:
+            enriched["display_name"] = self._get_feature_display_title(feature_name)
+        return enriched
 
     def _get_feature_chart_mode(self, feature_name: str) -> str:
         """Return effective chart display mode ('numeric' or 'categorical')."""
@@ -1108,10 +1132,16 @@ class MLService:
     def get_chart_display_settings(self) -> Dict[str, Any]:
         return {
             "show_missing_bars": bool(self.show_missing_bars),
+            "show_competence_levels": bool(self.show_competence_levels),
         }
 
-    def update_chart_display_settings(self, show_missing_bars: bool) -> Dict[str, Any]:
+    def update_chart_display_settings(
+        self,
+        show_missing_bars: bool,
+        show_competence_levels: bool,
+    ) -> Dict[str, Any]:
         self.show_missing_bars = bool(show_missing_bars)
+        self.show_competence_levels = bool(show_competence_levels)
         # Clear cached shape-function snapshots so the next fetch reflects the new mode.
         self.original_shape_functions = {}
         self.shape_function_offsets = {}
@@ -1252,6 +1282,7 @@ class MLService:
 
         return {
             "feature_name": feature_name,
+            "display_title": str(stored.get("display_title", "") or "").strip(),
             "base_feature_type": base_feature_type,
             "chart_feature_type": chart_feature_type,
             "is_numeric": is_numeric,
@@ -1278,6 +1309,7 @@ class MLService:
         feature_name: str,
         treat_as_categorical: bool,
         treat_as_numeric: bool = False,
+        display_title: Optional[str] = None,
         categorical_value_labels: Optional[Dict[str, str]] = None,
         numeric_tick_labels: Optional[Dict[str, str]] = None,
         value_labels: Optional[Dict[str, str]] = None,
@@ -1355,7 +1387,14 @@ class MLService:
                 continue
             sanitized_numeric_labels[key] = label
 
+        sanitized_display_title = (
+            str(current.get("display_title", "") or "").strip()
+            if display_title is None
+            else str(display_title or "").strip()
+        )
+
         normalized_setting = {
+            "display_title": sanitized_display_title,
             "treat_as_categorical": normalized_treat_as_categorical,
             "treat_as_numeric": normalized_treat_as_numeric,
             "categorical_value_labels": sanitized_categorical_labels,
@@ -1363,7 +1402,8 @@ class MLService:
         }
 
         if (
-            not normalized_setting["treat_as_categorical"]
+            not normalized_setting["display_title"]
+            and not normalized_setting["treat_as_categorical"]
             and not normalized_setting["treat_as_numeric"]
             and not normalized_setting["categorical_value_labels"]
             and not normalized_setting["numeric_tick_labels"]
@@ -1622,7 +1662,17 @@ class MLService:
         if hasattr(self.model, "get_params"):
             igann_params = _json_safe(self.model.get_params())
 
-        shape_functions = self._export_shape_functions_payload()
+        shape_functions = [
+            {
+                **shape_function,
+                "chart_config": {
+                    key: value
+                    for key, value in ((shape_function.get("chart_config") or {}).items())
+                    if key != "display_title"
+                },
+            }
+            for shape_function in self._export_shape_functions_payload()
+        ]
         exported_feature_names = [
             shape_function["feature_name"] for shape_function in shape_functions
         ]
@@ -1660,8 +1710,18 @@ class MLService:
             "numeric_missing_placeholder_values": _json_safe(
                 self.numeric_missing_placeholder_values
             ),
-            "feature_chart_settings": _json_safe(self.feature_chart_settings),
+            "feature_chart_settings": _json_safe(
+                {
+                    feature_name: {
+                        key: value
+                        for key, value in (setting or {}).items()
+                        if key != "display_title"
+                    }
+                    for feature_name, setting in self.feature_chart_settings.items()
+                }
+            ),
             "show_missing_bars": bool(self.show_missing_bars),
+            "show_competence_levels": bool(self.show_competence_levels),
             "shape_functions": shape_functions,
             "dataset_id": self.active_dataset_id,
             "dataset_name": self.active_dataset_name
@@ -2076,6 +2136,9 @@ class MLService:
                 if normalized
             },
             "show_missing_bars": bool(artifact.get("show_missing_bars", False)),
+            "show_competence_levels": bool(
+                artifact.get("show_competence_levels", False)
+            ),
             "shape_functions": normalized_shape_functions,
             "public_shape_functions": public_shape_functions,
             "dataset_id": artifact.get("dataset_id"),
@@ -2114,6 +2177,9 @@ class MLService:
         )
         self.feature_chart_settings = dict(validated["feature_chart_settings"])
         self.show_missing_bars = bool(validated.get("show_missing_bars", False))
+        self.show_competence_levels = bool(
+            validated.get("show_competence_levels", False)
+        )
         self.original_shape_functions = {
             shape_function["feature_name"]: shape_function
             for shape_function in validated["public_shape_functions"]
@@ -2189,7 +2255,10 @@ class MLService:
             "is_trained": self.is_trained,
             "data_loaded": self.X_train is not None,
             "features": self.selected_feature_columns if self.selected_feature_columns else [],
-            "feature_schema": self.feature_schema if self.feature_schema else [],
+            "feature_schema": [
+                self._with_feature_display_name(feature)
+                for feature in (self.feature_schema or [])
+            ],
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns if self.selected_feature_columns else [],
             "dataset_id": self.active_dataset_id,
@@ -2217,6 +2286,7 @@ class MLService:
             ),
             "primary_n_estimators": self.primary_n_estimators,
             "show_missing_bars": bool(self.show_missing_bars),
+            "show_competence_levels": bool(self.show_competence_levels),
         }
 
     def _reset_runtime_state(self) -> None:
@@ -2471,7 +2541,10 @@ class MLService:
             "train_size": len(self.X_train),
             "test_size": len(self.X_test),
             "features": self.selected_feature_columns,
-            "feature_schema": self.feature_schema,
+            "feature_schema": [
+                self._with_feature_display_name(feature)
+                for feature in self.feature_schema
+            ],
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns,
             "dataset_id": self.active_dataset_id,

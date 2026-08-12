@@ -228,6 +228,67 @@ def test_export_import_roundtrip_preserves_chart_label_maps(ml_service, monkeypa
     ] == {"1": "January"}
 
 
+def test_display_title_is_runtime_only_and_excluded_from_export(ml_service):
+    result = ml_service.update_feature_chart_setting(
+        "age",
+        treat_as_categorical=False,
+        display_title="Participant Age",
+    )
+
+    assert result["display_title"] == "Participant Age"
+
+    status = ml_service.get_model_status()
+    age_feature = next(
+        feature for feature in status["feature_schema"] if feature["name"] == "age"
+    )
+    assert age_feature["display_name"] == "Participant Age"
+
+    shape_function = next(
+        feature
+        for feature in ml_service.get_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+    assert shape_function["chart_config"]["display_title"] == "Participant Age"
+
+    artifact = ml_service.export_model_artifact()
+    exported_shape_function = next(
+        feature
+        for feature in artifact["shape_functions"]
+        if feature["feature_name"] == "age"
+    )
+
+    assert "display_title" not in artifact["feature_chart_settings"]["age"]
+    assert "display_title" not in exported_shape_function["chart_config"]
+    assert artifact["feature_names"] == ["age", "month"]
+
+
+def test_competence_level_setting_persists_through_export_import(
+    ml_service,
+    monkeypatch,
+):
+    settings = ml_service.update_chart_display_settings(
+        show_missing_bars=True,
+        show_competence_levels=True,
+    )
+
+    assert settings == {
+        "show_missing_bars": True,
+        "show_competence_levels": True,
+    }
+    assert ml_service.get_model_status()["show_competence_levels"] is True
+
+    artifact = ml_service.export_model_artifact()
+    assert artifact["show_competence_levels"] is True
+
+    monkeypatch.setattr(MLService, "_restore_active_dataset_metadata", lambda self: None)
+    monkeypatch.setattr(MLService, "_auto_load_persisted_dataset", lambda self: None)
+    imported = MLService()
+    imported.import_model_artifact(artifact)
+
+    assert imported.show_competence_levels is True
+    assert imported.get_chart_display_settings()["show_competence_levels"] is True
+
+
 def test_export_import_roundtrip_preserves_missing_indicator_features(
     ml_service,
     monkeypatch,

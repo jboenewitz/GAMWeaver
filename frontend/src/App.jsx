@@ -559,9 +559,7 @@ function App() {
     try {
       setError(null);
       await apiService.updateFeatureChartSettings(featureName, settings);
-      await fetchShapeFunctions({
-        refreshComparison: Boolean(modelStatus?.analytics_available),
-      });
+      await fetchModelStatus();
     } catch (err) {
       const message = formatApiError(
         err,
@@ -934,6 +932,7 @@ function App() {
             modelTrained={modelStatus?.is_trained}
             featureSchema={modelStatus?.feature_schema || []}
             targetColumn={modelStatus?.target_column}
+            showCompetenceLevels={Boolean(modelStatus?.show_competence_levels)}
             language={language}
           />
         </div>

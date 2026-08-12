@@ -163,6 +163,7 @@ class ModelStatusResponse(BaseModel):
     comparison_train_size: int = 0
     primary_n_estimators: Optional[int] = None
     show_missing_bars: bool = False
+    show_competence_levels: bool = False
 
 
 class ComparisonDataLoadRequest(BaseModel):
@@ -331,6 +332,7 @@ class FeatureChartSettingsRequest(BaseModel):
     """Superadmin chart-display settings for one feature."""
     treat_as_categorical: bool = False
     treat_as_numeric: bool = False
+    display_title: Optional[str] = None
     categorical_value_labels: Optional[Dict[str, str]] = None
     numeric_tick_labels: Optional[Dict[str, str]] = None
     value_labels: Optional[Dict[str, str]] = None
@@ -339,6 +341,7 @@ class FeatureChartSettingsRequest(BaseModel):
 class FeatureChartSettingsResponse(BaseModel):
     """Response with effective chart-display settings for one feature."""
     feature_name: str
+    display_title: str = ""
     base_feature_type: str
     chart_feature_type: str
     is_numeric: bool
@@ -357,8 +360,10 @@ class FeatureChartSettingsResponse(BaseModel):
 class ChartDisplaySettingsRequest(BaseModel):
     """Global superadmin chart-display settings."""
     show_missing_bars: bool = False
+    show_competence_levels: bool = False
 
 
 class ChartDisplaySettingsResponse(BaseModel):
     """Response with global chart-display settings."""
     show_missing_bars: bool
+    show_competence_levels: bool
