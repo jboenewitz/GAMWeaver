@@ -495,16 +495,16 @@ const translations = {
     "common.refresh": "Aktualisieren",
     "common.save": "Speichern",
     "common.apply": "Anwenden",
-    "common.reset": "Zuruecksetzen",
-    "common.close": "Schliessen",
-    "common.delete": "Loeschen",
+    "common.reset": "Zurücksetzen",
+    "common.close": "Schließen",
+    "common.delete": "Löschen",
     "common.target": "Ziel",
     "common.unknown": "Unbekannt",
 
     "header.subtitle": "Interaktiver GAM-Editor",
     "header.modelTrained": "Modell trainiert",
     "header.modelNotTrained": "Modell nicht trainiert",
-    "header.recordsLoaded": "{count} Datensaetze geladen",
+    "header.recordsLoaded": "{count} Datensätze geladen",
 
     "login.title": "Der interaktive GAM-Editor",
     "login.subtitleLogin": "Mit deinen Zugangsdaten anmelden",
@@ -513,18 +513,18 @@ const translations = {
     "login.passwordPlaceholder": "Dein Passwort",
     "login.professionPlaceholder": "Dein Beruf",
     "login.registerInviteOnly":
-      "Eine Registrierung ist nur ueber einen Einladungslink moeglich.",
+      "Eine Registrierung ist nur über einen Einladungslink möglich.",
     "login.error.enterCredentials":
       "Bitte Benutzername und Passwort eingeben",
     "login.error.professionRequired": "Bitte gib deinen Beruf ein",
     "login.error.inviteRequired":
-      "Die Registrierung erfordert einen gueltigen Einladungslink",
+      "Die Registrierung erfordert einen gültigen Einladungslink",
     "login.error.loginFailed": "Anmeldung fehlgeschlagen",
     "login.error.registerFailed": "Registrierung fehlgeschlagen",
     "login.error.serverUnavailable":
       "Der Server ist nicht erreichbar. Bitte versuche es erneut.",
-    "login.submitSigningIn": "Anmeldung laeuft...",
-    "login.submitRegistering": "Registrierung laeuft...",
+    "login.submitSigningIn": "Anmeldung läuft...",
+    "login.submitRegistering": "Registrierung läuft...",
     "login.submitSignIn": "Anmelden",
     "login.submitRegister": "Registrieren",
 
@@ -533,7 +533,7 @@ const translations = {
     "app.superadmin": "Superadmin",
     "app.logout": "Abmelden",
     "app.footerDescription":
-      "GAMWeaver - Interaktiver GAM-Editor fuer interaktive Modellierung und Erklaerbarkeit. Entwickelt von {name} im Rahmen einer Masterarbeit.",
+      "GAMWeaver - Interaktiver GAM-Editor für interaktive Modellierung und Erklärbarkeit. Entwickelt von {name} im Rahmen einer Masterarbeit.",
     "app.githubLink": "GAMWeaver GitHub",
     "app.notification.editRemoved": "Bearbeitung entfernt",
     "app.notification.editsRemoved": "Bearbeitungen entfernt",
@@ -552,9 +552,9 @@ const translations = {
     "app.error.applyShapeEdits":
       "Bearbeitungen der Shape-Funktionen konnten nicht angewendet werden",
     "app.error.resetShapeFunctions":
-      "Shape-Funktionen konnten nicht zurueckgesetzt werden",
+      "Shape-Funktionen konnten nicht zurückgesetzt werden",
     "app.error.resetFeature":
-      "Feature konnte nicht zurueckgesetzt werden",
+      "Feature konnte nicht zurückgesetzt werden",
     "app.error.updateFeatureChartSettings":
       "Feature-Diagrammeinstellungen konnten nicht aktualisiert werden",
     "app.error.loadData": "Daten konnten nicht geladen werden",
@@ -566,14 +566,14 @@ const translations = {
 
     "training.title": "Modelltraining",
     "training.restrictedNotice":
-      "Das Hochladen/Laden von Datensaetzen und die Trainingssteuerung sind auf den Superadmin beschraenkt.",
+      "Das Hochladen/Laden von Datensätzen und die Trainingssteuerung sind auf den Superadmin beschränkt.",
     "training.dataLoaded": "Daten geladen",
     "training.modelTrainedLabel": "Modell trainiert",
     "training.activeDataset": "Aktiver Datensatz",
     "training.stepLoadData": "Daten laden",
     "training.stepLoaded": "Geladen",
     "training.loadDescription":
-      "CSV-Datensatz hochladen, Vorhersageziel auswaehlen und zu importierende Spalten festlegen.",
+      "CSV-Datensatz hochladen, Vorhersageziel auswählen und zu importierende Spalten festlegen.",
     "training.uploadAndLoad": "Datensatz hochladen und laden",
     "training.stepTrainModel": "Modell trainieren",
     "training.stepTrained": "Trainiert",
@@ -584,39 +584,39 @@ const translations = {
     "training.trainButton": "IGANN-Modell trainieren",
     "training.uploadModalTitle": "Datensatz hochladen",
     "training.csvFile": "CSV-Datei",
-    "training.uploadInspect": "Hochladen und Spalten pruefen",
+    "training.uploadInspect": "Hochladen und Spalten prüfen",
     "training.columnsDetected": "Erkannte Spalten",
     "training.targetColumn": "Zielspalte",
     "training.featureColumns": "Feature-Spalten",
     "training.expandFeatureColumns": "Feature-Spalten erweitern",
     "training.collapseFeatureColumns": "Feature-Spalten verkleinern",
-    "training.selectAll": "Alle waehlen",
-    "training.clearAll": "Auswahl loeschen",
+    "training.selectAll": "Alle wählen",
+    "training.clearAll": "Auswahl löschen",
     "training.target": "Ziel",
-    "training.selectedFeatures": "Ausgewaehlte Features",
+    "training.selectedFeatures": "Ausgewählte Features",
     "training.loadDataset": "Datensatz laden",
-    "training.error.chooseCsvFirst": "Bitte zuerst eine CSV-Datei auswaehlen.",
+    "training.error.chooseCsvFirst": "Bitte zuerst eine CSV-Datei auswählen.",
     "training.error.uploadFailed": "Datensatz konnte nicht hochgeladen werden",
     "training.error.loadFailed": "Datensatz konnte nicht geladen werden",
     "training.error.uploadNeedsSelections":
-      "Bitte eine CSV hochladen, eine Zielspalte waehlen und mindestens eine Feature-Spalte auswaehlen.",
+      "Bitte eine CSV hochladen, eine Zielspalte wählen und mindestens eine Feature-Spalte auswählen.",
     "training.progress.loadingData": "Daten werden geladen...",
     "training.progress.training":
       "Modell wird trainiert... Das kann einen Moment dauern.",
     "training.uploading": "Wird hochgeladen...",
     "training.loadingDataset": "Wird geladen...",
-    "training.training": "Training laeuft...",
+    "training.training": "Training läuft...",
     "training.statusDataLoaded": "Daten geladen",
     "training.statusModelTrained": "Modell trainiert",
     "training.statusModelSource": "Modellquelle",
     "training.modelSourceImported": "importiert",
     "training.modelSourceTrained": "trainiert",
     "training.importedAnalyticsUnavailable":
-      "Analysen fuer importierte Modelle bleiben nicht verfuegbar, bis der Superadmin einen kompatiblen Datensatz laedt.",
+      "Analysen für importierte Modelle bleiben nicht verfügbar, bis der Superadmin einen kompatiblen Datensatz lädt.",
 
-    "dataSummary.title": "Datenuebersicht",
+    "dataSummary.title": "Datenübersicht",
     "dataSummary.empty": "Daten laden, um Zusammenfassungsstatistiken zu sehen",
-    "dataSummary.totalRecords": "Gesamtanzahl Datensaetze",
+    "dataSummary.totalRecords": "Gesamtanzahl Datensätze",
     "dataSummary.targetVariable": "Zielvariable",
     "dataSummary.targetFallback": "Ziel",
     "dataSummary.mean": "Mittelwert",
@@ -627,12 +627,12 @@ const translations = {
 
     "prediction.title": "Vorhersage erstellen",
     "prediction.description":
-      "Feature-Werte des Datensatzes setzen und eine Vorhersage ausfuehren. Die Eingaben werden aus dem aktiven Datensatzschema generiert.",
+      "Feature-Werte des Datensatzes setzen und eine Vorhersage ausführen. Die Eingaben werden aus dem aktiven Datensatzschema generiert.",
     "prediction.trainFirst":
       "Bitte zuerst das Modell trainieren, bevor Vorhersagen erstellt werden.",
     "prediction.noSchema":
-      "Kein Feature-Schema verfuegbar. Bitte den Superadmin, einen Datensatz zu laden.",
-    "prediction.predicting": "Vorhersage laeuft...",
+      "Kein Feature-Schema verfügbar. Bitte den Superadmin, einen Datensatz zu laden.",
+    "prediction.predicting": "Vorhersage läuft...",
     "prediction.predictTarget": "{target} vorhersagen",
     "prediction.predictedTarget": "Vorhergesagtes {target}",
 
@@ -642,7 +642,7 @@ const translations = {
     "shapeFunctions.sharedDescription":
       "Shape-Funktionen zeigen, wie jedes Feature die Vorhersage beeinflusst.",
     "shapeFunctions.gridDescription":
-      "Diese Diagramme zeigen, wie jedes Feature die Vorhersage der Fahrradvermietung beeinflusst. Werte ueber null erhoehen die Vorhersage, Werte darunter senken sie.",
+      "Diese Diagramme zeigen, wie jedes Feature die Vorhersage der Fahrradvermietung beeinflusst. Werte über null erhöhen die Vorhersage, Werte darunter senken sie.",
     "shapeFunctions.effectOnPrediction":
       "Effekt auf die Vorhersage",
     "shapeFunctions.interactiveTitle": "Interaktive Shape-Funktionen",
@@ -651,19 +651,19 @@ const translations = {
     "shapeFunctions.interactiveEditDescription":
       "Bearbeite Punkte und klicke dann bei jedem Feature auf Senden, um mit deiner Sicherheit zu speichern.",
     "shapeFunctions.interactiveViewDescription":
-      "Aktiviere den Bearbeitungsmodus, um Shape-Funktionen interaktiv zu aendern.",
-    "shapeFunctions.resetAll": "Alles zuruecksetzen",
+      "Aktiviere den Bearbeitungsmodus, um Shape-Funktionen interaktiv zu ändern.",
+    "shapeFunctions.resetAll": "Alles zurücksetzen",
     "shapeFunctions.syncAxes": "Achsen synchronisieren",
     "shapeFunctions.axesSynced": "Achsen synchronisiert",
     "shapeFunctions.syncAxesHintOn":
-      "Achsen sind synchronisiert - klicken fuer individuelle Skalierung",
+      "Achsen sind synchronisiert - klicken für individuelle Skalierung",
     "shapeFunctions.syncAxesHintOff":
       "Klicken, um alle Diagrammachsen auf dieselbe Skala zu synchronisieren",
     "shapeFunctions.enableEditing": "Bearbeitung aktivieren",
     "shapeFunctions.editingModeOn": "Bearbeitungsmodus AN",
     "shapeFunctions.editHelp":
-      "Bei numerischen Features klicken und ziehen, um Bearbeitungen entlang der Kurve zu pinseln. Mit dem Weich-Hart-Regler steuerst du, wie viel der Kurve beeinflusst wird. Bei kategorialen Features einen Punkt anfahren und nach oben oder unten ziehen. Doppelklick fuer eine praezise Eingabe. Wenn du mit einem Feature fertig bist, klicke auf Senden und bewerte deine Sicherheit.",
-    "shapeFunctions.lineBrushHardness": "Pinselhaerte der Linie",
+      "Bei numerischen Features klicken und ziehen, um Bearbeitungen entlang der Kurve zu pinseln. Mit dem Weich-Hart-Regler steuerst du, wie viel der Kurve beeinflusst wird. Bei kategorialen Features einen Punkt anfahren und nach oben oder unten ziehen. Doppelklick für eine präzise Eingabe. Wenn du mit einem Feature fertig bist, klicke auf Senden und bewerte deine Sicherheit.",
+    "shapeFunctions.lineBrushHardness": "Pinselhärte der Linie",
     "shapeFunctions.soft": "Weich",
     "shapeFunctions.hard": "Hart",
     "shapeFunctions.original": "Original",
@@ -678,19 +678,19 @@ const translations = {
     "shapeFunctions.setEffectValue": "Effektwert festlegen",
     "shapeFunctions.brushingAtX": "Pinsel bei x = {value}",
     "shapeFunctions.releaseToApply":
-      "Loslassen, um geglaetteten Strich anzuwenden: {value}",
+      "Loslassen, um geglätteten Strich anzuwenden: {value}",
     "shapeFunctions.draggingPoint": "Punkt {index} wird gezogen",
     "shapeFunctions.releaseToSetValue":
       "Loslassen, um Wert zu setzen: {value}",
     "shapeFunctions.clickDragHint":
-      "Klicken und ziehen, um die Linie zu bearbeiten. Doppelklick fuer eine praezise Eingabe.",
-    "shapeFunctions.pointSelected": "Punkt {index} ausgewaehlt",
+      "Klicken und ziehen, um die Linie zu bearbeiten. Doppelklick für eine präzise Eingabe.",
+    "shapeFunctions.pointSelected": "Punkt {index} ausgewählt",
     "shapeFunctions.preciseValueHint":
-      "Doppelklick fuer praezisen Wert",
+      "Doppelklick für präzisen Wert",
     "shapeFunctions.hoverSelectHint":
-      "Mit der Maus ueber einen Punkt fahren, um ihn auszuwaehlen",
+      "Mit der Maus über einen Punkt fahren, um ihn auszuwählen",
     "shapeFunctions.submitEditTitle":
-      "Bearbeitung fuer {feature} senden",
+      "Bearbeitung für {feature} senden",
     "shapeFunctions.submitEditDescription":
       "Bewerte deine Sicherheit und beschreibe deine Bearbeitung.",
     "shapeFunctions.confidenceLevel": "Sicherheitsstufe",
@@ -701,19 +701,19 @@ const translations = {
     "shapeFunctions.editDescriptionPlaceholder":
       "Beschreibe, warum du diese Bearbeitung vorgenommen hast...",
     "shapeFunctions.editDescriptionRequired":
-      "Bitte gib eine Beschreibung fuer deine Bearbeitung ein.",
+      "Bitte gib eine Beschreibung für deine Bearbeitung ein.",
     "shapeFunctions.submitEdit": "Bearbeitung senden",
     "shapeFunctions.chartSettingsSaveError":
       "Diagrammeinstellungen konnten nicht gespeichert werden",
     "shapeFunctions.chartMappingTitle":
       "Diagrammzuordnung: {feature}",
     "shapeFunctions.chartMappingDescription":
-      "Konfiguriere Diagrammtyp und X-Achsen-Beschriftungen fuer alle Benutzer.",
+      "Konfiguriere Diagrammtyp und X-Achsen-Beschriftungen für alle Benutzer.",
     "shapeFunctions.chartType": "Diagrammtyp",
     "shapeFunctions.numericChartType": "Numerisch",
     "shapeFunctions.categoricalChartType": "Kategorial",
     "shapeFunctions.numericMappingHint":
-      "Weise ganzzahligen numerischen X-Achsen-Werten Anzeigelabels zu, ohne die kontinuierliche Achse zu veraendern.",
+      "Weise ganzzahligen numerischen X-Achsen-Werten Anzeigelabels zu, ohne die kontinuierliche Achse zu verändern.",
     "shapeFunctions.categoricalMappingHint":
       "Weise den auf diesem Diagramm gezeigten kategorialen X-Achsen-Werten Anzeigelabels zu.",
     "shapeFunctions.treatAsCategorical":
@@ -727,13 +727,13 @@ const translations = {
     "shapeFunctions.numericXAxisLabels":
       "Ganzzahlige X-Achsen-Beschriftungen",
     "shapeFunctions.noCategoricalValues":
-      "Keine kategorialen Werte fuer die Zuordnung verfuegbar.",
+      "Keine kategorialen Werte für die Zuordnung verfügbar.",
     "shapeFunctions.noNumericValues":
-      "Keine numerischen X-Achsen-Werte fuer die Zuordnung verfuegbar.",
+      "Keine numerischen X-Achsen-Werte für die Zuordnung verfügbar.",
     "shapeFunctions.displayLabelFor":
-      "Anzeigelabel fuer {value}",
+      "Anzeigelabel für {value}",
     "shapeFunctions.mappingAvailableAfterCategorical":
-      "Label-Zuordnungen sind verfuegbar, sobald dieses Feature als kategoriales Diagramm angezeigt wird.",
+      "Label-Zuordnungen sind verfügbar, sobald dieses Feature als kategoriales Diagramm angezeigt wird.",
     "shapeFunctions.saveMapping": "Zuordnung speichern",
     "shapeFunctions.saving": "Speichern...",
     "shapeFunctions.switchChartToNumeric":
@@ -747,7 +747,7 @@ const translations = {
     "shapeFunctions.editChartMapping":
       "Diagrammzuordnung bearbeiten",
     "shapeFunctions.chartMappingButton": "Diagrammzuordnung",
-    "shapeFunctions.enlargeChart": "Diagramm vergroessern",
+    "shapeFunctions.enlargeChart": "Diagramm vergrößern",
     "shapeFunctions.submitFeature": "{feature} senden",
     "shapeFunctions.dataDistribution": "Datenverteilung",
     "shapeFunctions.showDistribution": "Verteilung anzeigen",
@@ -760,14 +760,14 @@ const translations = {
     "shapeFunctions.distributionMissingCount": "Fehlend: {count}",
     "shapeFunctions.distributionRepresentedCount":
       "Insgesamt dargestellte Zeilen: {count}",
-    "shapeFunctions.distributionEmpty": "Keine Verteilungsdaten verfuegbar.",
-    "shapeFunctions.openFeatureDetails": "Feature-Details oeffnen",
+    "shapeFunctions.distributionEmpty": "Keine Verteilungsdaten verfügbar.",
+    "shapeFunctions.openFeatureDetails": "Feature-Details öffnen",
     "shapeFunctions.detailsButton": "Details",
     "shapeFunctions.detailsDrawerTitle": "Feature-Details",
     "shapeFunctions.detailsSummary":
       "Zeigt, wie dieses Feature im Datensatz konstruiert wurde.",
     "shapeFunctions.detailsUnavailable":
-      "Fuer dieses Feature sind keine Metadaten zur Herkunft verfuegbar.",
+      "Für dieses Feature sind keine Metadaten zur Herkunft verfügbar.",
     "shapeFunctions.detailsCategory": "Kategorie",
     "shapeFunctions.detailsConstruction": "Konstruktion",
     "shapeFunctions.detailsSourceVariables": "Quellvariablen",
@@ -776,7 +776,7 @@ const translations = {
     "shapeFunctions.detailsTransformation": "Transformation",
     "shapeFunctions.detailsMissingHandling": "Fehlende Werte",
     "shapeFunctions.detailsRationale":
-      "Warum dieses Feature ausgewaehlt wurde",
+      "Warum dieses Feature ausgewählt wurde",
     "shapeFunctions.detailsSourceCount": "{count} Quellfragen",
     "shapeFunctions.detailsRawSource": "Direkter Quellwert",
     "shapeFunctions.detailsItemMean": "Itemmittelwert",
@@ -785,11 +785,11 @@ const translations = {
 
     "predictionComparison.title": "Vorhersagevergleich",
     "predictionComparison.empty":
-      "Bearbeite Shape-Funktionen und wende Aenderungen an, um den Vorhersagevergleich zu sehen.",
+      "Bearbeite Shape-Funktionen und wende Änderungen an, um den Vorhersagevergleich zu sehen.",
     "predictionComparison.subtitleWithEdits":
-      "Vergleiche Vorhersagen zwischen dem urspruenglichen IGANN-Modell und deiner bearbeiteten Version.",
+      "Vergleiche Vorhersagen zwischen dem ursprünglichen IGANN-Modell und deiner bearbeiteten Version.",
     "predictionComparison.subtitleWithoutEdits":
-      "Bearbeite Shape-Funktionen, um zu sehen, wie sich Vorhersagen aendern.",
+      "Bearbeite Shape-Funktionen, um zu sehen, wie sich Vorhersagen ändern.",
     "predictionComparison.customizeColors":
       "Diagrammfarben anpassen",
     "predictionComparison.colorsButton": "Farben",
@@ -801,7 +801,7 @@ const translations = {
     "predictionComparison.perfectPredictionLine":
       "Linie perfekter Vorhersage",
     "predictionComparison.persistHint":
-      "Melde dich an, um Farben sitzungsuebergreifend zu speichern.",
+      "Melde dich an, um Farben sitzungsübergreifend zu speichern.",
     "predictionComparison.originalTrace": "IGANN (Original)",
     "predictionComparison.editedTrace":
       "IGANN Interaktiv (Bearbeitet)",
@@ -811,7 +811,7 @@ const translations = {
     "predictionComparison.plotTitleWithEdits":
       "Vorhersagen vs. Ist-Werte (Original vs. Bearbeitet)",
     "predictionComparison.actualBikeRentals":
-      "Tatsaechliche Fahrradvermietungen",
+      "Tatsächliche Fahrradvermietungen",
     "predictionComparison.predictedBikeRentals":
       "Vorhergesagte Fahrradvermietungen",
     "predictionComparison.originalModel": "IGANN (Original)",
@@ -826,7 +826,7 @@ const translations = {
     "combined.loading": "Kombinierte Ergebnisse werden geladen...",
     "combined.summaryTitle": "Kombinierte Analyse von {count} Benutzern",
     "combined.summaryDescription":
-      "Diese Seite zeigt den aggregierten Effekt aller Benutzerbearbeitungen auf das GAM-Modell. Der Offset jedes Punkts wird ueber alle Benutzer gemittelt, die ihn bearbeitet haben.",
+      "Diese Seite zeigt den aggregierten Effekt aller Benutzerbearbeitungen auf das GAM-Modell. Der Offset jedes Punkts wird über alle Benutzer gemittelt, die ihn bearbeitet haben.",
     "combined.participatingUsers":
       "Teilnehmende Benutzer ({count})",
     "combined.noUsers": "Noch keine Benutzer.",
@@ -838,17 +838,17 @@ const translations = {
     "combined.scatterTitle":
       "Vorhergesagt vs. Original (Streudiagramm)",
     "combined.scatterDescription":
-      "Punkte naeher an der Diagonalen zeigen bessere Vorhersagen. Vergleiche, wie sich kombinierte Benutzerbearbeitungen auf die Genauigkeit auswirken.",
+      "Punkte näher an der Diagonalen zeigen bessere Vorhersagen. Vergleiche, wie sich kombinierte Benutzerbearbeitungen auf die Genauigkeit auswirken.",
     "combined.formTitle": "Mit kombinierten Bearbeitungen vorhersagen",
     "combined.formDescription":
-      "Erstelle eine Vorhersage mit dem Modell, auf das alle kombinierten Benutzerbearbeitungen angewendet wurden. Das Ergebnis spiegelt die aggregierten Aenderungen der Shape-Funktionen aller Benutzer wider.",
+      "Erstelle eine Vorhersage mit dem Modell, auf das alle kombinierten Benutzerbearbeitungen angewendet wurden. Das Ergebnis spiegelt die aggregierten Änderungen der Shape-Funktionen aller Benutzer wider.",
     "combined.predictButton":
       "{target} vorhersagen (kombiniertes Modell)",
     "combined.predictedResult":
       "Vorhergesagtes {target} (kombinierte Bearbeitungen)",
     "combined.predictionFailed": "Vorhersage fehlgeschlagen",
     "combined.shapeFunctionsNone":
-      "Keine Shape-Funktionsdaten verfuegbar.",
+      "Keine Shape-Funktionsdaten verfügbar.",
     "combined.shapeFunctionsTitle":
       "Shape-Funktionen: Original vs. kombinierte Bearbeitungen",
     "combined.weightingToggleTitle":
@@ -862,11 +862,11 @@ const translations = {
     "combined.combined": "Kombiniert",
     "combined.comparison": "Vergleichsdatensatz",
     "combined.noEdits":
-      "Es wurden noch keine Benutzerbearbeitungen vorgenommen. Die Diagramme unten zeigen die urspruenglichen Shape-Funktionen.",
-    "combined.modified": "Geaendert",
+      "Es wurden noch keine Benutzerbearbeitungen vorgenommen. Die Diagramme unten zeigen die ursprünglichen Shape-Funktionen.",
+    "combined.modified": "Geändert",
     "combined.effect": "Effekt",
     "combined.editLogsUnavailable":
-      "Bearbeitungsprotokolle sind voruebergehend nicht verfuegbar: {error}",
+      "Bearbeitungsprotokolle sind vorübergehend nicht verfügbar: {error}",
     "combined.editLogsTitle": "Bearbeitungsprotokolle",
     "combined.editLogsDescription":
       "Detailliertes Protokoll aller Benutzerbearbeitungen, nach Feature gruppiert. Es zeigt, wer bearbeitet hat, die selbst angegebene Sicherheit (1-10), den rohen Eingabewert und das gewichtete Ergebnis in der kombinierten Ansicht.",
@@ -882,35 +882,35 @@ const translations = {
     "combined.rawTotal": "Rohe Summe",
     "combined.weightedTotal": "Gewichtete Summe",
     "combined.message": "Nachricht",
-    "combined.xSummary": "X-Uebersicht",
-    "combined.deleteSubmission": "Einreichung loeschen",
+    "combined.xSummary": "X-Übersicht",
+    "combined.deleteSubmission": "Einreichung löschen",
     "combined.xValue": "X-Wert",
     "combined.rawInput": "Roheingabe",
     "combined.weighted": "Gewichtet",
     "combined.originalLinePreview": "Originale Linie",
     "combined.weightedLinePreview": "Gewichtete bearbeitete Linie",
     "combined.noSubmissions":
-      "Keine Einreichungen fuer dieses Feature verfuegbar.",
+      "Keine Einreichungen für dieses Feature verfügbar.",
     "combined.deleteDisabled":
       "Destruktive Aktionen sind in dieser Demo deaktiviert.",
     "combined.deleteReasonRequired":
-      "Bitte gib einen Grund fuer das Loeschen dieser Bearbeitung an.",
+      "Bitte gib einen Grund für das Löschen dieser Bearbeitung an.",
     "combined.noDeletionTarget":
-      "Kein Loeschziel fuer diese Einreichung verfuegbar",
+      "Kein Löschziel für diese Einreichung verfügbar",
     "combined.deleteFailed":
-      "Einreichung konnte nicht geloescht werden",
+      "Einreichung konnte nicht gelöscht werden",
     "combined.loadEditLogsFailed":
       "Bearbeitungsprotokolle konnten nicht geladen werden",
     "combined.loadDataFailed": "Daten konnten nicht geladen werden",
-    "combined.deleteModalTitle": "Einreichung loeschen",
+    "combined.deleteModalTitle": "Einreichung löschen",
     "combined.deleteModalDescription":
-      "Du bist dabei, eine eingereichte Kurvenbearbeitung von {user} zu loeschen.",
+      "Du bist dabei, eine eingereichte Kurvenbearbeitung von {user} zu löschen.",
     "combined.feature": "Feature",
     "combined.whyRemoved":
       "Warum wird diese Einreichung entfernt?",
     "combined.deleteReasonPlaceholder":
-      "Gib einen Grund fuer das Entfernen dieser Einreichung an...",
-    "combined.deleting": "Loeschen...",
+      "Gib einen Grund für das Entfernen dieser Einreichung an...",
+    "combined.deleting": "Löschen...",
 
     "superadmin.error.loadUsers": "Benutzer konnten nicht geladen werden",
     "superadmin.error.usernamePasswordRequired":
@@ -922,7 +922,7 @@ const translations = {
     "superadmin.error.createInvite":
       "Einladung konnte nicht erstellt werden",
     "superadmin.error.resetDatabase":
-      "Datenbank konnte nicht zurueckgesetzt werden",
+      "Datenbank konnte nicht zurückgesetzt werden",
     "superadmin.error.exportModel":
       "Modell konnte nicht exportiert werden",
     "superadmin.error.importModel":
@@ -931,14 +931,14 @@ const translations = {
       "Vergleichsdatensatz konnte nicht hochgeladen werden",
     "superadmin.compareLoadError":
       "Vergleichsdatensatz konnte nicht geladen werden",
-    "superadmin.title": "Superadmin-Uebersicht",
-    "superadmin.openCombined": "Kombinierte Ergebnisse oeffnen",
-    "superadmin.compareDatasets": "Datensaetze vergleichen",
+    "superadmin.title": "Superadmin-Übersicht",
+    "superadmin.openCombined": "Kombinierte Ergebnisse öffnen",
+    "superadmin.compareDatasets": "Datensätze vergleichen",
     "superadmin.compareDatasetsDescription":
-      "Lade einen zweiten Datensatz hoch, trainiere ihn mit der Estimator-Anzahl des primaeren Modells und lege seine Shape-Funktionen ueber die interaktiven Diagramme.",
+      "Lade einen zweiten Datensatz hoch, trainiere ihn mit der Estimator-Anzahl des primären Modells und lege seine Shape-Funktionen über die interaktiven Diagramme.",
     "superadmin.chartDisplayTitle": "Diagrammanzeige",
     "superadmin.chartDisplayDescription":
-      "Steuere, ob eigene Balken fuer fehlende Werte in Shape-Funktionsdiagrammen angezeigt werden.",
+      "Steuere, ob eigene Balken für fehlende Werte in Shape-Funktionsdiagrammen angezeigt werden.",
     "superadmin.showMissingBars": "Fehlend-Balken anzeigen",
     "superadmin.hideMissingBars": "Fehlend-Balken ausblenden",
     "superadmin.updatingChartDisplay":
@@ -946,11 +946,11 @@ const translations = {
     "superadmin.error.updateChartDisplaySettings":
       "Diagrammanzeige konnte nicht aktualisiert werden",
     "superadmin.compareModalDescription":
-      "Der Vergleichsdatensatz muss dieselbe Zielspalte und dieselben ausgewaehlten Feature-Spalten wie der primaere Datensatz verwenden.",
+      "Der Vergleichsdatensatz muss dieselbe Zielspalte und dieselben ausgewählten Feature-Spalten wie der primäre Datensatz verwenden.",
     "superadmin.uploadAndSelectComparison":
-      "Hochladen und Features waehlen",
+      "Hochladen und Features wählen",
     "superadmin.trainComparison": "Vergleichsmodell trainieren",
-    "superadmin.primaryEstimators": "Primaere Estimatoren",
+    "superadmin.primaryEstimators": "Primäre Estimatoren",
     "superadmin.comparisonDataset": "Vergleichsdatensatz",
     "superadmin.noComparisonDataset": "Kein Vergleichsdatensatz geladen",
     "superadmin.comparisonTrained": "Vergleich trainiert",
@@ -961,45 +961,45 @@ const translations = {
     "superadmin.generateInvite": "Einladung erzeugen",
     "superadmin.inviteCopied":
       "Einladungslink wurde in die Zwischenablage kopiert.",
-    "superadmin.expires": "Laeuft ab",
+    "superadmin.expires": "Läuft ab",
     "superadmin.inviteDescription":
-      "Einen Einladungslink erzeugen, um neue Registrierungen zu ermoeglichen.",
-    "superadmin.systemReset": "System zuruecksetzen",
+      "Einen Einladungslink erzeugen, um neue Registrierungen zu ermöglichen.",
+    "superadmin.systemReset": "System zurücksetzen",
     "superadmin.systemResetDescription":
       "Entfernt dauerhaft alle Benutzer, alle gespeicherten Bearbeitungen, hochgeladene CSV-Dateien und den extrahierten Feature-Zustand der aktuellen Backend-Umgebung.",
-    "superadmin.resetDatabase": "Datenbank zuruecksetzen",
+    "superadmin.resetDatabase": "Datenbank zurücksetzen",
     "superadmin.creating": "Wird erstellt...",
     "superadmin.users": "Benutzer",
     "superadmin.loadingUsers": "Benutzer werden geladen...",
     "superadmin.noUsers": "Noch keine Benutzer.",
     "superadmin.created": "Erstellt",
     "superadmin.badge": "Superadmin",
-    "superadmin.resetConfirmTitle": "Datenbank zuruecksetzen?",
+    "superadmin.resetConfirmTitle": "Datenbank zurücksetzen?",
     "superadmin.resetConfirmBody":
-      "Dadurch werden Benutzer, Bearbeitungen, hochgeladene CSV-Dateien und extrahierter Feature-Zustand dauerhaft geloescht. Diese Aktion kann nicht rueckgaengig gemacht werden.",
-    "superadmin.resetting": "Zuruecksetzen laeuft...",
-    "superadmin.resetEverything": "Ja, alles zuruecksetzen",
+      "Dadurch werden Benutzer, Bearbeitungen, hochgeladene CSV-Dateien und extrahierter Feature-Zustand dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "superadmin.resetting": "Zurücksetzen läuft...",
+    "superadmin.resetEverything": "Ja, alles zurücksetzen",
     "superadmin.modelTransferTitle": "Modelltransfer",
     "superadmin.modelTransferDescription":
       "Exportiere das aktive trainierte Modell als JSON oder importiere ein zuvor exportiertes Modellartefakt.",
-    "superadmin.exporting": "Export laeuft...",
+    "superadmin.exporting": "Export läuft...",
     "superadmin.exportModel": "Modell exportieren",
-    "superadmin.importing": "Import laeuft...",
+    "superadmin.importing": "Import läuft...",
     "superadmin.importModel": "Modell importieren",
     "superadmin.modelTransferWarning":
-      "Beim Importieren eines Modells wird das aktuelle Basismodell ersetzt und gespeicherte Benutzerbearbeitungen, die mit dem vorherigen Modell verknuepft sind, werden geloescht.",
+      "Beim Importieren eines Modells wird das aktuelle Basismodell ersetzt und gespeicherte Benutzerbearbeitungen, die mit dem vorherigen Modell verknüpft sind, werden gelöscht.",
     "superadmin.exportSuccess": "Modell wurde als {filename} exportiert.",
     "superadmin.exportSuccessWithEdits":
       "Modell und gespeicherte Shape-Function-Bearbeitungen wurden als {filename} exportiert.",
     "superadmin.importSuccess":
       "Modell wurde erfolgreich importiert.",
     "superadmin.importSuccessWithEdits":
-      "Modell und gespeicherte Shape-Function-Bearbeitungen wurden erfolgreich fuer {users} Benutzer mit {submissions} Einreichungen importiert.",
+      "Modell und gespeicherte Shape-Function-Bearbeitungen wurden erfolgreich für {users} Benutzer mit {submissions} Einreichungen importiert.",
     "superadmin.exportConfirmTitle": "Modellartefakt exportieren?",
     "superadmin.exportConfirmBody":
-      "Waehle, ob das exportierte Modellartefakt auch gespeicherte Shape-Function-Bearbeitungen des aktuellen Modells enthalten soll.",
+      "Wähle, ob das exportierte Modellartefakt auch gespeicherte Shape-Function-Bearbeitungen des aktuellen Modells enthalten soll.",
     "superadmin.exportIncludeEdits":
-      "Gespeicherte Shape-Function-Bearbeitungen einschliessen",
+      "Gespeicherte Shape-Function-Bearbeitungen einschließen",
     "superadmin.exportConfirmAction": "Artefakt exportieren",
   },
 };
