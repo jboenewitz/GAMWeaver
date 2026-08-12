@@ -661,6 +661,7 @@ const EditableShapeFunctionChart = ({
   brushHardness = 50,
   enlarged = false,
   sharedYRange = null,
+  headerContent = null,
   t,
 }) => {
   if (!shapeFunction) return null;
@@ -1894,6 +1895,11 @@ const EditableShapeFunctionChart = ({
       }`}
       style={{ userSelect: "none" }}
     >
+      {headerContent && (
+        <div className="border-b border-slate-200 bg-slate-50/80 px-3 py-2">
+          {headerContent}
+        </div>
+      )}
       {/* Precise Value Entry Modal */}
       {preciseEntry && (
         <div
@@ -2563,53 +2569,7 @@ const FeatureEditCard = ({
   const hasFeatureDetails = Boolean(featureSchemaEntry);
 
   return (
-    <div className="relative">
-      {isSuperadmin && (
-        <button
-          onClick={() => onOpenChartSettings(shapeFunction)}
-          title={t("shapeFunctions.editChartMapping")}
-          className="absolute top-2 left-2 z-10 h-7 px-2 bg-white/90 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-xs text-gray-700 font-medium"
-        >
-          {t("shapeFunctions.chartMappingButton")}
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={() => onOpenDetails(shapeFunction.feature_name)}
-        title={t("shapeFunctions.openFeatureDetails")}
-        disabled={!hasFeatureDetails}
-        className={`absolute top-2 right-11 z-10 h-7 px-2 border rounded-md shadow-sm transition-colors text-xs font-medium ${
-          hasFeatureDetails
-            ? "bg-white/90 hover:bg-gray-100 border-gray-300 text-gray-700"
-            : "bg-gray-100/90 border-gray-200 text-gray-400 cursor-not-allowed"
-        }`}
-      >
-        {t("shapeFunctions.detailsButton")}
-      </button>
-      {/* Enlarge button */}
-      <button
-        onClick={() => setIsEnlarged(true)}
-        title={t("shapeFunctions.enlargeChart")}
-        className="absolute top-2 right-2 z-10 p-1.5 bg-white/80 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-gray-500 hover:text-gray-700"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="15 3 21 3 21 9" />
-          <polyline points="9 21 3 21 3 15" />
-          <line x1="21" y1="3" x2="14" y2="10" />
-          <line x1="3" y1="21" x2="10" y2="14" />
-        </svg>
-      </button>
-
+    <div>
       <EditableShapeFunctionChart
         shapeFunction={shapeFunction}
         comparisonShapeFunction={comparisonShapeFunction}
@@ -2619,6 +2579,58 @@ const FeatureEditCard = ({
         showMissingBars={showMissingBars}
         brushHardness={brushHardness}
         sharedYRange={sharedYRange}
+        headerContent={
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              {isSuperadmin && (
+                <button
+                  onClick={() => onOpenChartSettings(shapeFunction)}
+                  title={t("shapeFunctions.editChartMapping")}
+                  className="h-7 px-2 bg-white hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-xs text-gray-700 font-medium"
+                >
+                  {t("shapeFunctions.chartMappingButton")}
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenDetails(shapeFunction.feature_name)}
+                title={t("shapeFunctions.openFeatureDetails")}
+                disabled={!hasFeatureDetails}
+                className={`h-7 px-2 border rounded-md shadow-sm transition-colors text-xs font-medium ${
+                  hasFeatureDetails
+                    ? "bg-white hover:bg-gray-100 border-gray-300 text-gray-700"
+                    : "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                }`}
+              >
+                {t("shapeFunctions.detailsButton")}
+              </button>
+              <button
+                onClick={() => setIsEnlarged(true)}
+                title={t("shapeFunctions.enlargeChart")}
+                className="p-1.5 bg-white hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-gray-500 hover:text-gray-700"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="15 3 21 3 21 9" />
+                  <polyline points="9 21 3 21 3 15" />
+                  <line x1="21" y1="3" x2="14" y2="10" />
+                  <line x1="3" y1="21" x2="10" y2="14" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        }
         t={t}
       />
       <div className="mt-2 flex justify-between items-center">

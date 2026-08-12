@@ -63,6 +63,9 @@ function App() {
   // User state
   const [currentUser, setCurrentUser] = useState(null);
   const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined', 'superadmin'
+  const hasSuperadminSession = Boolean(
+    currentUser?.is_superadmin && localStorage.getItem("superadminToken"),
+  );
 
   // State
   const [modelStatus, setModelStatus] = useState(null);
@@ -904,7 +907,7 @@ function App() {
             onFeatureReset={handleResetFeature}
             initialEditedPoints={userSavedEdits}
             onUnsavedEditsChange={handleUnsavedEditsChange}
-            isSuperadmin={Boolean(currentUser?.is_superadmin)}
+            isSuperadmin={hasSuperadminSession}
             onUpdateFeatureChartSettings={handleUpdateFeatureChartSettings}
             showMissingBars={Boolean(modelStatus?.show_missing_bars)}
             language={language}
