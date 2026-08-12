@@ -191,6 +191,7 @@ class MLService:
         self.feature_schema_map: Dict[str, Dict[str, Any]] = {}
         self.missing_indicator_map: Dict[str, str] = {}
         self.numeric_missing_placeholder_values: Dict[str, float] = {}
+        self.show_missing_bars = False
         self.model_source: str = "trained"
         self.imported_artifact_version: Optional[str] = None
         self.analytics_available = False
@@ -287,6 +288,7 @@ class MLService:
             "numeric_missing_placeholder_values": dict(
                 self.numeric_missing_placeholder_values
             ),
+            "show_missing_bars": bool(self.show_missing_bars),
             "original_shape_functions": dict(self.original_shape_functions),
             "shape_function_offsets": {
                 feature: dict(offsets)
@@ -317,6 +319,7 @@ class MLService:
         dataset_id = data.get("dataset_id")
         dataset_name = data.get("dataset_name")
         feature_chart_settings = data.get("feature_chart_settings")
+        show_missing_bars = data.get("show_missing_bars")
         if dataset_path:
             self.active_dataset_path = str(Path(dataset_path))
         if target_column:
@@ -346,6 +349,8 @@ class MLService:
                     "value_labels": labels,
                 }
             self.feature_chart_settings = sanitized
+        if show_missing_bars is not None:
+            self.show_missing_bars = bool(show_missing_bars)
 
     def _persist_active_dataset_metadata(self) -> None:
         payload = {
@@ -355,6 +360,7 @@ class MLService:
             "target_column": self.target_column,
             "selected_feature_columns": self.selected_feature_columns,
             "feature_chart_settings": self.feature_chart_settings,
+            "show_missing_bars": bool(self.show_missing_bars),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         self.active_dataset_file.write_text(
@@ -953,6 +959,19 @@ class MLService:
     def _is_feature_categorical_for_chart(self, feature_name: str) -> bool:
         return self._get_feature_chart_mode(feature_name) == "categorical"
 
+    def get_chart_display_settings(self) -> Dict[str, Any]:
+        return {
+            "show_missing_bars": bool(self.show_missing_bars),
+        }
+
+    def update_chart_display_settings(self, show_missing_bars: bool) -> Dict[str, Any]:
+        self.show_missing_bars = bool(show_missing_bars)
+        # Clear cached shape-function snapshots so the next fetch reflects the new mode.
+        self.original_shape_functions = {}
+        self.shape_function_offsets = {}
+        self._persist_active_dataset_metadata()
+        return self.get_chart_display_settings()
+
     def _get_chart_x_values(
         self,
         feature_name: str,
@@ -977,12 +996,14 @@ class MLService:
             numeric_series = pd.to_numeric(series, errors="coerce").dropna()
             uniques = sorted(numeric_series.unique().tolist())
             base_values = [self._stringify_chart_value(v) for v in uniques]
-            if self._get_public_missing_count(feature_name) > 0:
+            if self.show_missing_bars and self._get_public_missing_count(feature_name) > 0:
                 base_values.append(MISSING_CATEGORY_VALUE)
 
         deduped: List[str] = []
         seen = set()
         for raw in base_values:
+            if not self.show_missing_bars and raw == MISSING_CATEGORY_VALUE:
+                continue
             if raw in seen:
                 continue
             seen.add(raw)
@@ -1439,6 +1460,7 @@ class MLService:
             "cat_features": exported_cat_features,
             "num_features": exported_num_features,
             "feature_chart_settings": _json_safe(self.feature_chart_settings),
+            "show_missing_bars": bool(self.show_missing_bars),
             "shape_functions": shape_functions,
             "dataset_id": self.active_dataset_id,
             "dataset_name": self.active_dataset_name
@@ -1709,6 +1731,7 @@ class MLService:
             "cat_features": [str(item) for item in cat_features],
             "num_features": [str(item) for item in num_features],
             "feature_chart_settings": _json_safe(artifact.get("feature_chart_settings") or {}),
+            "show_missing_bars": bool(artifact.get("show_missing_bars", False)),
             "shape_functions": normalized_shape_functions,
             "dataset_id": artifact.get("dataset_id"),
             "dataset_name": artifact.get("dataset_name"),
@@ -1743,6 +1766,7 @@ class MLService:
         self.missing_indicator_map = {}
         self.numeric_missing_placeholder_values = {}
         self.feature_chart_settings = dict(validated["feature_chart_settings"])
+        self.show_missing_bars = bool(validated.get("show_missing_bars", False))
         self.original_shape_functions = {
             shape_function["feature_name"]: shape_function
             for shape_function in validated["shape_functions"]
@@ -1845,6 +1869,7 @@ class MLService:
                 else 0
             ),
             "primary_n_estimators": self.primary_n_estimators,
+            "show_missing_bars": bool(self.show_missing_bars),
         }
 
     def _reset_runtime_state(self) -> None:
@@ -2658,8 +2683,8 @@ class MLService:
             self.feature_schema = list(self.comparison_feature_schema)
             self.feature_schema_map = dict(self.comparison_feature_schema_map)
             self.missing_indicator_map = dict(self.comparison_missing_indicator_map)
-            self.numeric_missing_fill_values = dict(
-                self.comparison_numeric_missing_fill_values
+            self.numeric_missing_placeholder_values = dict(
+                self.comparison_numeric_missing_placeholder_values
             )
             self.original_shape_functions = dict(
                 self.comparison_original_shape_functions
@@ -2986,10 +3011,14 @@ class MLService:
 
                 mean_val = np.mean(shape_values)
                 shape_values = [value - mean_val for value in shape_values]
-                missing_bucket = self._build_numeric_chart_missing_bucket(
-                    feature_name,
-                    baseline,
-                    mean_val,
+                missing_bucket = (
+                    self._build_numeric_chart_missing_bucket(
+                        feature_name,
+                        baseline,
+                        mean_val,
+                    )
+                    if self.show_missing_bars
+                    else None
                 )
 
                 result = {
@@ -3034,10 +3063,14 @@ class MLService:
 
         mean_val = np.mean(shape_values)
         shape_values = [value - mean_val for value in shape_values]
-        missing_bucket = self._build_numeric_chart_missing_bucket(
-            feature_name,
-            baseline,
-            mean_val,
+        missing_bucket = (
+            self._build_numeric_chart_missing_bucket(
+                feature_name,
+                baseline,
+                mean_val,
+            )
+            if self.show_missing_bars
+            else None
         )
 
         result = {

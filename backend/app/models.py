@@ -162,6 +162,7 @@ class ModelStatusResponse(BaseModel):
     comparison_dataset_name: Optional[str] = None
     comparison_train_size: int = 0
     primary_n_estimators: Optional[int] = None
+    show_missing_bars: bool = False
 
 
 class ComparisonDataLoadRequest(BaseModel):
@@ -346,3 +347,13 @@ class FeatureChartSettingsResponse(BaseModel):
     treat_as_numeric: bool
     value_labels: Dict[str, str]
     available_values: List[str] = []
+
+
+class ChartDisplaySettingsRequest(BaseModel):
+    """Global superadmin chart-display settings."""
+    show_missing_bars: bool = False
+
+
+class ChartDisplaySettingsResponse(BaseModel):
+    """Response with global chart-display settings."""
+    show_missing_bars: bool

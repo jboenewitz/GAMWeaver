@@ -144,6 +144,18 @@ export const apiService = {
     return response.data;
   },
 
+  getChartDisplaySettings: async () => {
+    const response = await api.get("/model/chart-display-settings");
+    return response.data;
+  },
+
+  updateChartDisplaySettings: async (settings) => {
+    const response = await api.put("/model/chart-display-settings", settings, {
+      headers: adminHeaders(),
+    });
+    return response.data;
+  },
+
   updateFeatureChartSettings: async (featureName, settings) => {
     const response = await api.put(
       `/model/feature-chart-settings/${encodeURIComponent(featureName)}`,

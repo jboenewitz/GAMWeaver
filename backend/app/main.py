@@ -35,6 +35,8 @@ from .models import (
     UserPreferencesResponse,
     FeatureChartSettingsRequest,
     FeatureChartSettingsResponse,
+    ChartDisplaySettingsRequest,
+    ChartDisplaySettingsResponse,
     ShapeFunctionsResponse,
 )
 from .ml_service import ml_service
@@ -570,6 +572,42 @@ async def update_feature_chart_settings(
             value_labels=request.value_labels,
         )
         return FeatureChartSettingsResponse(**settings_payload)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get(
+    "/api/model/chart-display-settings",
+    response_model=ChartDisplaySettingsResponse,
+)
+async def get_chart_display_settings():
+    """Get global chart display settings."""
+    try:
+        payload = ml_service.get_chart_display_settings()
+        return ChartDisplaySettingsResponse(**payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put(
+    "/api/model/chart-display-settings",
+    response_model=ChartDisplaySettingsResponse,
+)
+async def update_chart_display_settings(
+    request: ChartDisplaySettingsRequest,
+    http_request: Request,
+):
+    """Update global superadmin chart display settings."""
+    try:
+        _require_superadmin(http_request)
+        payload = ml_service.update_chart_display_settings(
+            show_missing_bars=request.show_missing_bars,
+        )
+        return ChartDisplaySettingsResponse(**payload)
     except HTTPException:
         raise
     except ValueError as e:

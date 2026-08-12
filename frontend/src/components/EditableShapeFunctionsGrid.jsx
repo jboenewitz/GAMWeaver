@@ -289,10 +289,25 @@ const getConstructionLabel = (constructionType, t) => {
   }
 };
 
-const getDistributionCountSummary = (distribution) => {
+const getDistributionCountSummary = (
+  distribution,
+  showMissingBars = false,
+) => {
   if (!distribution || typeof distribution !== "object") return null;
 
-  if (distribution.chart_type === "numeric") {
+  if (!showMissingBars && distribution.chart_type === "numeric") {
+    const totalCount = Number(distribution.total_count) || 0;
+    const missingCount = Number(distribution.missing_count) || 0;
+    const answeredCount = Math.max(0, totalCount - missingCount);
+    return {
+      totalCount: answeredCount,
+      missingCount: 0,
+      answeredCount,
+      includesMissing: false,
+    };
+  }
+
+  if (showMissingBars && distribution.chart_type === "numeric") {
     const totalCount = Number(distribution.total_count) || 0;
     const missingCount = Number(distribution.missing_count) || 0;
     if (missingCount > 0) {
@@ -642,6 +657,7 @@ const EditableShapeFunctionChart = ({
   editedPoints,
   onPointEdit,
   isEditing,
+  showMissingBars = false,
   brushHardness = 50,
   enlarged = false,
   sharedYRange = null,
@@ -1788,8 +1804,8 @@ const EditableShapeFunctionChart = ({
     [],
   );
   const distributionCountSummary = useMemo(
-    () => getDistributionCountSummary(distribution),
-    [distribution],
+    () => getDistributionCountSummary(distribution, showMissingBars),
+    [distribution, showMissingBars],
   );
 
   // Determine cursor style
@@ -2393,6 +2409,7 @@ const FeatureEditCard = ({
   onBrushHardnessChange = null,
   hasSavedEdits,
   isSuperadmin = false,
+  showMissingBars = false,
   sharedYRange = null,
   t,
 }) => {
@@ -2543,6 +2560,7 @@ const FeatureEditCard = ({
         editedPoints={editedPoints}
         onPointEdit={onPointEdit}
         isEditing={isEditing}
+        showMissingBars={showMissingBars}
         brushHardness={brushHardness}
         sharedYRange={sharedYRange}
         t={t}
@@ -2646,6 +2664,7 @@ const FeatureEditCard = ({
                   editedPoints={editedPoints}
                   onPointEdit={onPointEdit}
                   isEditing={isEditing}
+                  showMissingBars={showMissingBars}
                   brushHardness={brushHardness}
                   enlarged
                   sharedYRange={sharedYRange}
@@ -2710,6 +2729,7 @@ const EditableShapeFunctionsGrid = ({
   onUnsavedEditsChange,
   isSuperadmin = false,
   onUpdateFeatureChartSettings,
+  showMissingBars = false,
   language = "en",
 }) => {
   const t = createTranslator(language);
@@ -2755,7 +2775,10 @@ const EditableShapeFunctionsGrid = ({
     const allY = [];
     shapeFunctions.forEach((sf) => {
       allY.push(...sf.y_values);
-      if (Number.isFinite(Number(sf?.missing_bucket?.y_value))) {
+      if (
+        showMissingBars &&
+        Number.isFinite(Number(sf?.missing_bucket?.y_value))
+      ) {
         allY.push(Number(sf.missing_bucket.y_value));
       }
       (initialEditedPoints[sf.feature_name] || []).forEach((p) =>
@@ -2766,7 +2789,10 @@ const EditableShapeFunctionsGrid = ({
       );
     });
     (comparisonShapeFunctions || []).forEach((sf) => {
-      if (Number.isFinite(Number(sf?.missing_bucket?.y_value))) {
+      if (
+        showMissingBars &&
+        Number.isFinite(Number(sf?.missing_bucket?.y_value))
+      ) {
         allY.push(Number(sf.missing_bucket.y_value));
       }
     });
@@ -2781,6 +2807,7 @@ const EditableShapeFunctionsGrid = ({
     comparisonShapeFunctions,
     initialEditedPoints,
     editedPoints,
+    showMissingBars,
   ]);
 
   // Only reset unsaved edits when a completely new model is trained
@@ -3154,6 +3181,7 @@ const EditableShapeFunctionsGrid = ({
               initialEditedPoints[sf.feature_name].length > 0
             }
             isSuperadmin={isSuperadmin}
+            showMissingBars={showMissingBars}
             sharedYRange={globalYRange}
             t={t}
           />

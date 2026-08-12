@@ -423,6 +423,14 @@ const translations = {
     "superadmin.expires": "Expires",
     "superadmin.inviteDescription":
       "Generate an invite link to allow new registrations.",
+    "superadmin.chartDisplayTitle": "Chart Display",
+    "superadmin.chartDisplayDescription":
+      "Control whether dedicated missing-value bars are shown in shape-function charts.",
+    "superadmin.showMissingBars": "Show missing bars",
+    "superadmin.hideMissingBars": "Hide missing bars",
+    "superadmin.updatingChartDisplay": "Updating chart display...",
+    "superadmin.error.updateChartDisplaySettings":
+      "Chart display settings could not be updated",
     "superadmin.systemReset": "System Reset",
     "superadmin.systemResetDescription":
       "Permanently removes all users, all saved edits, uploaded CSV files, and extracted feature state for the current backend environment.",
@@ -901,6 +909,15 @@ const translations = {
     "superadmin.compareDatasets": "Datensaetze vergleichen",
     "superadmin.compareDatasetsDescription":
       "Lade einen zweiten Datensatz hoch, trainiere ihn mit der Estimator-Anzahl des primaeren Modells und lege seine Shape-Funktionen ueber die interaktiven Diagramme.",
+    "superadmin.chartDisplayTitle": "Diagrammanzeige",
+    "superadmin.chartDisplayDescription":
+      "Steuere, ob eigene Balken fuer fehlende Werte in Shape-Funktionsdiagrammen angezeigt werden.",
+    "superadmin.showMissingBars": "Fehlend-Balken anzeigen",
+    "superadmin.hideMissingBars": "Fehlend-Balken ausblenden",
+    "superadmin.updatingChartDisplay":
+      "Diagrammanzeige wird aktualisiert...",
+    "superadmin.error.updateChartDisplaySettings":
+      "Diagrammanzeige konnte nicht aktualisiert werden",
     "superadmin.compareModalDescription":
       "Der Vergleichsdatensatz muss dieselbe Zielspalte und dieselben ausgewaehlten Feature-Spalten wie der primaere Datensatz verwenden.",
     "superadmin.uploadAndSelectComparison":

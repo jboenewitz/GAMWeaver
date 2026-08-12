@@ -569,6 +569,21 @@ function App() {
     }
   };
 
+  const handleUpdateChartDisplaySettings = async (settings) => {
+    try {
+      setError(null);
+      await apiService.updateChartDisplaySettings(settings);
+      await fetchModelStatus();
+    } catch (err) {
+      const message = formatApiError(
+        err,
+        t("app.error.updateFeatureChartSettings"),
+      );
+      setError(`${t("app.error.updateFeatureChartSettings")}: ${message}`);
+      throw new Error(message);
+    }
+  };
+
   const handleUploadDataset = async (file) => {
     try {
       setError(null);
@@ -729,6 +744,7 @@ function App() {
         onUploadComparisonDataset={handleUploadComparisonDataset}
         onLoadComparisonData={handleLoadComparisonData}
         onTrainComparisonModel={handleTrainComparisonModel}
+        onUpdateChartDisplaySettings={handleUpdateChartDisplaySettings}
         modelStatus={modelStatus}
         busy={loading || dataLoading}
         language={language}
@@ -892,6 +908,7 @@ function App() {
             onUnsavedEditsChange={handleUnsavedEditsChange}
             isSuperadmin={Boolean(currentUser?.is_superadmin)}
             onUpdateFeatureChartSettings={handleUpdateFeatureChartSettings}
+            showMissingBars={Boolean(modelStatus?.show_missing_bars)}
             language={language}
           />
         </div>

@@ -11,6 +11,7 @@ const SuperadminPage = ({
   onUploadComparisonDataset,
   onLoadComparisonData,
   onTrainComparisonModel,
+  onUpdateChartDisplaySettings,
   modelStatus,
   busy = false,
   language = "en",
@@ -42,6 +43,7 @@ const SuperadminPage = ({
   const [comparisonTargetColumn, setComparisonTargetColumn] = useState("");
   const [comparisonFeatureColumns, setComparisonFeatureColumns] = useState([]);
   const [comparisonExpanded, setComparisonExpanded] = useState(false);
+  const [updatingChartDisplay, setUpdatingChartDisplay] = useState(false);
 
   const resetComparisonModal = () => {
     setComparisonFile(null);
@@ -276,6 +278,23 @@ const SuperadminPage = ({
     }
   };
 
+  const handleToggleMissingBars = async () => {
+    if (!onUpdateChartDisplaySettings) return;
+    setUpdatingChartDisplay(true);
+    setError(null);
+    try {
+      await onUpdateChartDisplaySettings({
+        show_missing_bars: !Boolean(modelStatus?.show_missing_bars),
+      });
+    } catch (err) {
+      setError(
+        err?.message || t("superadmin.error.updateChartDisplaySettings"),
+      );
+    } finally {
+      setUpdatingChartDisplay(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
@@ -343,6 +362,34 @@ const SuperadminPage = ({
             {modelTransferMessage}
           </div>
         )}
+
+        <section className="bg-white rounded-xl shadow-md p-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">
+                {t("superadmin.chartDisplayTitle")}
+              </h2>
+              <p className="text-sm text-gray-600 mt-1">
+                {t("superadmin.chartDisplayDescription")}
+              </p>
+            </div>
+            <button
+              onClick={handleToggleMissingBars}
+              disabled={busy || updatingChartDisplay}
+              className={`px-4 py-2 rounded-lg text-white transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                modelStatus?.show_missing_bars
+                  ? "bg-rose-600 hover:bg-rose-700"
+                  : "bg-slate-700 hover:bg-slate-800"
+              }`}
+            >
+              {updatingChartDisplay
+                ? t("superadmin.updatingChartDisplay")
+                : modelStatus?.show_missing_bars
+                  ? t("superadmin.hideMissingBars")
+                  : t("superadmin.showMissingBars")}
+            </button>
+          </div>
+        </section>
 
         <section className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center justify-between gap-4">
