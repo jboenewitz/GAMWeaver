@@ -37,6 +37,21 @@ class DummyModel:
         }
 
 
+class MissingAwareDummyModel(DummyModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.linear_model = SimpleNamespace(intercept_=1.0)
+
+    def get_shape_functions_as_dict(self):
+        shape_functions = super().get_shape_functions_as_dict()
+        shape_functions["age [missing]"] = {
+            "x": ["(Missing)", "Observed"],
+            "y": [5.0, 0.0],
+            "datatype": "categorical",
+        }
+        return shape_functions
+
+
 @pytest.fixture
 def ml_service(monkeypatch, tmp_path):
     monkeypatch.setattr(MLService, "_restore_active_dataset_metadata", lambda self: None)
@@ -211,6 +226,59 @@ def test_export_import_roundtrip_preserves_chart_label_maps(ml_service, monkeypa
     assert imported.feature_chart_settings["month"][
         "categorical_value_labels"
     ] == {"1": "January"}
+
+
+def test_export_import_roundtrip_preserves_missing_indicator_features(
+    ml_service,
+    monkeypatch,
+):
+    ml_service.model = MissingAwareDummyModel()
+    ml_service.feature_names = ["age", "age [missing]", "month"]
+    ml_service.selected_feature_columns = ["age", "month"]
+    ml_service.num_features = ["age"]
+    ml_service.cat_features = ["age [missing]", "month"]
+    ml_service.feature_schema = [
+        {
+            "name": "age",
+            "feature_type": "numeric",
+            "default_value": 10.0,
+            "min_value": 0.0,
+            "max_value": 29.0,
+        },
+        {
+            "name": "month",
+            "feature_type": "categorical",
+            "default_value": "1",
+            "categorical_options": ["1", "2", "3"],
+        },
+    ]
+    ml_service.feature_schema_map = {
+        item["name"]: item for item in ml_service.feature_schema
+    }
+    ml_service.missing_indicator_map = {"age": "age [missing]"}
+    ml_service.numeric_missing_placeholder_values = {"age": 10.0}
+
+    artifact = ml_service.export_model_artifact()
+
+    assert artifact["feature_names"] == ["age", "age [missing]", "month"]
+    assert [item["name"] for item in artifact["feature_schema"]] == ["age", "month"]
+    assert artifact["missing_indicator_map"] == {"age": "age [missing]"}
+    assert artifact["numeric_missing_placeholder_values"] == {"age": 10.0}
+
+    monkeypatch.setattr(MLService, "_restore_active_dataset_metadata", lambda self: None)
+    monkeypatch.setattr(MLService, "_auto_load_persisted_dataset", lambda self: None)
+    imported = MLService()
+    imported.import_model_artifact(artifact)
+
+    assert imported.feature_names == ["age", "age [missing]", "month"]
+    assert imported.selected_feature_columns == ["age", "month"]
+    assert imported.missing_indicator_map == {"age": "age [missing]"}
+    assert imported.numeric_missing_placeholder_values == {"age": 10.0}
+    assert [sf["feature_name"] for sf in imported.get_shape_functions()] == [
+        "age",
+        "month",
+    ]
+    assert imported.predict({"age": None, "month": "1"}) == pytest.approx(7.1)
 
 
 def test_feature_chart_settings_require_superadmin(ml_service, monkeypatch):

@@ -17,6 +17,7 @@ from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 
 from .data_processing import (
     MISSING_CATEGORY_VALUE,
+    MISSING_INDICATOR_SUFFIX,
     prepare_training_data,
 )
 
@@ -67,15 +68,25 @@ class ImportedIGANNRuntime:
         self._params = dict(igann_params or {})
         self.boosting_rates = [0.0] * max(int(effective_boosting_rounds), 0)
         self._shape_by_feature: Dict[str, Dict[str, Any]] = {}
+        self._shape_functions: List[Dict[str, Any]] = []
 
         for shape_function in shape_functions:
             feature_name = str(shape_function.get("feature_name", "")).strip()
             if not feature_name:
                 continue
-            self._shape_by_feature[feature_name] = shape_function
+            normalized_shape = _json_safe(shape_function)
+            self._shape_by_feature[feature_name] = normalized_shape
+            self._shape_functions.append(normalized_shape)
 
     def get_params(self, deep: bool = True) -> Dict[str, Any]:
         return dict(self._params)
+
+    def export_shape_functions(self) -> List[Dict[str, Any]]:
+        return [
+            _json_safe(self._shape_by_feature[feature_name])
+            for feature_name in self.feature_names
+            if feature_name in self._shape_by_feature
+        ]
 
     @staticmethod
     def _predict_numeric(shape_function: Dict[str, Any], value: Any) -> float:
@@ -1538,6 +1549,8 @@ class MLService:
 
     def _export_shape_functions_payload(self) -> List[Dict[str, Any]]:
         if self.model_source == "imported":
+            if isinstance(self.model, ImportedIGANNRuntime):
+                return self.model.export_shape_functions()
             self._ensure_original_shape_functions()
             return [
                 _json_safe(shape_function)
@@ -1643,6 +1656,10 @@ class MLService:
             "feature_schema": exported_feature_schema,
             "cat_features": exported_cat_features,
             "num_features": exported_num_features,
+            "missing_indicator_map": _json_safe(self.missing_indicator_map),
+            "numeric_missing_placeholder_values": _json_safe(
+                self.numeric_missing_placeholder_values
+            ),
             "feature_chart_settings": _json_safe(self.feature_chart_settings),
             "show_missing_bars": bool(self.show_missing_bars),
             "shape_functions": shape_functions,
@@ -1682,6 +1699,28 @@ class MLService:
         if isinstance(x_tick_labels, list):
             normalized["x_tick_labels"] = [str(label) for label in x_tick_labels]
         return normalized
+
+    @staticmethod
+    def _infer_missing_indicator_map_from_artifact(
+        feature_names: List[str],
+        selected_feature_columns: List[str],
+    ) -> Dict[str, str]:
+        selected_feature_set = {
+            str(feature_name).strip()
+            for feature_name in selected_feature_columns
+            if str(feature_name).strip()
+        }
+        inferred: Dict[str, str] = {}
+
+        for feature_name in feature_names:
+            normalized_name = str(feature_name).strip()
+            if not normalized_name.endswith(MISSING_INDICATOR_SUFFIX):
+                continue
+            base_feature_name = normalized_name[: -len(MISSING_INDICATOR_SUFFIX)].strip()
+            if base_feature_name and base_feature_name in selected_feature_set:
+                inferred[base_feature_name] = normalized_name
+
+        return inferred
 
     @staticmethod
     def _validate_shape_function_edits_export(
@@ -1849,19 +1888,29 @@ class MLService:
         cat_features = artifact.get("cat_features")
         num_features = artifact.get("num_features")
         shape_functions = artifact.get("shape_functions")
+        missing_indicator_map = artifact.get("missing_indicator_map")
+        numeric_missing_placeholder_values = artifact.get(
+            "numeric_missing_placeholder_values"
+        )
 
         if not isinstance(feature_names, list) or not feature_names:
             raise ValueError("Imported artifact must include non-empty feature_names")
         if not isinstance(selected_feature_columns, list) or not selected_feature_columns:
             raise ValueError("Imported artifact must include non-empty selected_feature_columns")
-        if not isinstance(feature_schema, list) or len(feature_schema) != len(feature_names):
-            raise ValueError("Imported artifact feature_schema must match the feature_names length")
         if not isinstance(cat_features, list) or not isinstance(num_features, list):
             raise ValueError("Imported artifact must include cat_features and num_features arrays")
-        if sorted([str(item) for item in cat_features] + [str(item) for item in num_features]) != sorted([str(item) for item in feature_names]):
+        normalized_feature_names = [str(item) for item in feature_names]
+        selected_feature_names = [str(item) for item in selected_feature_columns]
+        if sorted([str(item) for item in cat_features] + [str(item) for item in num_features]) != sorted(normalized_feature_names):
             raise ValueError("Imported artifact cat_features and num_features must cover all feature_names exactly")
         if not isinstance(shape_functions, list) or len(shape_functions) != len(feature_names):
             raise ValueError("Imported artifact must include one shape function per feature")
+        if not set(selected_feature_names).issubset(set(normalized_feature_names)):
+            raise ValueError(
+                "Imported artifact selected_feature_columns must be covered by feature_names"
+            )
+        if not isinstance(feature_schema, list) or not feature_schema:
+            raise ValueError("Imported artifact must include non-empty feature_schema")
 
         feature_schema_map = {}
         for item in feature_schema:
@@ -1869,24 +1918,124 @@ class MLService:
                 raise ValueError("Imported artifact feature_schema entries must be objects")
             feature_name = str(item.get("name", "")).strip()
             feature_type = str(item.get("feature_type", "")).strip()
-            if feature_name not in feature_names:
-                raise ValueError(f"Imported artifact schema references unknown feature '{feature_name}'")
+            if feature_name not in selected_feature_names:
+                if feature_name in normalized_feature_names:
+                    continue
+                raise ValueError(
+                    f"Imported artifact schema references unknown feature '{feature_name}'"
+                )
             if feature_type not in {"numeric", "categorical"}:
                 raise ValueError(f"Imported artifact schema has invalid feature_type for '{feature_name}'")
             feature_schema_map[feature_name] = _json_safe(item)
 
-        if sorted(feature_schema_map.keys()) != sorted([str(item) for item in feature_names]):
-            raise ValueError("Imported artifact feature_schema must cover all feature_names exactly")
-        selected_feature_names = [str(item) for item in selected_feature_columns]
-        if not set(feature_names).issubset(set(selected_feature_names)):
-            raise ValueError("Imported artifact feature_names must be a subset of selected_feature_columns")
+        if sorted(feature_schema_map.keys()) != sorted(selected_feature_names):
+            raise ValueError(
+                "Imported artifact feature_schema must cover all selected_feature_columns exactly"
+            )
+
+        if missing_indicator_map is None:
+            normalized_missing_indicator_map = (
+                self._infer_missing_indicator_map_from_artifact(
+                    normalized_feature_names,
+                    selected_feature_names,
+                )
+            )
+        else:
+            if not isinstance(missing_indicator_map, dict):
+                raise ValueError(
+                    "Imported artifact missing_indicator_map must be an object when present"
+                )
+            normalized_missing_indicator_map = {}
+            for raw_feature_name, raw_indicator_name in missing_indicator_map.items():
+                feature_name = str(raw_feature_name).strip()
+                indicator_name = str(raw_indicator_name).strip()
+                if feature_name not in selected_feature_names:
+                    raise ValueError(
+                        f"Imported artifact missing_indicator_map references unknown feature '{feature_name}'"
+                    )
+                if indicator_name not in normalized_feature_names:
+                    raise ValueError(
+                        f"Imported artifact missing_indicator_map references unknown indicator '{indicator_name}'"
+                    )
+                normalized_missing_indicator_map[feature_name] = indicator_name
+
+        for feature_name, indicator_name in normalized_missing_indicator_map.items():
+            if indicator_name in selected_feature_names:
+                raise ValueError(
+                    f"Imported artifact missing indicator '{indicator_name}' must not be a public feature"
+                )
+            if str(feature_schema_map.get(feature_name, {}).get("feature_type")) != "numeric":
+                raise ValueError(
+                    f"Imported artifact missing indicator '{indicator_name}' must map to a numeric feature"
+                )
+
+        allowed_internal_features = set(selected_feature_names) | set(
+            normalized_missing_indicator_map.values()
+        )
+        unexpected_internal_features = sorted(
+            feature_name
+            for feature_name in normalized_feature_names
+            if feature_name not in allowed_internal_features
+        )
+        if unexpected_internal_features:
+            raise ValueError(
+                "Imported artifact feature_names contains unsupported internal features: "
+                f"{unexpected_internal_features}"
+            )
+
+        if not set(normalized_missing_indicator_map.values()).issubset(
+            set(str(item) for item in cat_features)
+        ):
+            raise ValueError(
+                "Imported artifact missing indicators must be listed in cat_features"
+            )
 
         normalized_shape_functions = [
             self._validate_shape_function_artifact(item)
             for item in shape_functions
         ]
-        if sorted(sf["feature_name"] for sf in normalized_shape_functions) != sorted([str(item) for item in feature_names]):
+        if sorted(sf["feature_name"] for sf in normalized_shape_functions) != sorted(normalized_feature_names):
             raise ValueError("Imported artifact shape_functions must cover all feature_names exactly")
+
+        public_shape_functions = [
+            shape_function
+            for shape_function in normalized_shape_functions
+            if shape_function["feature_name"] in selected_feature_names
+        ]
+        if sorted(sf["feature_name"] for sf in public_shape_functions) != sorted(
+            selected_feature_names
+        ):
+            raise ValueError(
+                "Imported artifact shape_functions must cover all selected_feature_columns exactly"
+            )
+
+        if numeric_missing_placeholder_values is not None and not isinstance(
+            numeric_missing_placeholder_values,
+            dict,
+        ):
+            raise ValueError(
+                "Imported artifact numeric_missing_placeholder_values must be an object when present"
+            )
+        normalized_numeric_missing_placeholder_values: Dict[str, float] = {}
+        for feature_name in normalized_missing_indicator_map:
+            fallback_value = feature_schema_map.get(feature_name, {}).get(
+                "default_value",
+                0.0,
+            )
+            raw_value = (
+                numeric_missing_placeholder_values.get(feature_name, fallback_value)
+                if isinstance(numeric_missing_placeholder_values, dict)
+                else fallback_value
+            )
+            try:
+                normalized_numeric_missing_placeholder_values[feature_name] = float(
+                    raw_value
+                )
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "Imported artifact numeric_missing_placeholder_values must be numeric "
+                    f"for '{feature_name}'"
+                ) from exc
 
         shape_function_edits_export = artifact.get("shape_function_edits_export")
         if shape_function_edits_export is not None and not isinstance(
@@ -1899,7 +2048,7 @@ class MLService:
 
         normalized_shape_function_edits_export = self._validate_shape_function_edits_export(
             _json_safe(shape_function_edits_export or {}),
-            feature_names=[str(item) for item in feature_names],
+            feature_names=normalized_feature_names,
         ) if shape_function_edits_export is not None else {}
 
         return {
@@ -1907,13 +2056,17 @@ class MLService:
             "igann_params": dict(artifact.get("igann_params") or {}),
             "effective_boosting_rounds": int(artifact.get("effective_boosting_rounds") or 0),
             "base_prediction_offset": float(artifact.get("base_prediction_offset")),
-            "feature_names": [str(item) for item in feature_names],
+            "feature_names": normalized_feature_names,
             "selected_feature_columns": selected_feature_names,
             "target_column": str(artifact.get("target_column")),
             "feature_schema": list(feature_schema_map.values()),
             "feature_schema_map": feature_schema_map,
             "cat_features": [str(item) for item in cat_features],
             "num_features": [str(item) for item in num_features],
+            "missing_indicator_map": normalized_missing_indicator_map,
+            "numeric_missing_placeholder_values": (
+                normalized_numeric_missing_placeholder_values
+            ),
             "feature_chart_settings": {
                 str(feature_name): normalized
                 for feature_name, raw_setting in (
@@ -1924,6 +2077,7 @@ class MLService:
             },
             "show_missing_bars": bool(artifact.get("show_missing_bars", False)),
             "shape_functions": normalized_shape_functions,
+            "public_shape_functions": public_shape_functions,
             "dataset_id": artifact.get("dataset_id"),
             "dataset_name": artifact.get("dataset_name"),
             "shape_function_edits_export": normalized_shape_function_edits_export,
@@ -1954,13 +2108,15 @@ class MLService:
         self.target_column = validated["target_column"]
         self.feature_schema = list(validated["feature_schema"])
         self.feature_schema_map = dict(validated["feature_schema_map"])
-        self.missing_indicator_map = {}
-        self.numeric_missing_placeholder_values = {}
+        self.missing_indicator_map = dict(validated["missing_indicator_map"])
+        self.numeric_missing_placeholder_values = dict(
+            validated["numeric_missing_placeholder_values"]
+        )
         self.feature_chart_settings = dict(validated["feature_chart_settings"])
         self.show_missing_bars = bool(validated.get("show_missing_bars", False))
         self.original_shape_functions = {
             shape_function["feature_name"]: shape_function
-            for shape_function in validated["shape_functions"]
+            for shape_function in validated["public_shape_functions"]
         }
         self.shape_function_offsets = {}
         self.model_source = "imported"
