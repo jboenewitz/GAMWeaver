@@ -351,6 +351,7 @@ const translations = {
     "combined.legend": "Legend:",
     "combined.original": "Original",
     "combined.combined": "Combined",
+    "combined.comparison": "Comparison Dataset",
     "combined.noEdits":
       "No user edits have been made yet. The charts below show the original shape functions.",
     "combined.modified": "Modified",
@@ -859,6 +860,7 @@ const translations = {
     "combined.legend": "Legende:",
     "combined.original": "Original",
     "combined.combined": "Kombiniert",
+    "combined.comparison": "Vergleichsdatensatz",
     "combined.noEdits":
       "Es wurden noch keine Benutzerbearbeitungen vorgenommen. Die Diagramme unten zeigen die urspruenglichen Shape-Funktionen.",
     "combined.modified": "Geaendert",

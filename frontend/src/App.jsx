@@ -896,9 +896,7 @@ function App() {
         <div className="mt-6">
           <EditableShapeFunctionsGrid
             shapeFunctions={shapeFunctions}
-            comparisonShapeFunctions={
-              currentUser?.is_superadmin ? comparisonShapeFunctions : []
-            }
+            comparisonShapeFunctions={comparisonShapeFunctions}
             featureSchema={modelStatus?.feature_schema || []}
             loading={chartLoading}
             onShapeFunctionsEdit={handleShapeFunctionsEdit}

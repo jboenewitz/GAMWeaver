@@ -964,6 +964,11 @@ async def get_combined_predictions_comparison(weighted: bool = True):
         # Add original shape functions for visualization
         comparison["original_shape_functions"] = list(ml_service.original_shape_functions.values())
         
+        comparison_shape_functions = ml_service.get_comparison_shape_functions()
+        comparison_shape_function_map = {
+            sf["feature_name"]: sf for sf in comparison_shape_functions
+        }
+
         # Add combined (modified) shape functions for visualization
         combined_shape_functions_display = []
         for sf in ml_service.original_shape_functions.values():
@@ -971,6 +976,12 @@ async def get_combined_predictions_comparison(weighted: bool = True):
             x_values = sf["x_values"]
             original_y = sf["y_values"]
             feature_type = sf["feature_type"]
+            comparison_sf = comparison_shape_function_map.get(feature_name)
+            comparison_y_values = None
+            if comparison_sf:
+                candidate_values = comparison_sf.get("y_values") or []
+                if len(candidate_values) == len(x_values):
+                    comparison_y_values = candidate_values
             
             # Apply combined offsets
             modified_y = []
@@ -992,9 +1003,10 @@ async def get_combined_predictions_comparison(weighted: bool = True):
                 "x_tick_labels": sf.get("x_tick_labels"),
                 "y_values": modified_y,
                 "original_y_values": original_y,
+                "comparison_y_values": comparison_y_values,
                 "chart_config": sf.get("chart_config"),
             })
-        
+
         comparison["combined_shape_functions_display"] = combined_shape_functions_display
         
         return comparison

@@ -418,9 +418,14 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   const renderMetricsComparison = () => {
     if (!analyticsAvailable || !comparisonData?.metrics) return null;
 
-    const activeData =
+  const activeData =
       (useWeighting ? comparisonData : unweightedComparisonData) ??
       comparisonData;
+    const hasComparisonOverlay = activeData.combined_shape_functions_display.some(
+      (sf) =>
+        Array.isArray(sf.comparison_y_values) &&
+        sf.comparison_y_values.length === sf.x_values.length,
+    );
     if (
       !Number.isFinite(activeData?.metrics?.original_rmse) ||
       !Number.isFinite(activeData?.metrics?.original_mae) ||
@@ -706,6 +711,17 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
               />
               <span className="text-slate-500">{t("combined.combined")}</span>
             </div>
+            {hasComparisonOverlay && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span
+                  className="inline-block rounded-full"
+                  style={{ width: 28, height: 3, backgroundColor: "#0ea5e9" }}
+                />
+                <span className="text-slate-500">
+                  {t("combined.comparison")}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -725,6 +741,11 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
             const hasChanges = sf.y_values.some(
               (y, i) => Math.abs(y - sf.original_y_values[i]) > 0.0001,
             );
+            const comparisonYValues =
+              Array.isArray(sf.comparison_y_values) &&
+              sf.comparison_y_values.length === sf.x_values.length
+                ? sf.comparison_y_values
+                : null;
 
             let plotData;
             if (showUserOverlay && !loadingOverlay) {
@@ -800,6 +821,29 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                   showlegend: false,
                 });
               }
+              if (comparisonYValues) {
+                if (isNumeric) {
+                  plotData.push({
+                    x: sf.x_values,
+                    y: comparisonYValues,
+                    type: "scatter",
+                    mode: "lines",
+                    name: t("combined.comparison"),
+                    line: { color: "#0ea5e9", width: 2, dash: "dash" },
+                    showlegend: false,
+                  });
+                } else {
+                  plotData.push({
+                    x: sf.x_values,
+                    y: comparisonYValues,
+                    type: "bar",
+                    name: t("combined.comparison"),
+                    marker: { color: "#0ea5e9" },
+                    opacity: 0.75,
+                    showlegend: false,
+                  });
+                }
+              }
             } else {
               // Normal mode: original vs combined
               plotData = isNumeric
@@ -820,6 +864,22 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                       name: t("combined.combined"),
                       line: { color: "#10b981", width: 2 },
                     },
+                    ...(comparisonYValues
+                      ? [
+                          {
+                            x: sf.x_values,
+                            y: comparisonYValues,
+                            type: "scatter",
+                            mode: "lines",
+                            name: t("combined.comparison"),
+                            line: {
+                              color: "#0ea5e9",
+                              width: 2,
+                              dash: "dash",
+                            },
+                          },
+                        ]
+                      : []),
                   ]
                 : [
                     {
@@ -837,6 +897,18 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                       name: t("combined.combined"),
                       marker: { color: "#10b981" },
                     },
+                    ...(comparisonYValues
+                      ? [
+                          {
+                            x: sf.x_values,
+                            y: comparisonYValues,
+                            type: "bar",
+                            name: t("combined.comparison"),
+                            marker: { color: "#0ea5e9" },
+                            opacity: 0.75,
+                          },
+                        ]
+                      : []),
                   ];
             }
 

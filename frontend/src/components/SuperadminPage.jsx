@@ -21,7 +21,6 @@ const SuperadminPage = ({
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newProfession, setNewProfession] = useState("");
@@ -101,7 +100,6 @@ const SuperadminPage = ({
       setNewUsername("");
       setNewPassword("");
       setNewProfession("");
-      setShowCreateForm(false);
       await fetchUsers();
     } catch (err) {
       setError(
@@ -339,13 +337,6 @@ const SuperadminPage = ({
             >
               {t("superadmin.compareDatasets")}
             </button>
-            <button
-              onClick={() => setShowCreateForm((prev) => !prev)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
-            >
-              <span className="text-lg">+</span>
-              <span>{t("superadmin.createUser")}</span>
-            </button>
           </div>
         </div>
       </header>
@@ -534,63 +525,61 @@ const SuperadminPage = ({
           </button>
         </section>
 
-        {showCreateForm && (
-          <section className="bg-white rounded-xl shadow-md p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4">
-              {t("superadmin.createUser")}
-            </h2>
-            <form onSubmit={handleCreateUser} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t("common.username")}
-                </label>
-                <input
-                  type="text"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t("common.password")}
-                </label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t("common.profession")}
-                </label>
-                <input
-                  type="text"
-                  value={newProfession}
-                  onChange={(e) => setNewProfession(e.target.value)}
-                  placeholder={t("superadmin.professionPlaceholder")}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={
-                  creating ||
-                  !newUsername.trim() ||
-                  !newPassword ||
-                  !newProfession.trim()
-                }
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
-              >
-                {creating
-                  ? t("superadmin.creating")
-                  : t("superadmin.createUser")}
-              </button>
-            </form>
-          </section>
-        )}
+        <section className="bg-white rounded-xl shadow-md p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">
+            {t("superadmin.createUser")}
+          </h2>
+          <form onSubmit={handleCreateUser} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("common.username")}
+              </label>
+              <input
+                type="text"
+                value={newUsername}
+                onChange={(e) => setNewUsername(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("common.password")}
+              </label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("common.profession")}
+              </label>
+              <input
+                type="text"
+                value={newProfession}
+                onChange={(e) => setNewProfession(e.target.value)}
+                placeholder={t("superadmin.professionPlaceholder")}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={
+                creating ||
+                !newUsername.trim() ||
+                !newPassword ||
+                !newProfession.trim()
+              }
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
+            >
+              {creating
+                ? t("superadmin.creating")
+                : t("superadmin.createUser")}
+            </button>
+          </form>
+        </section>
 
         <section className="bg-white rounded-xl shadow-md p-6">
           <div className="flex items-center justify-between mb-4">
