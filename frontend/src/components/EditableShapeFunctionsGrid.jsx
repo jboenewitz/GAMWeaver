@@ -665,6 +665,7 @@ const EditableShapeFunctionChart = ({
 }) => {
   if (!shapeFunction) return null;
 
+  const chartConfig = shapeFunction?.chart_config || {};
   const { feature_name, x_values, y_values, feature_type, x_tick_labels } =
     shapeFunction;
   const isNumeric = feature_type === "numeric";
@@ -673,6 +674,43 @@ const EditableShapeFunctionChart = ({
     Array.isArray(x_tick_labels) && x_tick_labels.length === x_values.length
       ? x_tick_labels
       : null;
+  const numericCustomTicks =
+    isNumeric
+      ? Object.entries(chartConfig.numeric_tick_labels || {}).reduce(
+          (acc, [rawValue, rawLabel]) => {
+            const tickValue = Number(rawValue);
+            const label = String(rawLabel ?? "").trim();
+            if (Number.isFinite(tickValue) && label) {
+              acc.push({ value: tickValue, label });
+            }
+            return acc;
+          },
+          [],
+        )
+      : [];
+  const numericAxisTicks =
+    isNumeric && numericCustomTicks.length > 0
+      ? numericCustomTicks
+      : isNumeric &&
+          Array.isArray(chartConfig.available_numeric_values) &&
+          chartConfig.available_numeric_values.length > 0 &&
+          chartConfig.available_numeric_values.length <= 8
+        ? chartConfig.available_numeric_values.reduce((acc, rawValue) => {
+            const tickValue = Number(rawValue);
+            if (Number.isFinite(tickValue)) {
+              acc.push({ value: tickValue, label: String(rawValue) });
+            }
+            return acc;
+          }, [])
+        : xTickLabels
+          ? x_values.reduce((acc, xValue, index) => {
+              const label = String(xTickLabels[index] ?? "").trim();
+              if (label) {
+                acc.push({ value: Number(xValue), label });
+              }
+              return acc;
+            }, [])
+          : [];
   const containerRef = useRef(null);
   const plotRef = useRef(null);
 
@@ -831,14 +869,22 @@ const EditableShapeFunctionChart = ({
   const numXVals = isNumeric ? x_values.map(Number) : [];
   const xDataMin = isNumeric ? Math.min(...numXVals) : 0;
   const xDataMax = isNumeric ? Math.max(...numXVals) : 1;
+  const numericDomainMin = Number.isFinite(Number(chartConfig.numeric_domain_min))
+    ? Number(chartConfig.numeric_domain_min)
+    : null;
+  const numericDomainMax = Number.isFinite(Number(chartConfig.numeric_domain_max))
+    ? Number(chartConfig.numeric_domain_max)
+    : null;
   const xPad = isNumeric ? Math.max((xDataMax - xDataMin) * 0.05, 0.1) : 0;
   const xRange = isNumeric
     ? [
-        Math.min(
-          xDataMin - xPad,
-          numericMissingLayout ? numericMissingLayout.rangeMin : xDataMin - xPad,
-        ),
-        xDataMax + xPad,
+        numericMissingLayout
+          ? Math.min(
+              numericMissingLayout.rangeMin,
+              numericDomainMin ?? xDataMin - xPad,
+            )
+          : (numericDomainMin ?? xDataMin - xPad),
+        numericDomainMax ?? xDataMax + xPad,
       ]
     : [xDataMin - xPad, xDataMax + xPad];
 
@@ -1561,6 +1607,13 @@ const EditableShapeFunctionChart = ({
             tickangle: -20,
           }
         : {}),
+      ...(isNumeric && numericAxisTicks.length > 0
+        ? {
+            tickmode: "array",
+            tickvals: numericAxisTicks.map((tick) => tick.value),
+            ticktext: numericAxisTicks.map((tick) => tick.label),
+          }
+        : {}),
       ...(isNumeric ? { range: xRange } : {}),
     },
     yaxis: {
@@ -1674,6 +1727,13 @@ const EditableShapeFunctionChart = ({
             fixedrange: true,
             gridcolor: "#e2e8f0",
             zeroline: false,
+            ...(numericAxisTicks.length > 0
+              ? {
+                  tickmode: "array",
+                  tickvals: numericAxisTicks.map((tick) => tick.value),
+                  ticktext: numericAxisTicks.map((tick) => tick.label),
+                }
+              : {}),
             tickfont: { size: enlarged ? 11 : 10 },
           },
           yaxis: {
@@ -2189,8 +2249,9 @@ const FeatureChartSettingsModal = ({
   onSave,
   t,
 }) => {
-  const [treatAsCategorical, setTreatAsCategorical] = useState(false);
-  const [valueLabels, setValueLabels] = useState({});
+  const [selectedChartType, setSelectedChartType] = useState("numeric");
+  const [categoricalValueLabels, setCategoricalValueLabels] = useState({});
+  const [numericTickLabels, setNumericTickLabels] = useState({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -2199,64 +2260,146 @@ const FeatureChartSettingsModal = ({
   const baseFeatureType =
     chartConfig.base_feature_type ||
     (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
+  const currentChartType =
+    chartConfig.chart_feature_type ||
+    (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
   const canBeCategorical =
     Boolean(chartConfig.can_be_categorical) ||
     baseFeatureType === "categorical";
+  const canBeNumeric =
+    Boolean(chartConfig.can_be_numeric) || baseFeatureType === "numeric";
 
-  const availableValues = useMemo(() => {
-    const configured = Array.isArray(chartConfig.available_values)
-      ? chartConfig.available_values.map((v) => String(v))
+  const availableCategoricalValues = useMemo(() => {
+    const configured = Array.isArray(chartConfig.available_categorical_values)
+      ? chartConfig.available_categorical_values.map((v) => String(v))
       : [];
     if (configured.length > 0) return configured;
+    if (currentChartType !== "categorical") return [];
     const fallback = Array.isArray(shapeFunction?.x_values)
       ? shapeFunction.x_values.map((v) => String(v))
       : [];
     return fallback;
-  }, [chartConfig.available_values, shapeFunction]);
+  }, [
+    chartConfig.available_categorical_values,
+    currentChartType,
+    shapeFunction,
+  ]);
+
+  const availableNumericValues = useMemo(() => {
+    const configured = Array.isArray(chartConfig.available_numeric_values)
+      ? chartConfig.available_numeric_values.map((v) => String(v))
+      : [];
+    if (configured.length > 0) return configured;
+    if (currentChartType !== "numeric") return [];
+    const fallback = Array.isArray(shapeFunction?.x_values)
+      ? shapeFunction.x_values.map((v) => String(v))
+      : [];
+    return fallback;
+  }, [chartConfig.available_numeric_values, currentChartType, shapeFunction]);
+
+  const canChooseChartType = canBeCategorical && canBeNumeric;
+  const isCategoricalMode = selectedChartType === "categorical";
+  const activeValues = isCategoricalMode
+    ? availableCategoricalValues
+    : availableNumericValues;
+  const activeLabels = isCategoricalMode
+    ? categoricalValueLabels
+    : numericTickLabels;
+  const setActiveLabels = isCategoricalMode
+    ? setCategoricalValueLabels
+    : setNumericTickLabels;
 
   useEffect(() => {
     if (!isOpen || !shapeFunction) return;
-    setTreatAsCategorical(
-      baseFeatureType === "numeric"
-        ? Boolean(chartConfig.treat_as_categorical)
-        : false,
-    );
-    setValueLabels({ ...(chartConfig.value_labels || {}) });
+    setSelectedChartType(currentChartType);
+    setCategoricalValueLabels({
+      ...(chartConfig.categorical_value_labels || chartConfig.value_labels || {}),
+    });
+    setNumericTickLabels({ ...(chartConfig.numeric_tick_labels || {}) });
     setSaving(false);
     setError(null);
   }, [
     isOpen,
     shapeFunction,
-    chartConfig.treat_as_categorical,
+    currentChartType,
+    chartConfig.categorical_value_labels,
+    chartConfig.numeric_tick_labels,
     chartConfig.value_labels,
-    baseFeatureType,
   ]);
 
-  if (!isOpen || !shapeFunction) return null;
+  const normalizeLabels = (values, labels) => {
+    const normalized = {};
+    values.forEach((rawValue) => {
+      const rawKey = String(rawValue);
+      const nextLabel = String(labels[rawKey] ?? "").trim();
+      if (nextLabel && nextLabel !== rawKey) {
+        normalized[rawKey] = nextLabel;
+      }
+    });
+    return normalized;
+  };
 
-  const effectiveCategorical =
-    baseFeatureType === "categorical" || treatAsCategorical;
+  const updateChartType = (nextType) => {
+    setSelectedChartType(nextType);
+    setError(null);
+  };
+
+  const getChartTypeLabel = (chartType) =>
+    chartType === "categorical"
+      ? t("shapeFunctions.categoricalChartType")
+      : t("shapeFunctions.numericChartType");
+
+  const getValuesTitle = () =>
+    isCategoricalMode
+      ? t("shapeFunctions.xAxisValueLabels")
+      : t("shapeFunctions.numericXAxisLabels");
+
+  const getEmptyMessage = () =>
+    isCategoricalMode
+      ? t("shapeFunctions.noCategoricalValues")
+      : t("shapeFunctions.noNumericValues");
+
+  const getInputPlaceholder = (value) =>
+    t("shapeFunctions.displayLabelFor", { value });
+
+  const modeHint = isCategoricalMode
+    ? t("shapeFunctions.categoricalMappingHint")
+    : t("shapeFunctions.numericMappingHint");
+
+  const modeUnavailableNotice =
+    !canChooseChartType && baseFeatureType === "numeric" && !canBeCategorical
+      ? t("shapeFunctions.cannotConvertCategorical")
+      : !canChooseChartType &&
+          baseFeatureType === "categorical" &&
+          !canBeNumeric
+        ? t("shapeFunctions.chartTypeUnavailable")
+        : null;
+
+  const chartTypeChoices = [
+    { value: "numeric", disabled: !canBeNumeric },
+    { value: "categorical", disabled: !canBeCategorical },
+  ];
+
+  if (!isOpen || !shapeFunction) return null;
 
   const handleSubmit = async () => {
     try {
       setSaving(true);
       setError(null);
 
-      const normalizedLabels = {};
-      if (effectiveCategorical) {
-        availableValues.forEach((rawValue) => {
-          const rawKey = String(rawValue);
-          const nextLabel = String(valueLabels[rawKey] ?? "").trim();
-          if (nextLabel && nextLabel !== rawKey) {
-            normalizedLabels[rawKey] = nextLabel;
-          }
-        });
-      }
-
       await onSave(featureName, {
         treat_as_categorical:
-          baseFeatureType === "numeric" ? Boolean(treatAsCategorical) : false,
-        value_labels: normalizedLabels,
+          baseFeatureType === "numeric" ? selectedChartType === "categorical" : false,
+        treat_as_numeric:
+          baseFeatureType === "categorical" ? selectedChartType === "numeric" : false,
+        categorical_value_labels: normalizeLabels(
+          availableCategoricalValues,
+          categoricalValueLabels,
+        ),
+        numeric_tick_labels: normalizeLabels(
+          availableNumericValues,
+          numericTickLabels,
+        ),
       });
       onClose();
     } catch (err) {
@@ -2285,83 +2428,83 @@ const FeatureChartSettingsModal = ({
         </div>
 
         <div className="px-5 py-4 space-y-4">
-          {baseFeatureType === "numeric" && (
-            <label className="flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <input
-                type="checkbox"
-                checked={treatAsCategorical}
-                disabled={!canBeCategorical || saving}
-                onChange={(e) => setTreatAsCategorical(e.target.checked)}
-                className="mt-1 h-4 w-4"
-              />
-              <div>
-                <div className="text-sm font-medium text-slate-700">
-                  {t("shapeFunctions.treatAsCategorical")}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {t("shapeFunctions.treatAsCategoricalHint")}
-                </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <div className="text-sm font-medium text-slate-700">
+              {t("shapeFunctions.chartType")}
+            </div>
+            {canChooseChartType ? (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {chartTypeChoices.map((choice) => (
+                  <button
+                    key={choice.value}
+                    type="button"
+                    disabled={choice.disabled || saving}
+                    onClick={() => updateChartType(choice.value)}
+                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                      selectedChartType === choice.value
+                        ? "border-primary-500 bg-primary-50 text-primary-700"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+                    } ${choice.disabled ? "cursor-not-allowed opacity-50" : ""}`}
+                  >
+                    {getChartTypeLabel(choice.value)}
+                  </button>
+                ))}
               </div>
-            </label>
-          )}
+            ) : (
+              <div className="mt-2 inline-flex rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-700 border border-slate-300">
+                {getChartTypeLabel(selectedChartType)}
+              </div>
+            )}
+            <div className="mt-2 text-xs text-slate-500">{modeHint}</div>
+          </div>
 
-          {!canBeCategorical && baseFeatureType === "numeric" && (
+          {modeUnavailableNotice && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              {t("shapeFunctions.cannotConvertCategorical")}
+              {modeUnavailableNotice}
             </div>
           )}
 
-          {effectiveCategorical && (
-            <div className="rounded-lg border border-gray-200">
-              <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium text-gray-700">
-                {t("shapeFunctions.xAxisValueLabels")}
-              </div>
-              <div className="max-h-72 overflow-auto">
-                {availableValues.length === 0 ? (
-                  <div className="px-3 py-3 text-sm text-gray-500">
-                    {t("shapeFunctions.noCategoricalValues")}
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {availableValues.map((rawValue) => {
-                      const key = String(rawValue);
-                      return (
-                        <div
-                          key={key}
-                          className="grid grid-cols-2 gap-3 px-3 py-2 items-center"
-                        >
-                          <div className="text-sm text-slate-700 font-mono">
-                            {key}
-                          </div>
-                          <input
-                            type="text"
-                            value={valueLabels[key] ?? ""}
-                            onChange={(e) =>
-                              setValueLabels((prev) => ({
-                                ...prev,
-                                [key]: e.target.value,
-                              }))
-                            }
-                            placeholder={t("shapeFunctions.displayLabelFor", {
-                              value: key,
-                            })}
-                            disabled={saving}
-                            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
-                          />
+          <div className="rounded-lg border border-gray-200">
+            <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium text-gray-700">
+              {getValuesTitle()}
+            </div>
+            <div className="max-h-72 overflow-auto">
+              {activeValues.length === 0 ? (
+                <div className="px-3 py-3 text-sm text-gray-500">
+                  {getEmptyMessage()}
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {activeValues.map((rawValue) => {
+                    const key = String(rawValue);
+                    return (
+                      <div
+                        key={key}
+                        className="grid grid-cols-2 gap-3 px-3 py-2 items-center"
+                      >
+                        <div className="text-sm text-slate-700 font-mono">
+                          {key}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+                        <input
+                          type="text"
+                          value={activeLabels[key] ?? ""}
+                          onChange={(e) =>
+                            setActiveLabels((prev) => ({
+                              ...prev,
+                              [key]: e.target.value,
+                            }))
+                          }
+                          placeholder={getInputPlaceholder(key)}
+                          disabled={saving}
+                          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
-
-          {!effectiveCategorical && (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-              {t("shapeFunctions.mappingAvailableAfterCategorical")}
-            </div>
-          )}
+          </div>
 
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -2403,7 +2546,6 @@ const FeatureEditCard = ({
   onFeatureReset,
   onOpenChartSettings,
   onOpenDetails,
-  onCycleChartType,
   isEditing,
   brushHardness = 50,
   onBrushHardnessChange = null,
@@ -2414,105 +2556,19 @@ const FeatureEditCard = ({
   t,
 }) => {
   const [isEnlarged, setIsEnlarged] = useState(false);
-  const [isCyclingChartType, setIsCyclingChartType] = useState(false);
 
   // Show Submit only when there are genuinely new unsaved edits
   const hasUnsavedEdits = unsavedEditedPoints && unsavedEditedPoints.length > 0;
   const chartConfig = shapeFunction?.chart_config || {};
-  const baseFeatureType =
-    chartConfig.base_feature_type ||
-    (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
-  const currentChartType =
-    chartConfig.chart_feature_type ||
-    (shapeFunction?.feature_type === "categorical" ? "categorical" : "numeric");
-  const canToggleToCategorical =
-    currentChartType === "numeric" && Boolean(chartConfig.can_be_categorical);
-  const canToggleToNumeric =
-    currentChartType === "categorical" && Boolean(chartConfig.can_be_numeric);
-  const canCycleChartType = canToggleToCategorical || canToggleToNumeric;
-  const canConfigureCategoricalChart = currentChartType === "categorical";
   const hasFeatureDetails = Boolean(featureSchemaEntry);
-
-  const handleCycleChartType = useCallback(async () => {
-    if (!onCycleChartType || !canCycleChartType || isCyclingChartType) return;
-    setIsCyclingChartType(true);
-    try {
-      let payload;
-      if (currentChartType === "categorical") {
-        payload =
-          baseFeatureType === "categorical"
-            ? {
-                treat_as_numeric: true,
-              }
-            : {
-                treat_as_categorical: false,
-              };
-      } else {
-        payload =
-          baseFeatureType === "numeric"
-            ? {
-                treat_as_categorical: true,
-              }
-            : {
-                treat_as_numeric: false,
-              };
-      }
-      await onCycleChartType(shapeFunction.feature_name, payload);
-    } finally {
-      setIsCyclingChartType(false);
-    }
-  }, [
-    onCycleChartType,
-    canCycleChartType,
-    isCyclingChartType,
-    currentChartType,
-    baseFeatureType,
-    shapeFunction?.feature_name,
-  ]);
 
   return (
     <div className="relative">
       {isSuperadmin && (
         <button
-          onClick={handleCycleChartType}
-          title={
-            canCycleChartType
-              ? currentChartType === "categorical"
-                ? t("shapeFunctions.switchChartToNumeric")
-                : t("shapeFunctions.switchChartToCategorical")
-              : t("shapeFunctions.chartTypeUnavailable")
-          }
-          disabled={!canCycleChartType || isCyclingChartType}
-          className={`absolute top-2 left-2 z-10 p-1.5 border rounded-md shadow-sm transition-colors ${
-            canCycleChartType
-              ? "bg-white/90 hover:bg-gray-100 border-gray-300 text-gray-700"
-              : "bg-gray-100/90 border-gray-200 text-gray-400 cursor-not-allowed"
-          }`}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className={isCyclingChartType ? "animate-spin" : ""}
-          >
-            <path d="M3 2v6h6" />
-            <path d="M21 22v-6h-6" />
-            <path d="M21 11A8 8 0 0 0 7.5 5.5L3 8" />
-            <path d="M3 13a8 8 0 0 0 13.5 5.5L21 16" />
-          </svg>
-        </button>
-      )}
-      {isSuperadmin && canConfigureCategoricalChart && (
-        <button
           onClick={() => onOpenChartSettings(shapeFunction)}
-          title={t("shapeFunctions.editCategoricalMapping")}
-          className="absolute top-2 left-10 z-10 h-7 px-2 bg-white/90 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-xs text-gray-700 font-medium"
+          title={t("shapeFunctions.editChartMapping")}
+          className="absolute top-2 left-2 z-10 h-7 px-2 bg-white/90 hover:bg-gray-100 border border-gray-300 rounded-md shadow-sm transition-colors text-xs text-gray-700 font-medium"
         >
           {t("shapeFunctions.chartMappingButton")}
         </button>
@@ -3009,14 +3065,6 @@ const EditableShapeFunctionsGrid = ({
     [onUpdateFeatureChartSettings],
   );
 
-  const handleCycleChartType = useCallback(
-    async (featureName, payload) => {
-      if (!onUpdateFeatureChartSettings) return;
-      await onUpdateFeatureChartSettings(featureName, payload);
-    },
-    [onUpdateFeatureChartSettings],
-  );
-
   if (loading) {
     return (
       <div className="card">
@@ -3172,7 +3220,6 @@ const EditableShapeFunctionsGrid = ({
             onFeatureReset={handleFeatureReset}
             onOpenChartSettings={handleOpenChartSettings}
             onOpenDetails={handleOpenDetails}
-            onCycleChartType={handleCycleChartType}
             isEditing={isEditing}
             brushHardness={brushHardness}
             onBrushHardnessChange={setBrushHardness}

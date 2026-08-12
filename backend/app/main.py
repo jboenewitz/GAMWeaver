@@ -569,6 +569,8 @@ async def update_feature_chart_settings(
             feature_name=feature_name,
             treat_as_categorical=request.treat_as_categorical,
             treat_as_numeric=request.treat_as_numeric,
+            categorical_value_labels=request.categorical_value_labels,
+            numeric_tick_labels=request.numeric_tick_labels,
             value_labels=request.value_labels,
         )
         return FeatureChartSettingsResponse(**settings_payload)

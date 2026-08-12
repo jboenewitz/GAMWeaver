@@ -331,6 +331,8 @@ class FeatureChartSettingsRequest(BaseModel):
     """Superadmin chart-display settings for one feature."""
     treat_as_categorical: bool = False
     treat_as_numeric: bool = False
+    categorical_value_labels: Optional[Dict[str, str]] = None
+    numeric_tick_labels: Optional[Dict[str, str]] = None
     value_labels: Optional[Dict[str, str]] = None
 
 
@@ -345,8 +347,11 @@ class FeatureChartSettingsResponse(BaseModel):
     can_be_numeric: bool
     treat_as_categorical: bool
     treat_as_numeric: bool
-    value_labels: Dict[str, str]
-    available_values: List[str] = []
+    categorical_value_labels: Dict[str, str]
+    numeric_tick_labels: Dict[str, str]
+    value_labels: Dict[str, str] = {}
+    available_categorical_values: List[str] = []
+    available_numeric_values: List[str] = []
 
 
 class ChartDisplaySettingsRequest(BaseModel):

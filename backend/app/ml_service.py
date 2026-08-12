@@ -333,21 +333,9 @@ class MLService:
         if isinstance(feature_chart_settings, dict):
             sanitized: Dict[str, Dict[str, Any]] = {}
             for feature_name, raw_setting in feature_chart_settings.items():
-                if not isinstance(raw_setting, dict):
-                    continue
-                raw_labels = raw_setting.get("value_labels")
-                labels: Dict[str, str] = {}
-                if isinstance(raw_labels, dict):
-                    for raw_key, raw_label in raw_labels.items():
-                        label_str = str(raw_label).strip()
-                        if not label_str:
-                            continue
-                        labels[str(raw_key)] = label_str
-                sanitized[str(feature_name)] = {
-                    "treat_as_categorical": bool(raw_setting.get("treat_as_categorical")),
-                    "treat_as_numeric": bool(raw_setting.get("treat_as_numeric")),
-                    "value_labels": labels,
-                }
+                normalized = self._normalize_stored_feature_chart_setting(raw_setting)
+                if normalized:
+                    sanitized[str(feature_name)] = normalized
             self.feature_chart_settings = sanitized
         if show_missing_bars is not None:
             self.show_missing_bars = bool(show_missing_bars)
@@ -875,8 +863,55 @@ class MLService:
             provenance = provenance_map.get(feature_name)
             if provenance:
                 enriched_item["feature_provenance"] = provenance
+                numeric_domain = self._infer_numeric_domain_from_provenance(
+                    enriched_item,
+                    provenance,
+                )
+                if numeric_domain is not None:
+                    domain_min, domain_max = numeric_domain
+                    enriched_item["min_value"] = domain_min
+                    enriched_item["max_value"] = domain_max
+                    default_value = enriched_item.get("default_value")
+                    if default_value is not None:
+                        try:
+                            default_numeric = float(default_value)
+                        except (TypeError, ValueError):
+                            default_numeric = None
+                        if default_numeric is not None:
+                            enriched_item["default_value"] = round(
+                                min(max(default_numeric, domain_min), domain_max),
+                                2,
+                            )
             enriched_schema.append(enriched_item)
         return enriched_schema
+
+    @staticmethod
+    def _infer_numeric_domain_from_provenance(
+        feature_schema_entry: Dict[str, Any],
+        provenance: Dict[str, Any],
+    ) -> Optional[Tuple[float, float]]:
+        if str(feature_schema_entry.get("feature_type")) != "numeric":
+            return None
+        if str(provenance.get("construction_type")) != "item_mean":
+            return None
+
+        response_options = provenance.get("response_options") or []
+        numeric_values: List[float] = []
+        for option in response_options:
+            if not isinstance(option, dict):
+                continue
+            try:
+                numeric_value = float(option.get("value"))
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(numeric_value):
+                continue
+            numeric_values.append(numeric_value)
+
+        if len(numeric_values) < 2:
+            return None
+
+        return (float(min(numeric_values)), float(max(numeric_values)))
 
     @staticmethod
     def _stringify_chart_value(value: Any) -> str:
@@ -928,19 +963,50 @@ class MLService:
         numeric = pd.to_numeric(non_null, errors="coerce")
         return bool(numeric.notna().all())
 
-    def _get_feature_chart_setting(self, feature_name: str) -> Dict[str, Any]:
-        raw = self.feature_chart_settings.get(feature_name, {})
-        labels = raw.get("value_labels", {}) if isinstance(raw, dict) else {}
-        sanitized_labels = {
-            str(k): str(v).strip()
-            for k, v in labels.items()
-            if str(v).strip()
-        } if isinstance(labels, dict) else {}
+    @classmethod
+    def _sanitize_chart_label_map(cls, raw_labels: Any) -> Dict[str, str]:
+        if not isinstance(raw_labels, dict):
+            return {}
+        sanitized: Dict[str, str] = {}
+        for raw_key, raw_label in raw_labels.items():
+            label_str = str(raw_label).strip()
+            if not label_str:
+                continue
+            sanitized[cls._stringify_chart_value(raw_key)] = label_str
+        return sanitized
+
+    @classmethod
+    def _normalize_stored_feature_chart_setting(
+        cls,
+        raw_setting: Any,
+    ) -> Dict[str, Any]:
+        if not isinstance(raw_setting, dict):
+            return {}
+        categorical_value_labels = cls._sanitize_chart_label_map(
+            raw_setting.get("categorical_value_labels", raw_setting.get("value_labels")),
+        )
+        numeric_tick_labels = cls._sanitize_chart_label_map(
+            raw_setting.get("numeric_tick_labels"),
+        )
         return {
-            "treat_as_categorical": bool(raw.get("treat_as_categorical")) if isinstance(raw, dict) else False,
-            "treat_as_numeric": bool(raw.get("treat_as_numeric")) if isinstance(raw, dict) else False,
-            "value_labels": sanitized_labels,
+            "treat_as_categorical": bool(raw_setting.get("treat_as_categorical")),
+            "treat_as_numeric": bool(raw_setting.get("treat_as_numeric")),
+            "categorical_value_labels": categorical_value_labels,
+            "numeric_tick_labels": numeric_tick_labels,
         }
+
+    def _get_feature_chart_setting(self, feature_name: str) -> Dict[str, Any]:
+        normalized = self._normalize_stored_feature_chart_setting(
+            self.feature_chart_settings.get(feature_name, {}),
+        )
+        if not normalized:
+            return {
+                "treat_as_categorical": False,
+                "treat_as_numeric": False,
+                "categorical_value_labels": {},
+                "numeric_tick_labels": {},
+            }
+        return normalized
 
     def _get_feature_chart_mode(self, feature_name: str) -> str:
         """Return effective chart display mode ('numeric' or 'categorical')."""
@@ -958,6 +1024,75 @@ class MLService:
 
     def _is_feature_categorical_for_chart(self, feature_name: str) -> bool:
         return self._get_feature_chart_mode(feature_name) == "categorical"
+
+    def _get_numeric_chart_x_values(self, feature_name: str) -> List[float]:
+        if feature_name in self.cat_features:
+            return [
+                float(numeric_x)
+                for _, numeric_x in self._get_numeric_chart_values_for_categorical_feature(
+                    feature_name,
+                )
+            ]
+
+        public_numeric_series = pd.to_numeric(
+            self._get_public_training_series(feature_name),
+            errors="coerce",
+        ).dropna()
+        if public_numeric_series.empty:
+            return []
+
+        schema = self.feature_schema_map.get(feature_name, {}) or {}
+        schema_min = schema.get("min_value")
+        schema_max = schema.get("max_value")
+        try:
+            min_val = float(schema_min)
+        except (TypeError, ValueError):
+            min_val = float(public_numeric_series.min())
+        try:
+            max_val = float(schema_max)
+        except (TypeError, ValueError):
+            max_val = float(public_numeric_series.max())
+
+        if not np.isfinite(min_val):
+            min_val = float(public_numeric_series.min())
+        if not np.isfinite(max_val):
+            max_val = float(public_numeric_series.max())
+        if max_val < min_val:
+            min_val = float(public_numeric_series.min())
+            max_val = float(public_numeric_series.max())
+
+        if min_val == max_val:
+            return [min_val]
+        return np.linspace(min_val, max_val, 30).tolist()
+
+    def _get_numeric_chart_label_values(self, feature_name: str) -> List[str]:
+        numeric_x_values = self._get_numeric_chart_x_values(feature_name)
+        if not numeric_x_values:
+            return []
+
+        min_val = min(numeric_x_values)
+        max_val = max(numeric_x_values)
+        start = int(np.ceil(min_val - 1e-9))
+        end = int(np.floor(max_val + 1e-9))
+        if end < start:
+            return []
+        return [str(value) for value in range(start, end + 1)]
+
+    def _build_numeric_chart_tick_labels(
+        self,
+        x_values: List[float],
+        numeric_tick_labels: Dict[str, str],
+    ) -> Optional[List[str]]:
+        labels: List[str] = []
+        has_custom_labels = False
+        for x_value in x_values:
+            label = str(
+                numeric_tick_labels.get(self._stringify_chart_value(x_value), "")
+            ).strip()
+            if label:
+                has_custom_labels = True
+            labels.append(label)
+        return labels if has_custom_labels else None
 
     def get_chart_display_settings(self) -> Dict[str, Any]:
         return {
@@ -1072,24 +1207,36 @@ class MLService:
 
         is_categorical = chart_feature_type == "categorical"
         is_numeric = chart_feature_type == "numeric"
-        allowed_values = set(
-            self._get_chart_x_values(
-                feature_name,
-                treat_as_categorical=is_categorical,
-            )
+        allowed_categorical_values = set(
+            self._get_chart_x_values(feature_name, treat_as_categorical=True)
         )
-        available_values = self._get_chart_x_values(
-            feature_name,
-            treat_as_categorical=bool(
-                is_categorical
-                or can_be_categorical
-                or base_feature_type == "categorical"
-            ),
+        available_categorical_values = (
+            self._get_chart_x_values(feature_name, treat_as_categorical=True)
+            if can_be_categorical or base_feature_type == "categorical"
+            else []
         )
-        value_labels = {
+        available_numeric_values = (
+            self._get_numeric_chart_label_values(feature_name)
+            if can_be_numeric or base_feature_type == "numeric"
+            else []
+        )
+        numeric_domain_values = (
+            self._get_numeric_chart_x_values(feature_name)
+            if can_be_numeric or base_feature_type == "numeric"
+            else []
+        )
+        allowed_numeric_values = set(available_numeric_values)
+        categorical_value_labels = {
             str(raw): str(label).strip()
-            for raw, label in (stored.get("value_labels", {}) or {}).items()
-            if str(label).strip() and (not allowed_values or str(raw) in allowed_values)
+            for raw, label in (stored.get("categorical_value_labels", {}) or {}).items()
+            if str(label).strip()
+            and (not allowed_categorical_values or str(raw) in allowed_categorical_values)
+        }
+        numeric_tick_labels = {
+            str(raw): str(label).strip()
+            for raw, label in (stored.get("numeric_tick_labels", {}) or {}).items()
+            if str(label).strip()
+            and (not allowed_numeric_values or str(raw) in allowed_numeric_values)
         }
 
         return {
@@ -1102,8 +1249,17 @@ class MLService:
             "can_be_numeric": can_be_numeric,
             "treat_as_categorical": treat_as_categorical,
             "treat_as_numeric": treat_as_numeric,
-            "value_labels": value_labels,
-            "available_values": available_values,
+            "categorical_value_labels": categorical_value_labels,
+            "numeric_tick_labels": numeric_tick_labels,
+            "value_labels": categorical_value_labels,
+            "available_categorical_values": available_categorical_values,
+            "available_numeric_values": available_numeric_values,
+            "numeric_domain_min": (
+                float(min(numeric_domain_values)) if numeric_domain_values else None
+            ),
+            "numeric_domain_max": (
+                float(max(numeric_domain_values)) if numeric_domain_values else None
+            ),
         }
 
     def update_feature_chart_setting(
@@ -1111,6 +1267,8 @@ class MLService:
         feature_name: str,
         treat_as_categorical: bool,
         treat_as_numeric: bool = False,
+        categorical_value_labels: Optional[Dict[str, str]] = None,
+        numeric_tick_labels: Optional[Dict[str, str]] = None,
         value_labels: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
         """Persist superadmin chart settings for one feature."""
@@ -1144,34 +1302,60 @@ class MLService:
         ) or (
             base_feature_type == "numeric" and normalized_treat_as_categorical
         )
-        allowed_values = set(
-            self._get_chart_x_values(
-                feature_name,
-                treat_as_categorical=effective_categorical,
+        allowed_categorical_values = set(
+            self._get_chart_x_values(feature_name, treat_as_categorical=True)
+        )
+        allowed_numeric_values = {
+            self._stringify_chart_value(value)
+            for value in self._get_numeric_chart_label_values(feature_name)
+        }
+
+        source_categorical_labels = (
+            current.get("categorical_value_labels", {})
+            if categorical_value_labels is None and value_labels is None
+            else (
+                categorical_value_labels
+                if categorical_value_labels is not None
+                else (value_labels or {})
             )
         )
-
-        source_labels = current.get("value_labels", {}) if value_labels is None else (value_labels or {})
-        sanitized_labels: Dict[str, str] = {}
-        for raw_key, raw_label in source_labels.items():
+        sanitized_categorical_labels: Dict[str, str] = {}
+        for raw_key, raw_label in (source_categorical_labels or {}).items():
             key = self._stringify_chart_value(raw_key)
             label = str(raw_label).strip()
             if not label:
                 continue
-            if allowed_values and key not in allowed_values:
+            if allowed_categorical_values and key not in allowed_categorical_values:
                 continue
-            sanitized_labels[key] = label
+            sanitized_categorical_labels[key] = label
+
+        source_numeric_labels = (
+            current.get("numeric_tick_labels", {})
+            if numeric_tick_labels is None
+            else (numeric_tick_labels or {})
+        )
+        sanitized_numeric_labels: Dict[str, str] = {}
+        for raw_key, raw_label in (source_numeric_labels or {}).items():
+            key = self._stringify_chart_value(raw_key)
+            label = str(raw_label).strip()
+            if not label:
+                continue
+            if allowed_numeric_values and key not in allowed_numeric_values:
+                continue
+            sanitized_numeric_labels[key] = label
 
         normalized_setting = {
             "treat_as_categorical": normalized_treat_as_categorical,
             "treat_as_numeric": normalized_treat_as_numeric,
-            "value_labels": sanitized_labels,
+            "categorical_value_labels": sanitized_categorical_labels,
+            "numeric_tick_labels": sanitized_numeric_labels,
         }
 
         if (
             not normalized_setting["treat_as_categorical"]
             and not normalized_setting["treat_as_numeric"]
-            and not normalized_setting["value_labels"]
+            and not normalized_setting["categorical_value_labels"]
+            and not normalized_setting["numeric_tick_labels"]
         ):
             self.feature_chart_settings.pop(feature_name, None)
         else:
@@ -1730,7 +1914,14 @@ class MLService:
             "feature_schema_map": feature_schema_map,
             "cat_features": [str(item) for item in cat_features],
             "num_features": [str(item) for item in num_features],
-            "feature_chart_settings": _json_safe(artifact.get("feature_chart_settings") or {}),
+            "feature_chart_settings": {
+                str(feature_name): normalized
+                for feature_name, raw_setting in (
+                    _json_safe(artifact.get("feature_chart_settings") or {})
+                ).items()
+                for normalized in [self._normalize_stored_feature_chart_setting(raw_setting)]
+                if normalized
+            },
             "show_missing_bars": bool(artifact.get("show_missing_bars", False)),
             "shape_functions": normalized_shape_functions,
             "dataset_id": artifact.get("dataset_id"),
@@ -2147,10 +2338,27 @@ class MLService:
             raise ValueError(
                 "Comparison dataset target column must match the primary dataset target column exactly"
             )
-        if list(feature_columns) != list(self.selected_feature_columns):
+        if (
+            len(feature_columns) != len(self.selected_feature_columns)
+            or set(feature_columns) != set(self.selected_feature_columns)
+        ):
             raise ValueError(
                 "Comparison dataset feature columns must match the primary dataset selected feature columns exactly"
             )
+
+    def _normalize_comparison_feature_order(
+        self,
+        feature_columns: List[str],
+    ) -> List[str]:
+        primary_feature_set = set(self.selected_feature_columns)
+        normalized = [
+            feature_name
+            for feature_name in self.selected_feature_columns
+            if feature_name in primary_feature_set and feature_name in set(feature_columns)
+        ]
+        if len(normalized) != len(feature_columns):
+            return list(feature_columns)
+        return normalized
 
     def _validate_comparison_feature_schema(
         self,
@@ -2229,10 +2437,18 @@ class MLService:
             target_column=resolved_target,
             feature_columns=selected_features,
         )
+        selected_features = self._normalize_comparison_feature_order(
+            selected_features,
+        )
 
         public_numeric_features = list(
             feature_processing_metadata.get("public_numeric_features", [])
         )
+        public_numeric_features = [
+            feature_name
+            for feature_name in selected_features
+            if feature_name in set(public_numeric_features)
+        ]
         comparison_missing_indicator_map = dict(
             feature_processing_metadata.get("missing_indicator_map", {})
         )
@@ -2927,7 +3143,10 @@ class MLService:
         """Extract shape function data for a single feature."""
         chart_setting = self.get_feature_chart_setting(feature_name)
         is_categorical = chart_setting.get("chart_feature_type") == "categorical"
-        value_labels = chart_setting.get("value_labels", {}) or {}
+        categorical_value_labels = (
+            chart_setting.get("categorical_value_labels", {}) or {}
+        )
+        numeric_tick_labels = chart_setting.get("numeric_tick_labels", {}) or {}
         baseline = self._build_shape_baseline()
 
         if is_categorical:
@@ -2974,7 +3193,7 @@ class MLService:
                 mean_val = np.mean(shape_values)
                 shape_values = [value - mean_val for value in shape_values]
                 x_tick_labels = [
-                    str(value_labels.get(raw_value, raw_value))
+                    str(categorical_value_labels.get(raw_value, raw_value))
                     for raw_value in effective_x_values
                 ]
 
@@ -3026,6 +3245,10 @@ class MLService:
                     "x_values": x_values_numeric,
                     "y_values": shape_values,
                     "feature_type": "numeric",
+                    "x_tick_labels": self._build_numeric_chart_tick_labels(
+                        x_values_numeric,
+                        numeric_tick_labels,
+                    ),
                     "chart_config": chart_setting,
                     "missing_bucket": missing_bucket,
                 }
@@ -3037,22 +3260,12 @@ class MLService:
                     )
                 return result
 
-        public_numeric_series = pd.to_numeric(
-            self._get_public_training_series(feature_name),
-            errors="coerce",
-        ).dropna()
-        if public_numeric_series.empty:
+        x_values_numeric = self._get_numeric_chart_x_values(feature_name)
+        if not x_values_numeric:
             raise ValueError(f"No observed numeric values available for '{feature_name}'")
 
-        min_val = float(public_numeric_series.min())
-        max_val = float(public_numeric_series.max())
-        if min_val == max_val:
-            x_range = np.array([min_val])
-        else:
-            x_range = np.linspace(min_val, max_val, 30)
-
         shape_values = []
-        for x_val in x_range:
+        for x_val in x_values_numeric:
             sample_data = baseline.copy()
             sample_data[feature_name] = float(x_val)
             indicator_name = self._missing_indicator_feature_name(feature_name)
@@ -3075,9 +3288,13 @@ class MLService:
 
         result = {
             "feature_name": feature_name,
-            "x_values": x_range.tolist(),
+            "x_values": x_values_numeric,
             "y_values": shape_values,
             "feature_type": "numeric",
+            "x_tick_labels": self._build_numeric_chart_tick_labels(
+                x_values_numeric,
+                numeric_tick_labels,
+            ),
             "chart_config": chart_setting,
             "missing_bucket": missing_bucket,
         }
@@ -3085,7 +3302,7 @@ class MLService:
             result["distribution"] = self._build_shape_function_distribution(
                 feature_name,
                 "numeric",
-                x_range.tolist(),
+                x_values_numeric,
             )
         return result
 

@@ -214,7 +214,14 @@ const translations = {
       "Failed to save chart settings",
     "shapeFunctions.chartMappingTitle": "Chart Mapping: {feature}",
     "shapeFunctions.chartMappingDescription":
-      "Configure how categorical x-axis values are displayed for all users.",
+      "Configure chart type and x-axis labels for all users.",
+    "shapeFunctions.chartType": "Chart Type",
+    "shapeFunctions.numericChartType": "Numeric",
+    "shapeFunctions.categoricalChartType": "Categorical",
+    "shapeFunctions.numericMappingHint":
+      "Assign display labels to whole-number numeric x-axis values while keeping the axis continuous.",
+    "shapeFunctions.categoricalMappingHint":
+      "Assign display labels to categorical x-axis values shown on this chart.",
     "shapeFunctions.treatAsCategorical":
       "Treat this chart as categorical",
     "shapeFunctions.treatAsCategoricalHint":
@@ -222,8 +229,11 @@ const translations = {
     "shapeFunctions.cannotConvertCategorical":
       "This feature has too many or non-discrete values and cannot be converted to a categorical chart.",
     "shapeFunctions.xAxisValueLabels": "X-Axis Value Labels",
+    "shapeFunctions.numericXAxisLabels": "Whole-Number X-Axis Labels",
     "shapeFunctions.noCategoricalValues":
       "No categorical values available for mapping.",
+    "shapeFunctions.noNumericValues":
+      "No numeric x-axis values available for mapping.",
     "shapeFunctions.displayLabelFor": "Display label for {value}",
     "shapeFunctions.mappingAvailableAfterCategorical":
       "Label mapping is available once this feature is displayed as a categorical chart.",
@@ -236,6 +246,8 @@ const translations = {
       "This feature cannot be switched to the other chart type",
     "shapeFunctions.editCategoricalMapping":
       "Edit categorical mapping",
+    "shapeFunctions.editChartMapping":
+      "Edit chart mapping",
     "shapeFunctions.chartMappingButton": "Chart Mapping",
     "shapeFunctions.enlargeChart": "Enlarge chart",
     "shapeFunctions.submitFeature": "Submit {feature}",
@@ -695,7 +707,14 @@ const translations = {
     "shapeFunctions.chartMappingTitle":
       "Diagrammzuordnung: {feature}",
     "shapeFunctions.chartMappingDescription":
-      "Konfiguriere, wie kategoriale Werte auf der x-Achse fuer alle Benutzer angezeigt werden.",
+      "Konfiguriere Diagrammtyp und X-Achsen-Beschriftungen fuer alle Benutzer.",
+    "shapeFunctions.chartType": "Diagrammtyp",
+    "shapeFunctions.numericChartType": "Numerisch",
+    "shapeFunctions.categoricalChartType": "Kategorial",
+    "shapeFunctions.numericMappingHint":
+      "Weise ganzzahligen numerischen X-Achsen-Werten Anzeigelabels zu, ohne die kontinuierliche Achse zu veraendern.",
+    "shapeFunctions.categoricalMappingHint":
+      "Weise den auf diesem Diagramm gezeigten kategorialen X-Achsen-Werten Anzeigelabels zu.",
     "shapeFunctions.treatAsCategorical":
       "Dieses Diagramm als kategorial behandeln",
     "shapeFunctions.treatAsCategoricalHint":
@@ -704,8 +723,12 @@ const translations = {
       "Dieses Feature hat zu viele oder nicht-diskrete Werte und kann nicht in ein kategoriales Diagramm umgewandelt werden.",
     "shapeFunctions.xAxisValueLabels":
       "Wertebeschriftungen der X-Achse",
+    "shapeFunctions.numericXAxisLabels":
+      "Ganzzahlige X-Achsen-Beschriftungen",
     "shapeFunctions.noCategoricalValues":
       "Keine kategorialen Werte fuer die Zuordnung verfuegbar.",
+    "shapeFunctions.noNumericValues":
+      "Keine numerischen X-Achsen-Werte fuer die Zuordnung verfuegbar.",
     "shapeFunctions.displayLabelFor":
       "Anzeigelabel fuer {value}",
     "shapeFunctions.mappingAvailableAfterCategorical":
@@ -720,6 +743,8 @@ const translations = {
       "Dieses Feature kann nicht in den anderen Diagrammtyp umgeschaltet werden",
     "shapeFunctions.editCategoricalMapping":
       "Kategoriale Zuordnung bearbeiten",
+    "shapeFunctions.editChartMapping":
+      "Diagrammzuordnung bearbeiten",
     "shapeFunctions.chartMappingButton": "Diagrammzuordnung",
     "shapeFunctions.enlargeChart": "Diagramm vergroessern",
     "shapeFunctions.submitFeature": "{feature} senden",
