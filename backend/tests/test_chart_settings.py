@@ -547,6 +547,52 @@ def test_export_import_roundtrip_preserves_missing_indicator_features(
     assert imported.predict({"age": None, "month": "1"}) == pytest.approx(7.1)
 
 
+def test_imported_numeric_shape_functions_expand_to_schema_domain(
+    ml_service,
+    monkeypatch,
+):
+    artifact = ml_service.export_model_artifact()
+    age_shape = next(
+        feature
+        for feature in artifact["shape_functions"]
+        if feature["feature_name"] == "age"
+    )
+    age_shape["x_values"] = [1.4, 2.0, 3.0, 4.0]
+    age_shape["y_values"] = [5.5, 2.8, -0.2, -7.6]
+    age_schema = next(
+        feature for feature in artifact["feature_schema"] if feature["name"] == "age"
+    )
+    age_schema["min_value"] = 1.0
+    age_schema["max_value"] = 4.0
+    artifact["feature_chart_settings"]["age"] = {
+        "numeric_tick_labels": {"1": "Start", "4": "End"}
+    }
+
+    monkeypatch.setattr(MLService, "_restore_active_dataset_metadata", lambda self: None)
+    monkeypatch.setattr(MLService, "_auto_load_persisted_dataset", lambda self: None)
+    imported = MLService()
+    imported.import_model_artifact(artifact)
+
+    imported_age_shape = next(
+        feature
+        for feature in imported.get_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+
+    assert min(imported_age_shape["x_values"]) == pytest.approx(1.0)
+    assert max(imported_age_shape["x_values"]) == pytest.approx(4.0)
+    assert len(imported_age_shape["x_values"]) == 30
+    assert imported_age_shape["x_tick_labels"][0] == "Start"
+    assert imported_age_shape["x_tick_labels"][-1] == "End"
+
+    raw_age_shape = next(
+        feature
+        for feature in imported.model.export_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+    assert raw_age_shape["x_values"] == [1.4, 2.0, 3.0, 4.0]
+
+
 def test_feature_chart_settings_require_superadmin(ml_service, monkeypatch):
     from backend.app import main as main_module
 

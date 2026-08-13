@@ -1906,6 +1906,108 @@ class MLService:
             normalized["x_tick_labels"] = [str(label) for label in x_tick_labels]
         return normalized
 
+    def _normalize_imported_public_shape_function(
+        self,
+        shape_function: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        normalized_shape = _json_safe(shape_function)
+        feature_name = str(normalized_shape.get("feature_name", "")).strip()
+        if not feature_name:
+            return normalized_shape
+
+        stored_chart_config = _json_safe(self.feature_chart_settings.get(feature_name) or {})
+        chart_config = _json_safe(normalized_shape.get("chart_config") or {})
+        if not str(chart_config.get("display_title", "") or "").strip():
+            chart_config["display_title"] = stored_chart_config.get("display_title", "")
+        if not (chart_config.get("categorical_value_labels") or {}):
+            chart_config["categorical_value_labels"] = stored_chart_config.get(
+                "categorical_value_labels",
+                {},
+            )
+        if not (chart_config.get("numeric_tick_labels") or {}):
+            chart_config["numeric_tick_labels"] = stored_chart_config.get(
+                "numeric_tick_labels",
+                {},
+            )
+        if "treat_as_categorical" not in chart_config:
+            chart_config["treat_as_categorical"] = stored_chart_config.get(
+                "treat_as_categorical",
+                False,
+            )
+        if "treat_as_numeric" not in chart_config:
+            chart_config["treat_as_numeric"] = stored_chart_config.get(
+                "treat_as_numeric",
+                False,
+            )
+        normalized_shape["chart_config"] = chart_config
+
+        if (
+            str(normalized_shape.get("feature_type")) != "numeric"
+            or str(chart_config.get("chart_feature_type", "numeric")) != "numeric"
+        ):
+            return normalized_shape
+
+        x_values = normalized_shape.get("x_values") or []
+        y_values = normalized_shape.get("y_values") or []
+        if (
+            not isinstance(x_values, list)
+            or not isinstance(y_values, list)
+            or len(x_values) != len(y_values)
+            or not x_values
+        ):
+            return normalized_shape
+
+        try:
+            x_numeric = np.asarray(x_values, dtype=float)
+            y_numeric = np.asarray(y_values, dtype=float)
+        except (TypeError, ValueError):
+            return normalized_shape
+
+        if x_numeric.size == 0 or y_numeric.size == 0 or x_numeric.size != y_numeric.size:
+            return normalized_shape
+
+        order = np.argsort(x_numeric)
+        x_numeric = x_numeric[order]
+        y_numeric = y_numeric[order]
+
+        schema = self.feature_schema_map.get(feature_name, {}) or {}
+        schema_min = schema.get("min_value")
+        schema_max = schema.get("max_value")
+        try:
+            domain_min = float(schema_min)
+            domain_max = float(schema_max)
+        except (TypeError, ValueError):
+            return normalized_shape
+
+        if (
+            not np.isfinite(domain_min)
+            or not np.isfinite(domain_max)
+            or domain_max < domain_min
+        ):
+            return normalized_shape
+
+        if abs(domain_max - domain_min) < 1e-12:
+            target_x = np.asarray([domain_min], dtype=float)
+        else:
+            target_x = np.linspace(domain_min, domain_max, 30)
+
+        normalized_shape["x_values"] = [float(value) for value in target_x.tolist()]
+        normalized_shape["y_values"] = [
+            float(value) for value in np.interp(target_x, x_numeric, y_numeric).tolist()
+        ]
+
+        numeric_tick_labels = chart_config.get("numeric_tick_labels") or {}
+        x_tick_labels = self._build_numeric_chart_tick_labels(
+            normalized_shape["x_values"],
+            numeric_tick_labels,
+        )
+        if x_tick_labels is not None:
+            normalized_shape["x_tick_labels"] = x_tick_labels
+        else:
+            normalized_shape.pop("x_tick_labels", None)
+
+        return normalized_shape
+
     @staticmethod
     def _infer_missing_indicator_map_from_artifact(
         feature_names: List[str],
@@ -2327,7 +2429,9 @@ class MLService:
             validated.get("show_competence_levels", False)
         )
         self.original_shape_functions = {
-            shape_function["feature_name"]: shape_function
+            shape_function["feature_name"]: self._normalize_imported_public_shape_function(
+                shape_function
+            )
             for shape_function in validated["public_shape_functions"]
         }
         self.shape_function_offsets = {}
