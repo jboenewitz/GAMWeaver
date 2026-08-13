@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -486,6 +487,137 @@ class MLService:
 
         return ""
 
+    @staticmethod
+    def _normalize_scale_variable_name(variable_name: Any) -> str:
+        normalized = str(variable_name or "").strip()
+        if not normalized:
+            return ""
+        return re.sub(r"_\d+$", "", normalized)
+
+    @staticmethod
+    def _normalize_scale_topic(scale_label: Any) -> str:
+        normalized = str(scale_label or "").strip()
+        if not normalized:
+            return ""
+        normalized = re.sub(r"^(skala|scale)\s*-\s*", "", normalized, flags=re.IGNORECASE)
+        normalized = re.sub(r"\s*\(imputiert\)\s*$", "", normalized, flags=re.IGNORECASE)
+        return normalized.strip()
+
+    @staticmethod
+    def _shared_response_options_from_details(
+        detail_rows: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        common_options: Optional[List[Dict[str, Any]]] = None
+
+        for detail in detail_rows:
+            options = _json_safe(detail.get("response_options", []))
+            if not options:
+                continue
+
+            if common_options is None:
+                common_options = options
+            elif common_options != options:
+                return []
+
+        return common_options or []
+
+    @staticmethod
+    def _scale_topic_tokens(scale_topic: str) -> List[str]:
+        return [
+            token
+            for token in re.findall(r"[a-z0-9]+", str(scale_topic or "").lower())
+            if token
+        ]
+
+    def _infer_iqb_scale_item_details(
+        self,
+        source_variables: List[str],
+        source_labels: List[str],
+        response_option_map: Dict[str, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        inferred_details: List[Dict[str, Any]] = []
+        seen_variables: set[str] = set()
+
+        def append_candidate(variable: str, metadata: Dict[str, Any]) -> None:
+            if variable in seen_variables:
+                return
+
+            inferred_details.append(
+                {
+                    "variable": variable,
+                    "label": str(metadata.get("description", "") or "").strip(),
+                    "response_options": _json_safe(
+                        metadata.get("response_options", [])
+                    ),
+                    "missing_response_options": _json_safe(
+                        metadata.get("missing_response_options", [])
+                    ),
+                }
+            )
+            seen_variables.add(variable)
+
+        for index, source_variable in enumerate(source_variables):
+            base_variable = self._normalize_scale_variable_name(source_variable)
+            if not base_variable:
+                continue
+
+            scale_topic = self._normalize_scale_topic(
+                source_labels[index] if index < len(source_labels) else "",
+            )
+            scale_topic_lower = scale_topic.lower()
+            scale_topic_tokens = self._scale_topic_tokens(scale_topic)
+
+            for candidate_variable, metadata in response_option_map.items():
+                if candidate_variable in seen_variables:
+                    continue
+                if candidate_variable == source_variable or candidate_variable == base_variable:
+                    continue
+                if re.fullmatch(rf"{re.escape(base_variable)}_\d+", candidate_variable):
+                    continue
+                if not candidate_variable.startswith(base_variable):
+                    continue
+
+                response_options = _json_safe(metadata.get("response_options", []))
+                if not response_options:
+                    continue
+
+                description = str(metadata.get("description", "") or "").strip()
+                if not description:
+                    continue
+                if description.lower().startswith(("skala -", "scale -")):
+                    continue
+                if scale_topic_lower and scale_topic_lower not in description.lower():
+                    continue
+
+                append_candidate(candidate_variable, metadata)
+
+            if inferred_details or not scale_topic_tokens:
+                continue
+
+            for candidate_variable, metadata in response_option_map.items():
+                if candidate_variable in seen_variables:
+                    continue
+                if candidate_variable == source_variable or candidate_variable == base_variable:
+                    continue
+
+                response_options = _json_safe(metadata.get("response_options", []))
+                if not response_options:
+                    continue
+
+                description = str(metadata.get("description", "") or "").strip()
+                description_lower = description.lower()
+                if not description:
+                    continue
+                if description_lower.startswith(("skala -", "scale -")):
+                    continue
+                if not all(token in description_lower for token in scale_topic_tokens):
+                    continue
+
+                append_candidate(candidate_variable, metadata)
+
+        inferred_details.sort(key=lambda detail: str(detail.get("variable", "")))
+        return inferred_details
+
     def _load_feature_provenance_from_path(
         self,
         dictionary_path: Path,
@@ -529,6 +661,10 @@ class MLService:
             selection_rationale = str(row.get("selection_rationale", "") or "").strip()
             source_details = []
             common_response_options: Optional[List[Dict[str, Any]]] = None
+            construction_type = self._classify_feature_construction(
+                transformation,
+                source_labels,
+            )
 
             for index, variable in enumerate(source_variables):
                 response_metadata = response_option_map.get(variable, {})
@@ -554,18 +690,28 @@ class MLService:
                 elif common_response_options != substantive_options:
                     common_response_options = []
 
+            scale_item_details: List[Dict[str, Any]] = []
+            if construction_type == "iqb_scale":
+                scale_item_details = self._infer_iqb_scale_item_details(
+                    source_variables,
+                    source_labels,
+                    response_option_map,
+                )
+                if not common_response_options:
+                    common_response_options = self._shared_response_options_from_details(
+                        scale_item_details,
+                    )
+
             provenance_map[output_column] = {
                 "role": str(row.get("role", "") or "").strip(),
                 "category": str(row.get("category", "") or "").strip(),
                 "source_variables": source_variables,
                 "source_labels": source_labels,
                 "source_details": source_details,
+                "scale_item_details": scale_item_details,
                 "transformation": transformation,
                 "selection_rationale": selection_rationale,
-                "construction_type": self._classify_feature_construction(
-                    transformation,
-                    source_labels,
-                ),
+                "construction_type": construction_type,
                 "response_options": common_response_options or [],
                 "missing_value_handling": self._extract_missing_value_handling(
                     transformation,

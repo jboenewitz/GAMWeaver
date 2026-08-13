@@ -389,6 +389,11 @@ const FeatureDetailsDrawer = ({
   const sourceVariables = Array.isArray(provenance?.source_variables)
     ? provenance.source_variables
     : [];
+  const scaleItemRows = Array.isArray(provenance?.scale_item_details)
+    ? provenance.scale_item_details.filter(
+        (row) => row && (row.variable || row.label),
+      )
+    : [];
   const sharedResponseOptions = Array.isArray(provenance?.response_options)
     ? provenance.response_options
     : [];
@@ -532,6 +537,34 @@ const FeatureDetailsDrawer = ({
                     </div>
                   ))}
                 </div>
+              </div>
+            </section>
+          )}
+
+          {scaleItemRows.length > 0 && (
+            <section className="mt-6">
+              <h4 className="text-sm font-semibold text-slate-800">
+                {t("shapeFunctions.detailsScaleItems")}
+              </h4>
+              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                {t("shapeFunctions.detailsScaleItemsSummary")}
+              </p>
+              <div className="mt-3 space-y-3">
+                {scaleItemRows.map((row, index) => (
+                  <div
+                    key={`${row.variable || "scale-item"}-${index}`}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                  >
+                    {row.variable && (
+                      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        {row.variable}
+                      </div>
+                    )}
+                    <div className="mt-1 text-sm text-slate-800">
+                      {row.label || row.variable}
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}

@@ -148,6 +148,15 @@ const translations = {
     "prediction.predicting": "Predicting...",
     "prediction.predictTarget": "Predict {target}",
     "prediction.predictedTarget": "Predicted {target}",
+    "prediction.scaleHelpLabel": "Explain the value scale for {feature}",
+    "prediction.scaleTooltipOptionsIntro":
+      "These values use the same x-axis coding:",
+    "prediction.scaleTooltipAvailableValues":
+      "Available x-axis values: {values}.",
+    "prediction.scaleTooltipRange":
+      "This input uses the same x-axis scale: {min} to {max}.",
+    "prediction.scaleTooltipSingleValue":
+      "This input uses a fixed x-axis value of {value}.",
     "prediction.competenceLevel": "Competence Level",
     "prediction.scoreValue": "Score",
     "prediction.assignment": "Assignment",
@@ -281,6 +290,9 @@ const translations = {
     "shapeFunctions.detailsSourceVariables": "Source variables",
     "shapeFunctions.detailsSourceQuestions": "Source questions",
     "shapeFunctions.detailsAnswerScale": "Answer scale",
+    "shapeFunctions.detailsScaleItems": "Underlying scale items",
+    "shapeFunctions.detailsScaleItemsSummary":
+      "This is an imputed scale score derived from the following statements.",
     "shapeFunctions.detailsTransformation": "Transformation",
     "shapeFunctions.detailsMissingHandling": "Missing values",
     "shapeFunctions.detailsRationale": "Why this feature was selected",
@@ -643,6 +655,16 @@ const translations = {
     "prediction.predicting": "Vorhersage läuft...",
     "prediction.predictTarget": "{target} vorhersagen",
     "prediction.predictedTarget": "Vorhergesagtes {target}",
+    "prediction.scaleHelpLabel":
+      "Werteskala für {feature} erklären",
+    "prediction.scaleTooltipOptionsIntro":
+      "Diese Werte verwenden dieselbe X-Achsen-Kodierung:",
+    "prediction.scaleTooltipAvailableValues":
+      "Verfügbare X-Achsen-Werte: {values}.",
+    "prediction.scaleTooltipRange":
+      "Diese Eingabe verwendet dieselbe X-Achsen-Skala: {min} bis {max}.",
+    "prediction.scaleTooltipSingleValue":
+      "Diese Eingabe verwendet den festen X-Achsen-Wert {value}.",
     "prediction.competenceLevel": "Kompetenzstufe",
     "prediction.scoreValue": "Punktwert",
     "prediction.assignment": "Zuordnung",
@@ -787,6 +809,9 @@ const translations = {
     "shapeFunctions.detailsSourceVariables": "Quellvariablen",
     "shapeFunctions.detailsSourceQuestions": "Quellfragen",
     "shapeFunctions.detailsAnswerScale": "Antwortskala",
+    "shapeFunctions.detailsScaleItems": "Zugrunde liegende Skalenitems",
+    "shapeFunctions.detailsScaleItemsSummary":
+      "Dies ist ein imputierter Skalenwert, der aus den folgenden Aussagen gebildet wird.",
     "shapeFunctions.detailsTransformation": "Transformation",
     "shapeFunctions.detailsMissingHandling": "Fehlende Werte",
     "shapeFunctions.detailsRationale":

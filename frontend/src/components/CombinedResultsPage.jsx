@@ -6,45 +6,12 @@ import {
   getFeatureDisplayName,
   getShapeFunctionDisplayName,
 } from "../utils/featureDisplay";
-
-const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
-
-const getValidNumericValue = (feature) => {
-  const min = Number.isFinite(feature.min_value) ? feature.min_value : undefined;
-  const max = Number.isFinite(feature.max_value) ? feature.max_value : undefined;
-  let value = Number.isFinite(feature.default_value) ? feature.default_value : 0;
-
-  if (min !== undefined && value < min) {
-    value = min;
-  }
-  if (max !== undefined && value > max) {
-    value = max;
-  }
-
-  return roundToTwoDecimals(value);
-};
-
-const getValidCategoricalValue = (feature) => {
-  const options = feature.categorical_options || [];
-  if (!options.length) {
-    return "";
-  }
-  return options.includes(feature.default_value)
-    ? feature.default_value
-    : options[0];
-};
-
-const buildInitialFormData = (featureSchema = []) => {
-  const initial = {};
-  featureSchema.forEach((feature) => {
-    if (feature.feature_type === "numeric") {
-      initial[feature.name] = getValidNumericValue(feature);
-    } else {
-      initial[feature.name] = getValidCategoricalValue(feature);
-    }
-  });
-  return initial;
-};
+import {
+  buildInitialFormData,
+  coerceFeatureInputValue,
+  featureUsesChoiceInput,
+  getFeatureChoiceOptions,
+} from "../utils/predictionInputs";
 
 const GLASS_CARD_CLASS = "glass-surface-strong p-6 mb-6";
 const GLASS_INSET_CLASS = "rounded-xl border border-slate-200/80 bg-white/85";
@@ -82,12 +49,7 @@ const CombinedPredictionForm = ({
   const handleChange = (feature, value) => {
     setFormData((prev) => ({
       ...prev,
-      [feature.name]:
-        feature.feature_type === "numeric"
-          ? value === ""
-            ? ""
-            : Number(value)
-          : value,
+      [feature.name]: coerceFeatureInputValue(feature, value),
     }));
   };
 
@@ -140,36 +102,49 @@ const CombinedPredictionForm = ({
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {(featureSchema || []).map((feature) => (
-            <div key={feature.name}>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                {getFeatureDisplayName(feature)}
-              </label>
-              {feature.feature_type === "categorical" ? (
-                <select
-                  value={formData[feature.name] ?? ""}
-                  onChange={(e) => handleChange(feature, e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
-                >
-                  {(feature.categorical_options || []).map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="number"
-                  value={formData[feature.name] ?? ""}
-                  onChange={(e) => handleChange(feature, e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
-                  min={Number.isFinite(feature.min_value) ? feature.min_value : undefined}
-                  max={Number.isFinite(feature.max_value) ? feature.max_value : undefined}
-                  step="any"
-                />
-              )}
-            </div>
-          ))}
+          {(featureSchema || []).map((feature) => {
+            const choiceOptions = getFeatureChoiceOptions(feature);
+            const usesChoiceInput = featureUsesChoiceInput(feature);
+
+            return (
+              <div key={feature.name}>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  {getFeatureDisplayName(feature)}
+                </label>
+                {usesChoiceInput ? (
+                  <select
+                    value={String(formData[feature.name] ?? "")}
+                    onChange={(e) => handleChange(feature, e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                  >
+                    {choiceOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="number"
+                    value={formData[feature.name] ?? ""}
+                    onChange={(e) => handleChange(feature, e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 bg-white/95 px-3 py-2 text-sm text-slate-800 shadow-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+                    min={
+                      Number.isFinite(feature.min_value)
+                        ? feature.min_value
+                        : undefined
+                    }
+                    max={
+                      Number.isFinite(feature.max_value)
+                        ? feature.max_value
+                        : undefined
+                    }
+                    step="any"
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <button

@@ -149,6 +149,211 @@ def test_item_mean_provenance_overrides_numeric_domain_to_full_scale(ml_service)
     assert domain == (1.0, 4.0)
 
 
+def test_iqb_scale_provenance_infers_underlying_item_scale(ml_service, tmp_path):
+    dictionary_path = tmp_path / "demo_feature_dictionary.csv"
+    dictionary_path.write_text(
+        "\n".join(
+            [
+                "output_column,role,category,source_variables,source_labels,transformation,selection_rationale",
+                (
+                    '"Schüler:innenerleben – Soziale Integration (Skalenwert)",'
+                    'Prädiktor,'
+                    '"Motivation, affect and self-regulation",'
+                    'Ssoe_1,'
+                    '"Skala - Soziale Eingebundenheit (imputiert)",'
+                    '"Numeric source value; IQB special missing codes replaced with NA",'
+                    '"Social integration may support well-being and classroom participation."'
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "demo_readable_v1_column_mapping.csv").write_text(
+        "\n".join(
+            [
+                "original_spss_variable,description,value_labels",
+                (
+                    'Ssoe01a,'
+                    '"Soziale Eingebundenheit: ich bin beliebt in meiner Klasse",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Ssoe01b,'
+                    '"Soziale Eingebundenheit: die anderen Kinder meiner Klasse kommen mit Problemen zu mir",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Ssoe01c,'
+                    '"Soziale Eingebundenheit: ich habe wirklich gute Freund:innen in der Klasse",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Ssoe01d,'
+                    '"Soziale Eingebundenheit: die anderen Kinder in meiner Klasse mögen mich",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                'Ssoe_1,"Skala - Soziale Eingebundenheit (imputiert)",""',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    provenance = ml_service._load_feature_provenance_from_path(dictionary_path)[
+        "Schüler:innenerleben – Soziale Integration (Skalenwert)"
+    ]
+
+    assert provenance["construction_type"] == "iqb_scale"
+    assert provenance["response_options"] == [
+        {"value": "1.0", "label": "stimmt gar nicht"},
+        {"value": "2.0", "label": "stimmt eher nicht"},
+        {"value": "3.0", "label": "stimmt eher"},
+        {"value": "4.0", "label": "stimmt genau"},
+    ]
+    assert [detail["variable"] for detail in provenance["scale_item_details"]] == [
+        "Ssoe01a",
+        "Ssoe01b",
+        "Ssoe01c",
+        "Ssoe01d",
+    ]
+
+
+def test_iqb_scale_provenance_infers_interest_scale_items(ml_service, tmp_path):
+    dictionary_path = tmp_path / "interest_feature_dictionary.csv"
+    dictionary_path.write_text(
+        "\n".join(
+            [
+                "output_column,role,category,source_variables,source_labels,transformation,selection_rationale",
+                (
+                    '"Deutsch – Interesse (Skalenwert)",'
+                    'Prädiktor,'
+                    '"Motivation, affect and self-regulation",'
+                    'Sind_1,'
+                    '"Skala - Interesse Deutsch (imputiert)",'
+                    '"Numeric source value; IQB special missing codes replaced with NA",'
+                    '"Interest supports sustained engagement with German-language learning."'
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "interest_readable_v1_column_mapping.csv").write_text(
+        "\n".join(
+            [
+                "original_spss_variable,description,value_labels",
+                (
+                    'Sind01a,'
+                    '"Interesse Deutsch: Deutsch ist wichtig",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Sind01b,'
+                    '"Interesse Deutsch: Deutsch macht Spass",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Sind01c,'
+                    '"Interesse Deutsch: Interesse fuer Deutsch",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Sind01d,'
+                    '"Interesse Deutsch: Deutsch ist ein Lieblingsfach von mir",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                'Sind_1,"Skala - Interesse Deutsch (imputiert)",""',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    provenance = ml_service._load_feature_provenance_from_path(dictionary_path)[
+        "Deutsch – Interesse (Skalenwert)"
+    ]
+
+    assert provenance["response_options"] == [
+        {"value": "1.0", "label": "stimmt gar nicht"},
+        {"value": "2.0", "label": "stimmt eher nicht"},
+        {"value": "3.0", "label": "stimmt eher"},
+        {"value": "4.0", "label": "stimmt genau"},
+    ]
+    assert [detail["variable"] for detail in provenance["scale_item_details"]] == [
+        "Sind01a",
+        "Sind01b",
+        "Sind01c",
+        "Sind01d",
+    ]
+
+
+def test_iqb_scale_provenance_infers_anxiety_scale_items_across_prefixes(
+    ml_service,
+    tmp_path,
+):
+    dictionary_path = tmp_path / "anxiety_feature_dictionary.csv"
+    dictionary_path.write_text(
+        "\n".join(
+            [
+                "output_column,role,category,source_variables,source_labels,transformation,selection_rationale",
+                (
+                    '"Deutsch – Angst (Skalenwert)",'
+                    'Prädiktor,'
+                    '"Motivation, affect and self-regulation",'
+                    'Sdeangst_1,'
+                    '"Skala - Angst Deutsch (imputiert)",'
+                    '"Numeric source value; IQB special missing codes replaced with NA",'
+                    '"Anxiety can inhibit learning and performance in German tasks."'
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "anxiety_readable_v1_column_mapping.csv").write_text(
+        "\n".join(
+            [
+                "original_spss_variable,description,value_labels",
+                (
+                    'Sword01a,'
+                    '"Angst Worry Deutsch: Sorgen, dass in einem Deutschtest die Zeit nicht reicht",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Sword01b,'
+                    '"Angst Worry Deutsch: Sorgen, dass mich die Lehrkraft im Deutschunterricht aufruft",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Semod01a,'
+                    '"Angst Emo Deutsch: aufgeregt, wenn in einem Deutschtest die Zeit nicht reicht",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                (
+                    'Semod01b,'
+                    '"Angst Emo Deutsch: aufgeregt, wenn mich die Lehrkraft im Deutschunterricht aufruft",'
+                    '"-99.0 = Auslassen einer Frage | 1.0 = stimmt gar nicht | 2.0 = stimmt eher nicht | 3.0 = stimmt eher | 4.0 = stimmt genau"'
+                ),
+                'Sdeangst_1,"Skala - Angst Deutsch (imputiert)",""',
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    provenance = ml_service._load_feature_provenance_from_path(dictionary_path)[
+        "Deutsch – Angst (Skalenwert)"
+    ]
+
+    assert provenance["response_options"] == [
+        {"value": "1.0", "label": "stimmt gar nicht"},
+        {"value": "2.0", "label": "stimmt eher nicht"},
+        {"value": "3.0", "label": "stimmt eher"},
+        {"value": "4.0", "label": "stimmt genau"},
+    ]
+    assert [detail["variable"] for detail in provenance["scale_item_details"]] == [
+        "Semod01a",
+        "Semod01b",
+        "Sword01a",
+        "Sword01b",
+    ]
+
+
 def test_switching_chart_modes_preserves_both_label_maps(ml_service):
     initial = ml_service.update_feature_chart_setting(
         "month",
