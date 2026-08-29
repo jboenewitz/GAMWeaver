@@ -38,8 +38,11 @@ from .models import (
     ChartDisplaySettingsRequest,
     ChartDisplaySettingsResponse,
     ShapeFunctionsResponse,
+    ModelComparePreviewRequest,
+    ModelComparePreviewResponse,
+    ModelComparePrepareResponse,
 )
-from .ml_service import ml_service
+from .ml_service import ml_service, _json_safe
 from .db_service import db_service
 from .config import settings
 from .security import create_admin_token, verify_admin_token
@@ -86,6 +89,24 @@ def _extract_prediction_features(payload: Dict[str, Any]) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail="'features' must be an object")
         return features
     return payload
+
+
+async def _read_uploaded_json_artifact(file: UploadFile) -> Dict[str, Any]:
+    file_name = (file.filename or "").strip()
+    if file_name and not file_name.lower().endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only JSON model artifacts are supported")
+
+    raw_bytes = await file.read()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    try:
+        return json.loads(raw_bytes.decode("utf-8"))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to parse JSON artifact: {exc}",
+        ) from exc
 
 
 def _require_destructive_access(request: Request) -> None:
@@ -368,6 +389,90 @@ async def import_model(http_request: Request, file: UploadFile = File(...)):
         else:
             db_service.clear_all_shape_edits()
         return ModelImportResponse(**result)
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/model-compare/prepare", response_model=ModelComparePrepareResponse)
+async def prepare_model_compare(
+    http_request: Request,
+    left_file: UploadFile = File(...),
+    right_file: UploadFile = File(...),
+):
+    """Validate two model artifacts and return a preview-only comparison payload."""
+    try:
+        _require_superadmin(http_request)
+        left_artifact = await _read_uploaded_json_artifact(left_file)
+        right_artifact = await _read_uploaded_json_artifact(right_file)
+
+        left_prepared = ml_service.prepare_model_compare_artifact(
+            left_artifact,
+            filename=left_file.filename or "left-artifact.json",
+        )
+        right_prepared = ml_service.prepare_model_compare_artifact(
+            right_artifact,
+            filename=right_file.filename or "right-artifact.json",
+        )
+
+        shared_features = ml_service._validate_model_compare_pair(
+            left_prepared,
+            right_prepared,
+        )
+        left_selected_submission_ids = [
+            str(submission.get("submission_id"))
+            for feature in left_prepared.get("submissions_by_feature") or []
+            for submission in feature.get("submissions") or []
+            if submission.get("submission_id")
+        ]
+        right_selected_submission_ids = [
+            str(submission.get("submission_id"))
+            for feature in right_prepared.get("submissions_by_feature") or []
+            for submission in feature.get("submissions") or []
+            if submission.get("submission_id")
+        ]
+        preview = ml_service.build_model_compare_preview(
+            left_artifact=left_prepared,
+            right_artifact=right_prepared,
+            left_selected_submission_ids=left_selected_submission_ids,
+            right_selected_submission_ids=right_selected_submission_ids,
+            use_confidence=True,
+            feature_names=shared_features,
+        )
+        return ModelComparePrepareResponse(
+            left_artifact=left_prepared,
+            right_artifact=right_prepared,
+            shared_features=shared_features,
+            preview=ModelComparePreviewResponse(**preview),
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/model-compare/preview", response_model=ModelComparePreviewResponse)
+async def preview_model_compare(
+    request: ModelComparePreviewRequest,
+    http_request: Request,
+):
+    """Recompute an isolated comparison preview from prepared artifact payloads."""
+    try:
+        _require_superadmin(http_request)
+        preview = ml_service.build_model_compare_preview(
+            left_artifact=_json_safe(request.left_artifact.dict()),
+            right_artifact=_json_safe(request.right_artifact.dict()),
+            left_selected_submission_ids=list(request.left_selected_submission_ids),
+            right_selected_submission_ids=list(request.right_selected_submission_ids),
+            use_confidence=bool(request.use_confidence),
+            feature_names=list(request.feature_names) if request.feature_names else None,
+        )
+        return ModelComparePreviewResponse(**preview)
     except HTTPException:
         raise
     except ValueError as e:

@@ -367,3 +367,112 @@ class ChartDisplaySettingsResponse(BaseModel):
     """Response with global chart-display settings."""
     show_missing_bars: bool
     show_competence_levels: bool
+
+
+class ModelCompareArtifactMetadata(BaseModel):
+    """Summary metadata for one uploaded model artifact."""
+    filename: str
+    exported_at: Optional[str] = None
+    dataset_name: Optional[str] = None
+    dataset_id: Optional[str] = None
+    target_column: str
+    selected_feature_count: int
+    has_edit_export: bool = False
+    edit_user_count: int = 0
+    edit_submission_count: int = 0
+    model_source: Optional[str] = None
+    artifact_version: Optional[str] = None
+
+
+class ModelCompareShapeFunction(BaseModel):
+    """Canonical base shape function extracted from an artifact."""
+    feature_name: str
+    feature_type: str
+    x_values: List[Any]
+    y_values: List[float]
+    x_tick_labels: Optional[List[str]] = None
+    chart_config: Optional[Dict[str, Any]] = None
+
+
+class ModelCompareEditedPoint(BaseModel):
+    """One stored edit point included in a compare submission."""
+    x_value: Any
+    y_value: float
+    weight: float = 0.5
+    message: str = ""
+    display_x_value: Optional[Any] = None
+
+
+class ModelCompareSubmission(BaseModel):
+    """One imported user edit submission available for preview selection."""
+    submission_id: str
+    feature_name: str
+    feature_type: str
+    user_name: str
+    profession: Optional[str] = None
+    message: str = ""
+    sureness: int = 0
+    point_count: int = 0
+    x_summary: str = ""
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    edited_points: List[ModelCompareEditedPoint] = Field(default_factory=list)
+
+
+class ModelCompareFeatureSubmissions(BaseModel):
+    """Submission tree grouped by feature for the compare page."""
+    feature_name: str
+    feature_type: str
+    submissions: List[ModelCompareSubmission] = Field(default_factory=list)
+
+
+class ModelComparePreparedArtifact(BaseModel):
+    """Canonical compare payload for one uploaded model artifact."""
+    metadata: ModelCompareArtifactMetadata
+    selected_feature_columns: List[str]
+    cat_features: List[str] = Field(default_factory=list)
+    num_features: List[str] = Field(default_factory=list)
+    shape_functions: List[ModelCompareShapeFunction] = Field(default_factory=list)
+    submissions_by_feature: List[ModelCompareFeatureSubmissions] = Field(
+        default_factory=list
+    )
+
+
+class ModelCompareFeaturePreview(BaseModel):
+    """Combined left/right preview for one feature."""
+    feature_name: str
+    feature_type: str
+    left_x_values: List[Any]
+    left_x_tick_labels: Optional[List[str]] = None
+    right_x_values: List[Any]
+    right_x_tick_labels: Optional[List[str]] = None
+    left_base_y_values: List[float]
+    left_effective_y_values: List[float]
+    right_base_y_values: List[float]
+    right_effective_y_values: List[float]
+    left_chart_config: Optional[Dict[str, Any]] = None
+    right_chart_config: Optional[Dict[str, Any]] = None
+
+
+class ModelComparePreviewRequest(BaseModel):
+    """Request to recompute a compare preview from canonical artifacts."""
+    left_artifact: ModelComparePreparedArtifact
+    right_artifact: ModelComparePreparedArtifact
+    left_selected_submission_ids: List[str] = Field(default_factory=list)
+    right_selected_submission_ids: List[str] = Field(default_factory=list)
+    use_confidence: bool = True
+    feature_names: Optional[List[str]] = None
+
+
+class ModelComparePreviewResponse(BaseModel):
+    """Response with recalculated preview traces for compared features."""
+    use_confidence: bool = True
+    feature_previews: List[ModelCompareFeaturePreview] = Field(default_factory=list)
+
+
+class ModelComparePrepareResponse(BaseModel):
+    """Response after validating two uploaded model artifacts for comparison."""
+    left_artifact: ModelComparePreparedArtifact
+    right_artifact: ModelComparePreparedArtifact
+    shared_features: List[str] = Field(default_factory=list)
+    preview: ModelComparePreviewResponse

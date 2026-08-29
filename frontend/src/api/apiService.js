@@ -122,6 +122,26 @@ export const apiService = {
     return response.data;
   },
 
+  prepareModelComparison: async (leftFile, rightFile) => {
+    const formData = new FormData();
+    formData.append("left_file", leftFile);
+    formData.append("right_file", rightFile);
+    const response = await api.post("/model-compare/prepare", formData, {
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
+  previewModelComparison: async (payload) => {
+    const response = await api.post("/model-compare/preview", payload, {
+      headers: adminHeaders(),
+    });
+    return response.data;
+  },
+
   getModelStatus: async () => {
     const response = await api.get("/model/status");
     return response.data;

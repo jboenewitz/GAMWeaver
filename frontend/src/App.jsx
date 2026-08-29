@@ -12,6 +12,7 @@ import DataSummaryCard from "./components/DataSummaryCard";
 import UserLogin from "./components/UserLogin";
 import CombinedResultsPage from "./components/CombinedResultsPage";
 import SuperadminPage from "./components/SuperadminPage";
+import ModelComparePage from "./components/ModelComparePage";
 import LanguageToggleButton from "./components/LanguageToggleButton";
 import {
   createTranslator,
@@ -62,7 +63,7 @@ function App() {
 
   // User state
   const [currentUser, setCurrentUser] = useState(null);
-  const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined', 'superadmin'
+  const [currentPage, setCurrentPage] = useState("login"); // 'login', 'main', 'combined', 'superadmin', 'modelCompare'
   const hasSuperadminSession = Boolean(
     currentUser?.is_superadmin && localStorage.getItem("superadminToken"),
   );
@@ -137,10 +138,13 @@ function App() {
   }, [currentPage, currentUser]);
 
   useEffect(() => {
-    if (currentPage === "superadmin" && !currentUser?.is_superadmin) {
+    if (
+      (currentPage === "superadmin" || currentPage === "modelCompare") &&
+      !hasSuperadminSession
+    ) {
       setCurrentPage("main");
     }
-  }, [currentPage, currentUser]);
+  }, [currentPage, hasSuperadminSession]);
 
   const checkForNotifications = async () => {
     if (!currentUser) return;
@@ -734,11 +738,21 @@ function App() {
     );
   }
 
-  if (currentPage === "superadmin" && currentUser?.is_superadmin) {
+  if (currentPage === "modelCompare" && hasSuperadminSession) {
+    return (
+      <ModelComparePage
+        onBack={() => setCurrentPage("superadmin")}
+        language={language}
+      />
+    );
+  }
+
+  if (currentPage === "superadmin" && hasSuperadminSession) {
     return (
       <SuperadminPage
         onBack={() => setCurrentPage("main")}
         onOpenCombined={() => setCurrentPage("combined")}
+        onOpenModelCompare={() => setCurrentPage("modelCompare")}
         onResetDatabase={handleResetDatabase}
         onExportModel={handleExportModelArtifact}
         onImportModel={handleImportModelArtifact}

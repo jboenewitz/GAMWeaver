@@ -433,6 +433,7 @@ const translations = {
     "superadmin.compareLoadError": "Failed to load comparison dataset",
     "superadmin.title": "Superadmin Overview",
     "superadmin.openCombined": "Open Combined Results",
+    "superadmin.openModelCompare": "Compare Model Exports",
     "superadmin.compareDatasets": "Compare datasets",
     "superadmin.compareDatasetsDescription":
       "Upload a second dataset, train it with the primary estimator count, and overlay its shape functions in the interactive charts.",
@@ -500,6 +501,55 @@ const translations = {
     "superadmin.exportIncludeEdits":
       "Include saved shape-function edits",
     "superadmin.exportConfirmAction": "Export Artifact",
+    "modelCompare.title": "Exported Model Comparison",
+    "modelCompare.subtitle":
+      "Upload two exported model JSON artifacts and compare their base and edited feature shapes.",
+    "modelCompare.previewOnly": "Preview only - live model remains unchanged",
+    "modelCompare.leftArtifact": "Left artifact",
+    "modelCompare.rightArtifact": "Right artifact",
+    "modelCompare.leftArtifactSelections": "Left artifact selections",
+    "modelCompare.rightArtifactSelections": "Right artifact selections",
+    "modelCompare.noFileChosen": "No file chosen yet",
+    "modelCompare.compareArtifacts": "Compare artifacts",
+    "modelCompare.instructions":
+      "Both uploads must be exported model JSON files with the same target column and selected feature set.",
+    "modelCompare.preparing": "Preparing comparison...",
+    "modelCompare.prepareError": "Failed to prepare model comparison",
+    "modelCompare.previewError": "Failed to recompute comparison preview",
+    "modelCompare.chooseBothFiles":
+      "Please choose both exported JSON files before comparing them.",
+    "modelCompare.exportedAt": "Exported at",
+    "modelCompare.dataset": "Dataset",
+    "modelCompare.features": "Features",
+    "modelCompare.editExport": "Edit export",
+    "modelCompare.selectedSubmissions": "Selected submissions",
+    "modelCompare.selectionHint":
+      "Select or deselect imported user submissions to preview their effect.",
+    "modelCompare.selected": "selected",
+    "modelCompare.noImportedEdits":
+      "This artifact does not include imported user edit submissions.",
+    "modelCompare.confidence": "Confidence",
+    "modelCompare.points": "points",
+    "modelCompare.xSummary": "X summary",
+    "modelCompare.chartControls": "Chart controls",
+    "modelCompare.chartControlsDescription":
+      "Switch between confidence-weighted and equal-weight preview, search features, and jump to a chart.",
+    "modelCompare.confidenceOn": "Confidence weighting on",
+    "modelCompare.confidenceOff": "Confidence weighting off",
+    "modelCompare.confidenceDescription":
+      "When off, selected submissions are averaged equally instead of using their saved confidence.",
+    "modelCompare.searchFeatures": "Search features",
+    "modelCompare.jumpToFeature": "Jump to feature",
+    "modelCompare.featureCharts": "Feature charts",
+    "modelCompare.featureChartsDescription":
+      "Dashed traces show each artifact's base shape. Solid traces show the preview after applying selected submissions.",
+    "modelCompare.recomputing": "Recomputing preview...",
+    "modelCompare.noMatchingFeatures":
+      "No feature charts match the current search.",
+    "modelCompare.leftBase": "Left base",
+    "modelCompare.leftEffective": "Left effective",
+    "modelCompare.rightBase": "Right base",
+    "modelCompare.rightEffective": "Right effective",
   },
   de: {
     "language.switchToEnglish": "Sprache auf Englisch umstellen",
@@ -972,6 +1022,7 @@ const translations = {
       "Vergleichsdatensatz konnte nicht geladen werden",
     "superadmin.title": "Superadmin-Übersicht",
     "superadmin.openCombined": "Kombinierte Ergebnisse öffnen",
+    "superadmin.openModelCompare": "Modellexporte vergleichen",
     "superadmin.compareDatasets": "Datensätze vergleichen",
     "superadmin.compareDatasetsDescription":
       "Lade einen zweiten Datensatz hoch, trainiere ihn mit der Estimator-Anzahl des primären Modells und lege seine Shape-Funktionen über die interaktiven Diagramme.",
@@ -1042,6 +1093,58 @@ const translations = {
     "superadmin.exportIncludeEdits":
       "Gespeicherte Shape-Function-Bearbeitungen einschließen",
     "superadmin.exportConfirmAction": "Artefakt exportieren",
+    "modelCompare.title": "Vergleich exportierter Modelle",
+    "modelCompare.subtitle":
+      "Zwei exportierte Modell-JSON-Dateien hochladen und ihre Basis- und bearbeiteten Feature-Shapes vergleichen.",
+    "modelCompare.previewOnly":
+      "Nur Vorschau - das Live-Modell bleibt unverändert",
+    "modelCompare.leftArtifact": "Linkes Artefakt",
+    "modelCompare.rightArtifact": "Rechtes Artefakt",
+    "modelCompare.leftArtifactSelections": "Auswahl linkes Artefakt",
+    "modelCompare.rightArtifactSelections": "Auswahl rechtes Artefakt",
+    "modelCompare.noFileChosen": "Noch keine Datei ausgewählt",
+    "modelCompare.compareArtifacts": "Artefakte vergleichen",
+    "modelCompare.instructions":
+      "Beide Uploads müssen exportierte Modell-JSON-Dateien mit derselben Zielspalte und derselben Feature-Auswahl sein.",
+    "modelCompare.preparing": "Vergleich wird vorbereitet...",
+    "modelCompare.prepareError":
+      "Modellvergleich konnte nicht vorbereitet werden",
+    "modelCompare.previewError":
+      "Vergleichsvorschau konnte nicht neu berechnet werden",
+    "modelCompare.chooseBothFiles":
+      "Bitte wähle beide exportierten JSON-Dateien aus, bevor du sie vergleichst.",
+    "modelCompare.exportedAt": "Exportiert am",
+    "modelCompare.dataset": "Datensatz",
+    "modelCompare.features": "Features",
+    "modelCompare.editExport": "Edit-Export",
+    "modelCompare.selectedSubmissions": "Ausgewählte Einreichungen",
+    "modelCompare.selectionHint":
+      "Importierte Benutzereinreichungen auswählen oder abwählen, um ihren Effekt in der Vorschau zu sehen.",
+    "modelCompare.selected": "ausgewählt",
+    "modelCompare.noImportedEdits":
+      "Dieses Artefakt enthält keine importierten Benutzerbearbeitungen.",
+    "modelCompare.confidence": "Sicherheit",
+    "modelCompare.points": "Punkte",
+    "modelCompare.xSummary": "X-Übersicht",
+    "modelCompare.chartControls": "Diagrammsteuerung",
+    "modelCompare.chartControlsDescription":
+      "Zwischen sicherheitsgewichteter und gleich gewichteter Vorschau wechseln, Features suchen und zu einem Diagramm springen.",
+    "modelCompare.confidenceOn": "Sicherheitsgewichtung an",
+    "modelCompare.confidenceOff": "Sicherheitsgewichtung aus",
+    "modelCompare.confidenceDescription":
+      "Wenn aus, werden ausgewählte Einreichungen gleich gewichtet statt mit ihrer gespeicherten Sicherheit.",
+    "modelCompare.searchFeatures": "Features suchen",
+    "modelCompare.jumpToFeature": "Zum Feature springen",
+    "modelCompare.featureCharts": "Feature-Diagramme",
+    "modelCompare.featureChartsDescription":
+      "Gestrichelte Linien zeigen die Basisform jedes Artefakts. Durchgezogene Linien zeigen die Vorschau nach den ausgewählten Einreichungen.",
+    "modelCompare.recomputing": "Vorschau wird neu berechnet...",
+    "modelCompare.noMatchingFeatures":
+      "Keine Feature-Diagramme passen zur aktuellen Suche.",
+    "modelCompare.leftBase": "Linke Basis",
+    "modelCompare.leftEffective": "Linke Vorschau",
+    "modelCompare.rightBase": "Rechte Basis",
+    "modelCompare.rightEffective": "Rechte Vorschau",
   },
 };
 
