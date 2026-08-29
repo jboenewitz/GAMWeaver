@@ -29,6 +29,16 @@ const getSelectedSubmissionIds = (selectionMap = {}) =>
 const countSelected = (selectionMap = {}) =>
   Object.values(selectionMap).filter(Boolean).length;
 
+const getFeatureSubmissions = (artifact, featureName) =>
+  (artifact?.submissions_by_feature || []).find(
+    (feature) => feature?.feature_name === featureName,
+  )?.submissions || [];
+
+const countSelectedForFeature = (artifact, featureName, selectionMap = {}) =>
+  getFeatureSubmissions(artifact, featureName).filter(
+    (submission) => selectionMap?.[submission.submission_id],
+  ).length;
+
 const formatSubmissionMeta = (submission, t) => {
   const parts = [
     submission?.user_name || t("common.unknown"),
@@ -54,11 +64,11 @@ const buildFeatureTitle = (featurePreview) => {
   return getShapeFunctionDisplayName(shapeLike);
 };
 
-const CompareFeatureChart = ({ featurePreview, t }) => {
+const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
   const featureTitle = buildFeatureTitle(featurePreview);
   const isCategorical = featurePreview?.feature_type === "categorical";
 
-  const data = isCategorical
+  const baseTraces = isCategorical
     ? [
         {
           x: featurePreview.left_x_values,
@@ -73,18 +83,6 @@ const CompareFeatureChart = ({ featurePreview, t }) => {
             "</extra>",
         },
         {
-          x: featurePreview.left_x_values,
-          y: featurePreview.left_effective_y_values,
-          type: "bar",
-          name: t("modelCompare.leftEffective"),
-          marker: { color: LEFT_COLORS.effective, opacity: 0.95 },
-          customdata: featurePreview.left_x_tick_labels || featurePreview.left_x_values,
-          hovertemplate:
-            "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
-            t("modelCompare.leftEffective") +
-            "</extra>",
-        },
-        {
           x: featurePreview.right_x_values,
           y: featurePreview.right_base_y_values,
           type: "bar",
@@ -95,6 +93,40 @@ const CompareFeatureChart = ({ featurePreview, t }) => {
           hovertemplate:
             "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
             t("modelCompare.rightBase") +
+            "</extra>",
+        },
+      ]
+    : [
+        {
+          x: featurePreview.left_x_values,
+          y: featurePreview.left_base_y_values,
+          type: "scatter",
+          mode: "lines",
+          name: t("modelCompare.leftBase"),
+          line: { color: LEFT_COLORS.base, dash: "dash", width: 2 },
+        },
+        {
+          x: featurePreview.right_x_values,
+          y: featurePreview.right_base_y_values,
+          type: "scatter",
+          mode: "lines",
+          name: t("modelCompare.rightBase"),
+          line: { color: RIGHT_COLORS.base, dash: "dash", width: 2 },
+        },
+      ];
+
+  const effectiveTraces = isCategorical
+    ? [
+        {
+          x: featurePreview.left_x_values,
+          y: featurePreview.left_effective_y_values,
+          type: "bar",
+          name: t("modelCompare.leftEffective"),
+          marker: { color: LEFT_COLORS.effective, opacity: 0.95 },
+          customdata: featurePreview.left_x_tick_labels || featurePreview.left_x_values,
+          hovertemplate:
+            "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
+            t("modelCompare.leftEffective") +
             "</extra>",
         },
         {
@@ -114,28 +146,12 @@ const CompareFeatureChart = ({ featurePreview, t }) => {
     : [
         {
           x: featurePreview.left_x_values,
-          y: featurePreview.left_base_y_values,
-          type: "scatter",
-          mode: "lines",
-          name: t("modelCompare.leftBase"),
-          line: { color: LEFT_COLORS.base, dash: "dash", width: 2 },
-        },
-        {
-          x: featurePreview.left_x_values,
           y: featurePreview.left_effective_y_values,
           type: "scatter",
           mode: "lines+markers",
           name: t("modelCompare.leftEffective"),
           marker: { color: LEFT_COLORS.effective, size: 5 },
           line: { color: LEFT_COLORS.effective, width: 3 },
-        },
-        {
-          x: featurePreview.right_x_values,
-          y: featurePreview.right_base_y_values,
-          type: "scatter",
-          mode: "lines",
-          name: t("modelCompare.rightBase"),
-          line: { color: RIGHT_COLORS.base, dash: "dash", width: 2 },
         },
         {
           x: featurePreview.right_x_values,
@@ -147,6 +163,10 @@ const CompareFeatureChart = ({ featurePreview, t }) => {
           line: { color: RIGHT_COLORS.effective, width: 3 },
         },
       ];
+
+  const data = showBaseTraces
+    ? [...baseTraces, ...effectiveTraces]
+    : effectiveTraces;
 
   const layout = {
     title: {
@@ -262,103 +282,129 @@ const ArtifactSummaryCard = ({
   );
 };
 
-const ArtifactSubmissionPanel = ({
+const FeatureSelectionModal = ({
+  open,
   artifact,
-  selectionMap,
   artifactKey,
   artifactLabel,
+  featureName,
+  selectionMap,
+  busy,
   t,
+  onClose,
   onToggleSubmission,
 }) => {
-  const hasSubmissions = (artifact?.submissions_by_feature || []).some(
-    (feature) => (feature?.submissions?.length || 0) > 0,
-  );
-
+  if (!open || !featureName) return null;
+  const submissions = getFeatureSubmissions(artifact, featureName);
+  const featureTitle = getShapeFunctionDisplayName({ feature_name: featureName });
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">{artifactLabel}</h3>
-          <p className="text-sm text-slate-600">
-            {t("modelCompare.selectionHint")}
-          </p>
-        </div>
-        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-          {countSelected(selectionMap)} {t("modelCompare.selected")}
-        </div>
-      </div>
-
-      {!hasSubmissions && (
-        <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-          {t("modelCompare.noImportedEdits")}
-        </div>
-      )}
-
-      <div className="space-y-4">
-        {(artifact?.submissions_by_feature || []).map((featureGroup) => {
-          const submissions = featureGroup?.submissions || [];
-          if (!submissions.length) return null;
-          return (
-            <section
-              key={`${artifactKey}-${featureGroup.feature_name}`}
-              className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+      <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              {artifactLabel}
+            </div>
+            <h3 className="mt-1 text-xl font-semibold text-slate-900">
+              {featureTitle}
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              {t("modelCompare.selectionHint")}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+          >
+            <svg
+              className="h-5 w-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              <div className="mb-3">
-                <h4 className="font-semibold text-slate-800">
-                  {getShapeFunctionDisplayName({
-                    feature_name: featureGroup.feature_name,
-                  })}
-                </h4>
-              </div>
-              <div className="space-y-3">
-                {submissions.map((submission) => (
-                  <label
-                    key={submission.submission_id}
-                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(selectionMap?.[submission.submission_id])}
-                      onChange={() =>
-                        onToggleSubmission(
-                          artifactKey,
-                          submission.submission_id,
-                          !selectionMap?.[submission.submission_id],
-                        )
-                      }
-                      className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium text-slate-900">
-                          {submission.user_name}
-                        </span>
-                        {submission.profession && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
-                            {submission.profession}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-600">
-                        {formatSubmissionMeta(submission, t)}
-                      </div>
-                      {submission.x_summary && (
-                        <div className="mt-1 text-xs text-slate-500">
-                          {t("modelCompare.xSummary")}: {submission.x_summary}
-                        </div>
-                      )}
-                      {submission.message && (
-                        <div className="mt-2 text-sm text-slate-700">
-                          {submission.message}
-                        </div>
-                      )}
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+        <div className="border-b border-slate-200 bg-slate-50 px-6 py-3 text-sm text-slate-600">
+          {countSelectedForFeature(artifact, featureName, selectionMap)} /{" "}
+          {submissions.length} {t("modelCompare.selectedSubmissions")}
+        </div>
+
+        <div className="max-h-[60vh] overflow-y-auto px-6 py-5">
+          {!submissions.length && (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+              {t("modelCompare.noImportedEditsForFeature")}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {submissions.map((submission) => (
+              <label
+                key={`${artifactKey}-${submission.submission_id}`}
+                className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3"
+              >
+                <input
+                  type="checkbox"
+                  checked={Boolean(selectionMap?.[submission.submission_id])}
+                  disabled={busy}
+                  onChange={() =>
+                    onToggleSubmission(
+                      artifactKey,
+                      submission.submission_id,
+                      !selectionMap?.[submission.submission_id],
+                    )
+                  }
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium text-slate-900">
+                      {submission.user_name}
+                    </span>
+                    {submission.profession && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        {submission.profession}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    {formatSubmissionMeta(submission, t)}
+                  </div>
+                  {submission.x_summary && (
+                    <div className="mt-1 text-xs text-slate-500">
+                      {t("modelCompare.xSummary")}: {submission.x_summary}
                     </div>
-                  </label>
-                ))}
-              </div>
-            </section>
-          );
-        })}
+                  )}
+                  {submission.message && (
+                    <div className="mt-2 text-sm text-slate-700">
+                      {submission.message}
+                    </div>
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
+          <div className="text-sm text-slate-500">
+            {busy ? t("modelCompare.recomputing") : t("modelCompare.previewOnly")}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
+          >
+            {t("common.close")}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -373,18 +419,22 @@ function ModelComparePage({ onBack, language = "en" }) {
   const [preview, setPreview] = useState(null);
   const [selectionState, setSelectionState] = useState({ left: {}, right: {} });
   const [useConfidence, setUseConfidence] = useState(true);
+  const [showBaseTraces, setShowBaseTraces] = useState(true);
   const [featureSearch, setFeatureSearch] = useState("");
   const [jumpFeature, setJumpFeature] = useState("");
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [selectionModal, setSelectionModal] = useState(null);
 
   const resetPreparedState = () => {
     setComparePayload(null);
     setPreview(null);
     setSelectionState({ left: {}, right: {} });
     setUseConfidence(true);
+    setShowBaseTraces(true);
     setJumpFeature("");
+    setSelectionModal(null);
     setError(null);
   };
 
@@ -488,6 +538,23 @@ function ModelComparePage({ onBack, language = "en" }) {
       block: "start",
     });
   };
+
+  const openSelectionModal = (artifactKey, featureName) => {
+    setSelectionModal({ artifactKey, featureName });
+  };
+
+  const closeSelectionModal = () => {
+    setSelectionModal(null);
+  };
+
+  const modalArtifact =
+    selectionModal?.artifactKey === "left"
+      ? comparePayload?.left_artifact
+      : comparePayload?.right_artifact;
+  const modalSelectionMap =
+    selectionModal?.artifactKey === "left"
+      ? selectionState.left
+      : selectionState.right;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -640,6 +707,25 @@ function ModelComparePage({ onBack, language = "en" }) {
                     </div>
                   </label>
 
+                  <button
+                    type="button"
+                    onClick={() => setShowBaseTraces((current) => !current)}
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                      showBaseTraces
+                        ? "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">
+                      {showBaseTraces
+                        ? t("modelCompare.hideBaseTraces")
+                        : t("modelCompare.showBaseTraces")}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {t("modelCompare.baseTracesDescription")}
+                    </div>
+                  </button>
+
                   <input
                     type="search"
                     value={featureSearch}
@@ -669,25 +755,6 @@ function ModelComparePage({ onBack, language = "en" }) {
                   </div>
                 </div>
               </div>
-            </section>
-
-            <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <ArtifactSubmissionPanel
-                artifact={comparePayload.left_artifact}
-                selectionMap={selectionState.left}
-                artifactKey="left"
-                artifactLabel={t("modelCompare.leftArtifactSelections")}
-                t={t}
-                onToggleSubmission={handleToggleSubmission}
-              />
-              <ArtifactSubmissionPanel
-                artifact={comparePayload.right_artifact}
-                selectionMap={selectionState.right}
-                artifactKey="right"
-                artifactLabel={t("modelCompare.rightArtifactSelections")}
-                t={t}
-                onToggleSubmission={handleToggleSubmission}
-              />
             </section>
 
             <section className="space-y-4">
@@ -731,8 +798,54 @@ function ModelComparePage({ onBack, language = "en" }) {
                           {featurePreview.feature_name}
                         </p>
                       </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openSelectionModal("left", featurePreview.feature_name)
+                          }
+                          className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                        >
+                          {t("modelCompare.editLeftSelections")} (
+                          {countSelectedForFeature(
+                            comparePayload.left_artifact,
+                            featurePreview.feature_name,
+                            selectionState.left,
+                          )}
+                          /
+                          {getFeatureSubmissions(
+                            comparePayload.left_artifact,
+                            featurePreview.feature_name,
+                          ).length}
+                          )
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            openSelectionModal("right", featurePreview.feature_name)
+                          }
+                          className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
+                        >
+                          {t("modelCompare.editRightSelections")} (
+                          {countSelectedForFeature(
+                            comparePayload.right_artifact,
+                            featurePreview.feature_name,
+                            selectionState.right,
+                          )}
+                          /
+                          {getFeatureSubmissions(
+                            comparePayload.right_artifact,
+                            featurePreview.feature_name,
+                          ).length}
+                          )
+                        </button>
+                      </div>
                     </div>
-                    <CompareFeatureChart featurePreview={featurePreview} t={t} />
+                    <CompareFeatureChart
+                      featurePreview={featurePreview}
+                      showBaseTraces={showBaseTraces}
+                      t={t}
+                    />
                   </div>
                 ))}
               </div>
@@ -740,6 +853,23 @@ function ModelComparePage({ onBack, language = "en" }) {
           </>
         )}
       </main>
+
+      <FeatureSelectionModal
+        open={Boolean(selectionModal)}
+        artifact={modalArtifact}
+        artifactKey={selectionModal?.artifactKey}
+        artifactLabel={
+          selectionModal?.artifactKey === "left"
+            ? t("modelCompare.leftArtifactSelections")
+            : t("modelCompare.rightArtifactSelections")
+        }
+        featureName={selectionModal?.featureName}
+        selectionMap={modalSelectionMap}
+        busy={previewLoading}
+        t={t}
+        onClose={closeSelectionModal}
+        onToggleSubmission={handleToggleSubmission}
+      />
     </div>
   );
 }

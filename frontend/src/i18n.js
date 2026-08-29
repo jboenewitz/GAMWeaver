@@ -505,10 +505,10 @@ const translations = {
     "modelCompare.subtitle":
       "Upload two exported model JSON artifacts and compare their base and edited feature shapes.",
     "modelCompare.previewOnly": "Preview only - live model remains unchanged",
-    "modelCompare.leftArtifact": "Left artifact",
-    "modelCompare.rightArtifact": "Right artifact",
-    "modelCompare.leftArtifactSelections": "Left artifact selections",
-    "modelCompare.rightArtifactSelections": "Right artifact selections",
+    "modelCompare.leftArtifact": "Original artifact",
+    "modelCompare.rightArtifact": "Edited artifact",
+    "modelCompare.leftArtifactSelections": "Original artifact selections",
+    "modelCompare.rightArtifactSelections": "Edited artifact selections",
     "modelCompare.noFileChosen": "No file chosen yet",
     "modelCompare.compareArtifacts": "Compare artifacts",
     "modelCompare.instructions":
@@ -528,6 +528,8 @@ const translations = {
     "modelCompare.selected": "selected",
     "modelCompare.noImportedEdits":
       "This artifact does not include imported user edit submissions.",
+    "modelCompare.noImportedEditsForFeature":
+      "This artifact has no imported user edit submissions for this feature.",
     "modelCompare.confidence": "Confidence",
     "modelCompare.points": "points",
     "modelCompare.xSummary": "X summary",
@@ -538,6 +540,10 @@ const translations = {
     "modelCompare.confidenceOff": "Confidence weighting off",
     "modelCompare.confidenceDescription":
       "When off, selected submissions are averaged equally instead of using their saved confidence.",
+    "modelCompare.showBaseTraces": "Show base lines and bars",
+    "modelCompare.hideBaseTraces": "Hide base lines and bars",
+    "modelCompare.baseTracesDescription":
+      "Toggle the original baseline traces for both compared artifacts.",
     "modelCompare.searchFeatures": "Search features",
     "modelCompare.jumpToFeature": "Jump to feature",
     "modelCompare.featureCharts": "Feature charts",
@@ -546,10 +552,12 @@ const translations = {
     "modelCompare.recomputing": "Recomputing preview...",
     "modelCompare.noMatchingFeatures":
       "No feature charts match the current search.",
-    "modelCompare.leftBase": "Left base",
-    "modelCompare.leftEffective": "Left effective",
-    "modelCompare.rightBase": "Right base",
-    "modelCompare.rightEffective": "Right effective",
+    "modelCompare.leftBase": "Original base",
+    "modelCompare.leftEffective": "Original effective",
+    "modelCompare.rightBase": "Edited base",
+    "modelCompare.rightEffective": "Edited effective",
+    "modelCompare.editLeftSelections": "Edit original selections",
+    "modelCompare.editRightSelections": "Edit edited selections",
   },
   de: {
     "language.switchToEnglish": "Sprache auf Englisch umstellen",
@@ -1098,10 +1106,10 @@ const translations = {
       "Zwei exportierte Modell-JSON-Dateien hochladen und ihre Basis- und bearbeiteten Feature-Shapes vergleichen.",
     "modelCompare.previewOnly":
       "Nur Vorschau - das Live-Modell bleibt unverändert",
-    "modelCompare.leftArtifact": "Linkes Artefakt",
-    "modelCompare.rightArtifact": "Rechtes Artefakt",
-    "modelCompare.leftArtifactSelections": "Auswahl linkes Artefakt",
-    "modelCompare.rightArtifactSelections": "Auswahl rechtes Artefakt",
+    "modelCompare.leftArtifact": "Original-Artefakt",
+    "modelCompare.rightArtifact": "Bearbeitetes Artefakt",
+    "modelCompare.leftArtifactSelections": "Auswahl Original-Artefakt",
+    "modelCompare.rightArtifactSelections": "Auswahl bearbeitetes Artefakt",
     "modelCompare.noFileChosen": "Noch keine Datei ausgewählt",
     "modelCompare.compareArtifacts": "Artefakte vergleichen",
     "modelCompare.instructions":
@@ -1123,6 +1131,8 @@ const translations = {
     "modelCompare.selected": "ausgewählt",
     "modelCompare.noImportedEdits":
       "Dieses Artefakt enthält keine importierten Benutzerbearbeitungen.",
+    "modelCompare.noImportedEditsForFeature":
+      "Dieses Artefakt enthält für dieses Feature keine importierten Benutzerbearbeitungen.",
     "modelCompare.confidence": "Sicherheit",
     "modelCompare.points": "Punkte",
     "modelCompare.xSummary": "X-Übersicht",
@@ -1133,6 +1143,10 @@ const translations = {
     "modelCompare.confidenceOff": "Sicherheitsgewichtung aus",
     "modelCompare.confidenceDescription":
       "Wenn aus, werden ausgewählte Einreichungen gleich gewichtet statt mit ihrer gespeicherten Sicherheit.",
+    "modelCompare.showBaseTraces": "Basislinien und Balken anzeigen",
+    "modelCompare.hideBaseTraces": "Basislinien und Balken ausblenden",
+    "modelCompare.baseTracesDescription":
+      "Die ursprünglichen Basistraces für beide verglichenen Artefakte ein- oder ausblenden.",
     "modelCompare.searchFeatures": "Features suchen",
     "modelCompare.jumpToFeature": "Zum Feature springen",
     "modelCompare.featureCharts": "Feature-Diagramme",
@@ -1141,10 +1155,12 @@ const translations = {
     "modelCompare.recomputing": "Vorschau wird neu berechnet...",
     "modelCompare.noMatchingFeatures":
       "Keine Feature-Diagramme passen zur aktuellen Suche.",
-    "modelCompare.leftBase": "Linke Basis",
-    "modelCompare.leftEffective": "Linke Vorschau",
-    "modelCompare.rightBase": "Rechte Basis",
-    "modelCompare.rightEffective": "Rechte Vorschau",
+    "modelCompare.leftBase": "Original-Basis",
+    "modelCompare.leftEffective": "Original-Vorschau",
+    "modelCompare.rightBase": "Bearbeitete Basis",
+    "modelCompare.rightEffective": "Bearbeitete Vorschau",
+    "modelCompare.editLeftSelections": "Original-Auswahl bearbeiten",
+    "modelCompare.editRightSelections": "Bearbeitete Auswahl bearbeiten",
   },
 };
 
