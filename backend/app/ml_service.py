@@ -2945,18 +2945,52 @@ class MLService:
             for shape_function in (right_artifact.get("shape_functions") or [])
         }
         for feature_name in left_features:
+            left_shape = left_shape_map.get(feature_name) or {}
+            right_shape = right_shape_map.get(feature_name) or {}
             left_feature_type = str(
-                (left_shape_map.get(feature_name) or {}).get("feature_type", "")
+                left_shape.get("feature_type", "")
             )
             right_feature_type = str(
-                (right_shape_map.get(feature_name) or {}).get("feature_type", "")
+                right_shape.get("feature_type", "")
             )
             if left_feature_type != right_feature_type:
                 raise ValueError(
                     f"Compared artifacts must render feature '{feature_name}' with the same chart type"
                 )
+            left_x_values = list(left_shape.get("x_values") or [])
+            right_x_values = list(right_shape.get("x_values") or [])
+            if len(left_x_values) != len(right_x_values):
+                raise ValueError(
+                    f"Compared artifacts must use aligned x_values for feature '{feature_name}'"
+                )
+            if left_x_values != right_x_values:
+                raise ValueError(
+                    f"Compared artifacts must use the same x_values order for feature '{feature_name}'"
+                )
 
         return left_features
+
+    @staticmethod
+    def _compute_compare_mae(
+        baseline_y_values: List[float],
+        effective_y_values: List[float],
+    ) -> float:
+        if len(baseline_y_values) != len(effective_y_values):
+            raise ValueError("Cannot compute compare MAE for misaligned feature values")
+        if not baseline_y_values:
+            return 0.0
+        return float(mean_absolute_error(baseline_y_values, effective_y_values))
+
+    @staticmethod
+    def _compare_mae_status(
+        current_mae: float,
+        baseline_mae: float,
+    ) -> str:
+        if abs(current_mae - baseline_mae) < 0.000001:
+            return "unchanged"
+        if current_mae < baseline_mae:
+            return "decreased"
+        return "increased"
 
     @staticmethod
     def _collect_compare_offsets(
@@ -3091,6 +3125,23 @@ class MLService:
                 )
                 right_effective_y_values.append(float(base_y) + float(offset))
 
+            baseline_edited_vs_edited_base_mae = self._compute_compare_mae(
+                right_base_y_values,
+                right_base_y_values,
+            )
+            baseline_edited_vs_original_base_mae = self._compute_compare_mae(
+                left_base_y_values,
+                right_base_y_values,
+            )
+            edited_vs_edited_base_mae = self._compute_compare_mae(
+                right_base_y_values,
+                right_effective_y_values,
+            )
+            edited_vs_original_base_mae = self._compute_compare_mae(
+                left_base_y_values,
+                right_effective_y_values,
+            )
+
             feature_previews.append(
                 {
                     "feature_name": feature_name,
@@ -3105,6 +3156,20 @@ class MLService:
                     "right_effective_y_values": right_effective_y_values,
                     "left_chart_config": left_shape.get("chart_config") or {},
                     "right_chart_config": right_shape.get("chart_config") or {},
+                    "mae_metrics": {
+                        "edited_vs_edited_base_mae": edited_vs_edited_base_mae,
+                        "edited_vs_original_base_mae": edited_vs_original_base_mae,
+                        "baseline_edited_vs_edited_base_mae": baseline_edited_vs_edited_base_mae,
+                        "baseline_edited_vs_original_base_mae": baseline_edited_vs_original_base_mae,
+                        "edited_vs_edited_base_status": self._compare_mae_status(
+                            edited_vs_edited_base_mae,
+                            baseline_edited_vs_edited_base_mae,
+                        ),
+                        "edited_vs_original_base_status": self._compare_mae_status(
+                            edited_vs_original_base_mae,
+                            baseline_edited_vs_original_base_mae,
+                        ),
+                    },
                 }
             )
 

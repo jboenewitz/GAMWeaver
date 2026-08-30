@@ -552,6 +552,11 @@ const translations = {
     "modelCompare.recomputing": "Recomputing preview...",
     "modelCompare.noMatchingFeatures":
       "No feature charts match the current search.",
+    "modelCompare.maeVsEditedBase": "Edited vs edited base",
+    "modelCompare.maeVsOriginalBase": "Edited vs original base",
+    "modelCompare.maeImproved": "Improved",
+    "modelCompare.maeWorsened": "Worsened",
+    "modelCompare.maeUnchanged": "Unchanged",
     "modelCompare.leftBase": "Original base",
     "modelCompare.leftEffective": "Original effective",
     "modelCompare.rightBase": "Edited base",
@@ -1155,6 +1160,11 @@ const translations = {
     "modelCompare.recomputing": "Vorschau wird neu berechnet...",
     "modelCompare.noMatchingFeatures":
       "Keine Feature-Diagramme passen zur aktuellen Suche.",
+    "modelCompare.maeVsEditedBase": "Bearbeitet vs bearbeitete Basis",
+    "modelCompare.maeVsOriginalBase": "Bearbeitet vs Original-Basis",
+    "modelCompare.maeImproved": "Verbessert",
+    "modelCompare.maeWorsened": "Verschlechtert",
+    "modelCompare.maeUnchanged": "Unverändert",
     "modelCompare.leftBase": "Original-Basis",
     "modelCompare.leftEffective": "Original-Vorschau",
     "modelCompare.rightBase": "Bearbeitete Basis",

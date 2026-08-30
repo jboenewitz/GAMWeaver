@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import Plot from "react-plotly.js";
 import apiService from "../api/apiService";
-import { createTranslator, getDateLocale } from "../i18n";
+import { createTranslator, getDateLocale, getNumberLocale } from "../i18n";
 import { getShapeFunctionDisplayName } from "../utils/featureDisplay";
 
 const LEFT_COLORS = {
@@ -53,6 +53,39 @@ const formatArtifactDate = (value, language) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
   return parsed.toLocaleString(getDateLocale(language));
+};
+
+const formatMaeValue = (value, language) => {
+  if (!Number.isFinite(value)) return "-";
+  return new Intl.NumberFormat(getNumberLocale(language), {
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3,
+  }).format(value);
+};
+
+const getMaeTone = (status) => {
+  if (status === "decreased") {
+    return {
+      container: "border-emerald-200 bg-emerald-50",
+      label: "text-emerald-700",
+      value: "text-emerald-900",
+      status: "text-emerald-700",
+    };
+  }
+  if (status === "increased") {
+    return {
+      container: "border-rose-200 bg-rose-50",
+      label: "text-rose-700",
+      value: "text-rose-900",
+      status: "text-rose-700",
+    };
+  }
+  return {
+    container: "border-slate-200 bg-slate-50",
+    label: "text-slate-600",
+    value: "text-slate-900",
+    status: "text-slate-600",
+  };
 };
 
 const buildFeatureTitle = (featurePreview) => {
@@ -205,6 +238,28 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
         config={{ responsive: true, displayModeBar: false }}
         className="w-full"
       />
+    </div>
+  );
+};
+
+const FeatureMaeBadge = ({ label, mae, status, language, t }) => {
+  const tone = getMaeTone(status);
+  const statusLabel =
+    status === "decreased"
+      ? t("modelCompare.maeImproved")
+      : status === "increased"
+        ? t("modelCompare.maeWorsened")
+        : t("modelCompare.maeUnchanged");
+
+  return (
+    <div className={`rounded-2xl border px-3 py-2 ${tone.container}`}>
+      <div className={`text-[11px] font-semibold uppercase tracking-wide ${tone.label}`}>
+        {label}
+      </div>
+      <div className={`mt-1 text-base font-semibold ${tone.value}`}>
+        {t("combined.mae")}: {formatMaeValue(mae, language)}
+      </div>
+      <div className={`text-xs ${tone.status}`}>{statusLabel}</div>
     </div>
   );
 };
@@ -789,16 +844,44 @@ function ModelComparePage({ onBack, language = "en" }) {
                     }}
                     className="space-y-3"
                   >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      <div className="space-y-3">
                         <h3 className="text-base font-semibold text-slate-900">
                           {buildFeatureTitle(featurePreview)}
                         </h3>
                         <p className="text-sm text-slate-500">
                           {featurePreview.feature_name}
                         </p>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <FeatureMaeBadge
+                            label={t("modelCompare.maeVsEditedBase")}
+                            mae={
+                              featurePreview?.mae_metrics
+                                ?.edited_vs_edited_base_mae
+                            }
+                            status={
+                              featurePreview?.mae_metrics
+                                ?.edited_vs_edited_base_status
+                            }
+                            language={language}
+                            t={t}
+                          />
+                          <FeatureMaeBadge
+                            label={t("modelCompare.maeVsOriginalBase")}
+                            mae={
+                              featurePreview?.mae_metrics
+                                ?.edited_vs_original_base_mae
+                            }
+                            status={
+                              featurePreview?.mae_metrics
+                                ?.edited_vs_original_base_status
+                            }
+                            language={language}
+                            t={t}
+                          />
+                        </div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                         <button
                           type="button"
                           onClick={() =>

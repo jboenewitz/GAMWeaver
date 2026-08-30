@@ -438,6 +438,16 @@ class ModelComparePreparedArtifact(BaseModel):
     )
 
 
+class ModelCompareFeatureMaeMetrics(BaseModel):
+    """Per-feature MAE metrics for the edited artifact preview."""
+    edited_vs_edited_base_mae: float
+    edited_vs_original_base_mae: float
+    baseline_edited_vs_edited_base_mae: float
+    baseline_edited_vs_original_base_mae: float
+    edited_vs_edited_base_status: str
+    edited_vs_original_base_status: str
+
+
 class ModelCompareFeaturePreview(BaseModel):
     """Combined left/right preview for one feature."""
     feature_name: str
@@ -452,6 +462,7 @@ class ModelCompareFeaturePreview(BaseModel):
     right_effective_y_values: List[float]
     left_chart_config: Optional[Dict[str, Any]] = None
     right_chart_config: Optional[Dict[str, Any]] = None
+    mae_metrics: Optional[ModelCompareFeatureMaeMetrics] = None
 
 
 class ModelComparePreviewRequest(BaseModel):

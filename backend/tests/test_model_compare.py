@@ -133,6 +133,18 @@ def _get_feature_preview(preview, feature_name):
     )
 
 
+def _set_prepared_shape_values(prepared_artifact, feature_name, *, x_values=None, y_values=None):
+    shape_function = next(
+        shape_function
+        for shape_function in prepared_artifact["shape_functions"]
+        if shape_function["feature_name"] == feature_name
+    )
+    if x_values is not None:
+        shape_function["x_values"] = list(x_values)
+    if y_values is not None:
+        shape_function["y_values"] = list(y_values)
+
+
 def test_prepare_model_compare_accepts_valid_artifacts_without_edits(
     ml_service,
 ):
@@ -506,3 +518,260 @@ def test_preview_does_not_mutate_live_runtime_state(ml_service):
     assert ml_service.shape_function_offsets == before_shape_offsets
     assert ml_service.selected_feature_columns == before_selected_features
     assert ml_service.model_source == before_model_source
+
+
+def test_preview_returns_mae_metrics_for_edited_artifact(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-right",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 2.0, "weight": 0.5}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service, target_column="ridership"),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(
+            _build_artifact(ml_service, target_column="ridership"),
+            edits_payload,
+        ),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-right"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+
+    age_preview = _get_feature_preview(preview, "age")
+    assert age_preview["right_effective_y_values"][1] == pytest.approx(2.0)
+    assert age_preview["mae_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.0)
+    assert age_preview["mae_metrics"]["baseline_edited_vs_edited_base_mae"] == pytest.approx(0.0)
+    assert age_preview["mae_metrics"]["edited_vs_edited_base_status"] == "increased"
+    assert age_preview["mae_metrics"]["edited_vs_original_base_mae"] == pytest.approx(1.0)
+    assert age_preview["mae_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert age_preview["mae_metrics"]["edited_vs_original_base_status"] == "increased"
+
+
+def test_preview_mae_status_decreases_when_edits_move_edited_artifact_toward_original(
+    ml_service,
+):
+    original_artifact = _build_artifact(ml_service, target_column="ridership")
+    edited_artifact = _build_artifact(ml_service, target_column="ridership")
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-right",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": -1.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    original = ml_service.prepare_model_compare_artifact(
+        original_artifact,
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(edited_artifact, edits_payload),
+        filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        edited,
+        "age",
+        y_values=[1.0, 2.0, 2.0, 3.0],
+    )
+    edited_submission = edited["submissions_by_feature"][0]["submissions"][0]
+    edited_submission["edited_points"] = [
+        {"x_value": "x:0", "y_value": -1.0, "weight": 1.0},
+        {"x_value": "x:10", "y_value": -1.0, "weight": 1.0},
+        {"x_value": "x:20", "y_value": 0.0, "weight": 1.0},
+        {"x_value": "x:29", "y_value": 0.0, "weight": 1.0},
+    ]
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-right"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+
+    age_preview = _get_feature_preview(preview, "age")
+    assert age_preview["right_effective_y_values"] == pytest.approx([0.0, 1.0, 2.0, 3.0])
+    assert age_preview["mae_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(0.5)
+    assert age_preview["mae_metrics"]["edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert age_preview["mae_metrics"]["edited_vs_original_base_status"] == "decreased"
+
+
+def test_preview_unweighted_mode_changes_edited_mae_metrics(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}, {"name": "bob"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-a",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 2.0, "weight": 0.2}
+                        ],
+                    }
+                ],
+            },
+            {
+                "user_name": "bob",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-b",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 1.0, "weight": 0.8}
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    weighted_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=_all_submission_ids(edited),
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    unweighted_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=_all_submission_ids(edited),
+        use_confidence=False,
+        feature_names=["age"],
+    )
+
+    weighted_age = _get_feature_preview(weighted_preview, "age")
+    unweighted_age = _get_feature_preview(unweighted_preview, "age")
+    assert weighted_age["mae_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(0.6)
+    assert unweighted_age["mae_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.5)
+
+
+def test_preview_supports_categorical_edited_mae_metrics(ml_service):
+    original_artifact = _build_artifact(ml_service, target_column="ridership")
+    edited_artifact = _build_artifact(ml_service, target_column="ridership")
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "month",
+                        "feature_type": "categorical",
+                        "submission_id": "sub-month",
+                        "edited_points": [
+                            {"x_value": "2", "y_value": -0.2, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        original_artifact,
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(edited_artifact, edits_payload),
+        filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        edited,
+        "month",
+        y_values=[0.1, 0.4, 0.3],
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-month"],
+        use_confidence=True,
+        feature_names=["month"],
+    )
+
+    month_preview = _get_feature_preview(preview, "month")
+    assert month_preview["right_effective_y_values"] == pytest.approx(
+        [0.1, 0.2, 0.09999999999999998]
+    )
+    assert month_preview["mae_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(
+        0.06666666666666667
+    )
+    assert month_preview["mae_metrics"]["edited_vs_original_base_mae"] == pytest.approx(
+        0.06666666666666667
+    )
+    assert month_preview["mae_metrics"]["edited_vs_original_base_status"] == "unchanged"
+
+
+def test_prepare_model_compare_rejects_unaligned_feature_x_values(ml_service):
+    original_artifact = _build_artifact(ml_service, target_column="ridership")
+    edited_artifact = _build_artifact(ml_service, target_column="ridership")
+    original = ml_service.prepare_model_compare_artifact(
+        original_artifact,
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        edited_artifact,
+        filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        edited,
+        "age",
+        x_values=[0.0, 12.0, 20.0, 29.0],
+    )
+
+    with pytest.raises(ValueError, match="same x_values order"):
+        ml_service._validate_model_compare_pair(original, edited)
