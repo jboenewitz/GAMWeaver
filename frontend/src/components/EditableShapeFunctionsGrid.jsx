@@ -283,19 +283,6 @@ const hasShapeFunctionDistribution = (distribution) => {
 const getFeatureProvenance = (featureSchemaEntry) =>
   featureSchemaEntry?.feature_provenance || null;
 
-const getConstructionLabel = (constructionType, t) => {
-  switch (constructionType) {
-    case "item_mean":
-      return t("shapeFunctions.detailsItemMean");
-    case "iqb_scale":
-      return t("shapeFunctions.detailsIqbScale");
-    case "raw_source":
-      return t("shapeFunctions.detailsRawSource");
-    default:
-      return t("shapeFunctions.detailsUnknownConstruction");
-  }
-};
-
 const getDistributionCountSummary = (distribution, showMissingBars = false) => {
   if (!distribution || typeof distribution !== "object") return null;
 
@@ -386,9 +373,6 @@ const FeatureDetailsDrawer = ({
   const featureDisplayName =
     getFeatureDisplayName(featureSchemaEntry) || featureName;
   const sourceRows = buildSourceRows(provenance);
-  const sourceVariables = Array.isArray(provenance?.source_variables)
-    ? provenance.source_variables
-    : [];
   const scaleItemRows = Array.isArray(provenance?.scale_item_details)
     ? provenance.scale_item_details.filter(
         (row) => row && (row.variable || row.label),
@@ -398,10 +382,6 @@ const FeatureDetailsDrawer = ({
     ? provenance.response_options
     : [];
   const hasMetadata = Boolean(provenance);
-  const constructionLabel = getConstructionLabel(
-    provenance?.construction_type,
-    t,
-  );
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -465,27 +445,6 @@ const FeatureDetailsDrawer = ({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {t("shapeFunctions.detailsConstruction")}
-              </div>
-              <div className="mt-1 text-sm font-medium text-slate-800">
-                {constructionLabel}
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {t("shapeFunctions.detailsCategory")}
-              </div>
-              <div className="mt-1 text-sm font-medium text-slate-800">
-                {provenance?.category ||
-                  featureSchemaEntry?.feature_type ||
-                  t("common.unknown")}
-              </div>
-            </div>
-          </div>
-
           {provenance?.source_count > 0 && (
             <div className="mt-4 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
               {t("shapeFunctions.detailsSourceCount", {
@@ -498,24 +457,6 @@ const FeatureDetailsDrawer = ({
             <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               {t("shapeFunctions.detailsUnavailable")}
             </div>
-          )}
-
-          {sourceVariables.length > 0 && (
-            <section className="mt-6">
-              <h4 className="text-sm font-semibold text-slate-800">
-                {t("shapeFunctions.detailsSourceVariables")}
-              </h4>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {sourceVariables.map((variable) => (
-                  <code
-                    key={variable}
-                    className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                  >
-                    {variable}
-                  </code>
-                ))}
-              </div>
-            </section>
           )}
 
           {sharedResponseOptions.length > 0 && (
@@ -614,39 +555,6 @@ const FeatureDetailsDrawer = ({
             </section>
           )}
 
-          {provenance?.transformation && (
-            <section className="mt-6">
-              <h4 className="text-sm font-semibold text-slate-800">
-                {t("shapeFunctions.detailsTransformation")}
-              </h4>
-              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                {provenance.transformation}
-              </p>
-            </section>
-          )}
-
-          {provenance?.missing_value_handling &&
-            provenance.missing_value_handling !== provenance.transformation && (
-              <section className="mt-6">
-                <h4 className="text-sm font-semibold text-slate-800">
-                  {t("shapeFunctions.detailsMissingHandling")}
-                </h4>
-                <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                  {provenance.missing_value_handling}
-                </p>
-              </section>
-            )}
-
-          {provenance?.selection_rationale && (
-            <section className="mt-6">
-              <h4 className="text-sm font-semibold text-slate-800">
-                {t("shapeFunctions.detailsRationale")}
-              </h4>
-              <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                {provenance.selection_rationale}
-              </p>
-            </section>
-          )}
         </div>
       </aside>
     </div>,
@@ -800,6 +708,11 @@ const EditableShapeFunctionChart = ({
   useEffect(() => {
     preciseEntryOpenRef.current = preciseEntry !== null;
   }, [preciseEntry]);
+
+  const clearCategoricalHover = useCallback(() => {
+    setHoveredPoint(null);
+    hoveredPointRef.current = null;
+  }, []);
 
   const stopDragInteraction = useCallback(() => {
     setIsDragging(false);
@@ -1094,6 +1007,8 @@ const EditableShapeFunctionChart = ({
     const handleMouseUp = (e) => {
       if (!isDraggingRef.current || preciseEntryOpenRef.current) {
         stopDragInteraction();
+        clearCategoricalHover();
+        lastMouseDownRef.current = { time: 0, pointIndex: null, xValue: null };
         return;
       }
       e.preventDefault();
@@ -1108,6 +1023,8 @@ const EditableShapeFunctionChart = ({
       }
 
       stopDragInteraction();
+      clearCategoricalHover();
+      lastMouseDownRef.current = { time: 0, pointIndex: null, xValue: null };
     };
 
     window.addEventListener("mousemove", handleMouseMove);
@@ -1127,6 +1044,7 @@ const EditableShapeFunctionChart = ({
     onPointEdit,
     clientYToDataY,
     stopDragInteraction,
+    clearCategoricalHover,
   ]);
 
   // ---- Numeric continuous drag effect (mousemove / mouseup on window) ----
@@ -1222,7 +1140,7 @@ const EditableShapeFunctionChart = ({
     (eventData) => {
       if (isNumeric || !isEditing) return;
       if (!eventData.points || eventData.points.length === 0) {
-        setHoveredPoint(null);
+        clearCategoricalHover();
         return;
       }
       const point = eventData.points[0];
@@ -1231,20 +1149,18 @@ const EditableShapeFunctionChart = ({
         setHoveredPoint(point.pointIndex);
         hoveredPointRef.current = point.pointIndex;
       } else {
-        setHoveredPoint(null);
-        hoveredPointRef.current = null;
+        clearCategoricalHover();
       }
     },
-    [isNumeric, isEditing, hasEdits],
+    [isNumeric, isEditing, hasEdits, clearCategoricalHover],
   );
 
   const handleUnhover = useCallback(() => {
     if (isNumeric) return;
     if (!isDragging) {
-      setHoveredPoint(null);
-      hoveredPointRef.current = null;
+      clearCategoricalHover();
     }
-  }, [isNumeric, isDragging]);
+  }, [isNumeric, isDragging, clearCategoricalHover]);
 
   // ---- Categorical: native mousedown (hover-then-click) ----
   useEffect(() => {
@@ -1254,8 +1170,7 @@ const EditableShapeFunctionChart = ({
 
     const onMouseDown = (e) => {
       if (preciseEntryOpenRef.current) return;
-      const pointIndex =
-        hoveredPointRef.current ?? lastMouseDownRef.current.pointIndex;
+      const pointIndex = hoveredPointRef.current;
       if (pointIndex === null) return;
 
       e.preventDefault();
@@ -2192,7 +2107,20 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName, t }) => {
   const [sureness, setSureness] = useState(5);
   const [message, setMessage] = useState("");
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || typeof document === "undefined") return null;
 
   const handleConfirm = () => {
     if (!message.trim()) return; // Require message
@@ -2209,24 +2137,29 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName, t }) => {
 
   const isValid = message.trim().length > 0;
 
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full mx-4">
-        <h3 className="text-lg font-semibold text-gray-800 mb-2">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/50 p-4"
+      onClick={handleClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-md overflow-auto rounded-xl bg-white p-6 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h3 className="mb-2 text-lg font-semibold text-gray-800">
           {t("shapeFunctions.submitEditTitle", { feature: featureName })}
         </h3>
-        <p className="text-sm text-gray-600 mb-4">
+        <p className="mb-4 text-sm text-gray-600">
           {t("shapeFunctions.submitEditDescription")}
         </p>
 
-        {/* Confidence Slider */}
         <div className="mb-5">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             {t("shapeFunctions.confidenceLevel")}
           </label>
-          <div className="flex justify-between text-sm text-gray-500 mb-2">
+          <div className="mb-2 flex justify-between text-sm text-gray-500">
             <span>{t("shapeFunctions.notSure")}</span>
-            <span className="font-bold text-lg text-blue-600">{sureness}</span>
+            <span className="text-lg font-bold text-blue-600">{sureness}</span>
             <span>{t("shapeFunctions.verySure")}</span>
           </div>
           <input
@@ -2234,24 +2167,23 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName, t }) => {
             min="1"
             max="10"
             value={sureness}
-            onChange={(e) => setSureness(parseInt(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider"
+            onChange={(e) => setSureness(parseInt(e.target.value, 10))}
+            className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-gray-200 slider"
             style={{
               background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${
                 (sureness - 1) * 11.11
               }%, #e5e7eb ${(sureness - 1) * 11.11}%, #e5e7eb 100%)`,
             }}
           />
-          <div className="flex justify-between text-xs text-gray-400 mt-1">
+          <div className="mt-1 flex justify-between text-xs text-gray-400">
             <span>1</span>
             <span>5</span>
             <span>10</span>
           </div>
         </div>
 
-        {/* Commit Message */}
         <div className="mb-5">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="mb-2 block text-sm font-medium text-gray-700">
             {t("shapeFunctions.editDescription")}{" "}
             <span className="text-red-500">*</span>
           </label>
@@ -2259,11 +2191,11 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName, t }) => {
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={t("shapeFunctions.editDescriptionPlaceholder")}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+            className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
             rows={3}
           />
           {!isValid && message.length > 0 && (
-            <p className="text-xs text-red-500 mt-1">
+            <p className="mt-1 text-xs text-red-500">
               {t("shapeFunctions.editDescriptionRequired")}
             </p>
           )}
@@ -2272,24 +2204,25 @@ const SurenessModal = ({ isOpen, onClose, onConfirm, featureName, t }) => {
         <div className="flex gap-3">
           <button
             onClick={handleClose}
-            className="flex-1 px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+            className="flex-1 rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200"
           >
             {t("common.cancel")}
           </button>
           <button
             onClick={handleConfirm}
             disabled={!isValid}
-            className={`flex-1 px-4 py-2 text-sm rounded-lg transition-colors font-medium ${
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
               isValid
-                ? "bg-green-500 hover:bg-green-600 text-white"
-                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                ? "bg-green-500 text-white hover:bg-green-600"
+                : "cursor-not-allowed bg-gray-300 text-gray-500"
             }`}
           >
             {t("shapeFunctions.submitEdit")}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -2470,27 +2403,27 @@ const FeatureChartSettingsModal = ({
     }
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/50 p-4"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-auto"
+        className="max-h-[85vh] w-full max-w-2xl overflow-auto rounded-xl bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-4 border-b border-gray-200">
+        <div className="border-b border-gray-200 px-5 py-4">
           <h3 className="text-lg font-semibold text-gray-800">
             {t("shapeFunctions.chartMappingTitle", {
               feature: featureDisplayName,
             })}
           </h3>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="mt-1 text-sm text-gray-500">
             {t("shapeFunctions.chartMappingDescription")}
           </p>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
+        <div className="space-y-4 px-5 py-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
             <label className="block text-sm font-medium text-slate-700">
               {t("shapeFunctions.displayTitleLabel")}
@@ -2531,7 +2464,7 @@ const FeatureChartSettingsModal = ({
                 ))}
               </div>
             ) : (
-              <div className="mt-2 inline-flex rounded-full bg-white px-3 py-1 text-sm font-medium text-slate-700 border border-slate-300">
+              <div className="mt-2 inline-flex rounded-full border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700">
                 {getChartTypeLabel(selectedChartType)}
               </div>
             )}
@@ -2545,7 +2478,7 @@ const FeatureChartSettingsModal = ({
           )}
 
           <div className="rounded-lg border border-gray-200">
-            <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 text-sm font-medium text-gray-700">
+            <div className="border-b border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-700">
               {getValuesTitle()}
             </div>
             <div className="max-h-72 overflow-auto">
@@ -2560,9 +2493,9 @@ const FeatureChartSettingsModal = ({
                     return (
                       <div
                         key={key}
-                        className="grid grid-cols-2 gap-3 px-3 py-2 items-center"
+                        className="grid grid-cols-2 items-center gap-3 px-3 py-2"
                       >
-                        <div className="text-sm text-slate-700 font-mono">
+                        <div className="font-mono text-sm text-slate-700">
                           {key}
                         </div>
                         <input
@@ -2593,18 +2526,18 @@ const FeatureChartSettingsModal = ({
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2 border-t border-gray-200 px-5 py-3">
           <button
             onClick={onClose}
             disabled={saving}
-            className="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors disabled:opacity-50"
+            className="rounded-lg bg-gray-100 px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-200 disabled:opacity-50"
           >
             {t("common.cancel")}
           </button>
           <button
             onClick={handleSubmit}
             disabled={saving}
-            className="px-4 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-700 disabled:opacity-50"
           >
             {saving
               ? t("shapeFunctions.saving")
@@ -2612,7 +2545,8 @@ const FeatureChartSettingsModal = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -2730,9 +2664,7 @@ const FeatureEditCard = ({
           >
             <span>✓</span>
             <span>
-              {t("shapeFunctions.submitFeature", {
-                feature: featureDisplayName,
-              })}
+              {t("shapeFunctions.submitFeature")}
             </span>
           </button>
         )}
@@ -2839,9 +2771,7 @@ const FeatureEditCard = ({
                     >
                       <span>✓</span>
                       <span>
-                        {t("shapeFunctions.submitFeature", {
-                          feature: featureDisplayName,
-                        })}
+                        {t("shapeFunctions.submitFeature")}
                       </span>
                     </button>
                   )}
