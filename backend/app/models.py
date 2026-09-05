@@ -438,14 +438,26 @@ class ModelComparePreparedArtifact(BaseModel):
     )
 
 
-class ModelCompareFeatureMaeMetrics(BaseModel):
-    """Per-feature MAE metrics for the edited artifact preview."""
+class ModelCompareFeatureCurveMetrics(BaseModel):
+    """Per-feature curve comparison metrics for the edited artifact preview."""
     edited_vs_edited_base_mae: float
     edited_vs_original_base_mae: float
     baseline_edited_vs_edited_base_mae: float
     baseline_edited_vs_original_base_mae: float
     edited_vs_edited_base_status: str
     edited_vs_original_base_status: str
+    edited_vs_edited_base_rmse: float
+    edited_vs_original_base_rmse: float
+    baseline_edited_vs_edited_base_rmse: float
+    baseline_edited_vs_original_base_rmse: float
+    edited_vs_edited_base_rmse_status: str
+    edited_vs_original_base_rmse_status: str
+    edited_vs_edited_base_r2: float
+    edited_vs_original_base_r2: float
+    baseline_edited_vs_edited_base_r2: float
+    baseline_edited_vs_original_base_r2: float
+    edited_vs_edited_base_r2_status: str
+    edited_vs_original_base_r2_status: str
 
 
 class ModelCompareFeaturePreview(BaseModel):
@@ -462,7 +474,7 @@ class ModelCompareFeaturePreview(BaseModel):
     right_effective_y_values: List[float]
     left_chart_config: Optional[Dict[str, Any]] = None
     right_chart_config: Optional[Dict[str, Any]] = None
-    mae_metrics: Optional[ModelCompareFeatureMaeMetrics] = None
+    comparison_metrics: Optional[ModelCompareFeatureCurveMetrics] = None
 
 
 class ModelComparePreviewRequest(BaseModel):

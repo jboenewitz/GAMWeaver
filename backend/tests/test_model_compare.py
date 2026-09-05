@@ -520,7 +520,7 @@ def test_preview_does_not_mutate_live_runtime_state(ml_service):
     assert ml_service.model_source == before_model_source
 
 
-def test_preview_returns_mae_metrics_for_edited_artifact(ml_service):
+def test_preview_returns_curve_metrics_for_edited_artifact(ml_service):
     edits_payload = {
         "included": True,
         "users": [{"name": "alice"}],
@@ -563,12 +563,18 @@ def test_preview_returns_mae_metrics_for_edited_artifact(ml_service):
 
     age_preview = _get_feature_preview(preview, "age")
     assert age_preview["right_effective_y_values"][1] == pytest.approx(2.0)
-    assert age_preview["mae_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.0)
-    assert age_preview["mae_metrics"]["baseline_edited_vs_edited_base_mae"] == pytest.approx(0.0)
-    assert age_preview["mae_metrics"]["edited_vs_edited_base_status"] == "increased"
-    assert age_preview["mae_metrics"]["edited_vs_original_base_mae"] == pytest.approx(1.0)
-    assert age_preview["mae_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(0.0)
-    assert age_preview["mae_metrics"]["edited_vs_original_base_status"] == "increased"
+    assert age_preview["comparison_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.0)
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_edited_base_mae"] == pytest.approx(0.0)
+    assert age_preview["comparison_metrics"]["edited_vs_edited_base_status"] == "increased"
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_mae"] == pytest.approx(1.0)
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_status"] == "increased"
+    assert age_preview["comparison_metrics"]["edited_vs_edited_base_rmse"] == pytest.approx(1.0)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_rmse"] == pytest.approx(1.0)
+    assert age_preview["comparison_metrics"]["edited_vs_edited_base_r2"] == pytest.approx(0.2)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_r2"] == pytest.approx(0.2)
+    assert age_preview["comparison_metrics"]["edited_vs_edited_base_r2_status"] == "decreased"
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_r2_status"] == "decreased"
 
 
 def test_preview_mae_status_decreases_when_edits_move_edited_artifact_toward_original(
@@ -628,12 +634,17 @@ def test_preview_mae_status_decreases_when_edits_move_edited_artifact_toward_ori
 
     age_preview = _get_feature_preview(preview, "age")
     assert age_preview["right_effective_y_values"] == pytest.approx([0.0, 1.0, 2.0, 3.0])
-    assert age_preview["mae_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(0.5)
-    assert age_preview["mae_metrics"]["edited_vs_original_base_mae"] == pytest.approx(0.0)
-    assert age_preview["mae_metrics"]["edited_vs_original_base_status"] == "decreased"
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(0.5)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_status"] == "decreased"
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_rmse"] == pytest.approx(0.7071067811865476)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_rmse"] == pytest.approx(0.0)
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_r2"] == pytest.approx(0.6)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_r2"] == pytest.approx(1.0)
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_r2_status"] == "increased"
 
 
-def test_preview_unweighted_mode_changes_edited_mae_metrics(ml_service):
+def test_preview_unweighted_mode_changes_edited_curve_metrics(ml_service):
     edits_payload = {
         "included": True,
         "users": [{"name": "alice"}, {"name": "bob"}],
@@ -694,11 +705,15 @@ def test_preview_unweighted_mode_changes_edited_mae_metrics(ml_service):
 
     weighted_age = _get_feature_preview(weighted_preview, "age")
     unweighted_age = _get_feature_preview(unweighted_preview, "age")
-    assert weighted_age["mae_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(0.6)
-    assert unweighted_age["mae_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.5)
+    assert weighted_age["comparison_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(0.6)
+    assert unweighted_age["comparison_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.5)
+    assert weighted_age["comparison_metrics"]["edited_vs_edited_base_rmse"] == pytest.approx(0.6)
+    assert unweighted_age["comparison_metrics"]["edited_vs_edited_base_rmse"] == pytest.approx(1.5)
+    assert weighted_age["comparison_metrics"]["edited_vs_edited_base_r2"] == pytest.approx(0.712)
+    assert unweighted_age["comparison_metrics"]["edited_vs_edited_base_r2"] == pytest.approx(-0.8)
 
 
-def test_preview_supports_categorical_edited_mae_metrics(ml_service):
+def test_preview_supports_categorical_edited_curve_metrics(ml_service):
     original_artifact = _build_artifact(ml_service, target_column="ridership")
     edited_artifact = _build_artifact(ml_service, target_column="ridership")
     edits_payload = {
@@ -747,16 +762,32 @@ def test_preview_supports_categorical_edited_mae_metrics(ml_service):
     assert month_preview["right_effective_y_values"] == pytest.approx(
         [0.1, 0.2, 0.09999999999999998]
     )
-    assert month_preview["mae_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(
+    assert month_preview["comparison_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(
         0.06666666666666667
     )
-    assert month_preview["mae_metrics"]["edited_vs_original_base_mae"] == pytest.approx(
+    assert month_preview["comparison_metrics"]["edited_vs_original_base_mae"] == pytest.approx(
         0.06666666666666667
     )
-    assert month_preview["mae_metrics"]["edited_vs_original_base_status"] == "unchanged"
+    assert month_preview["comparison_metrics"]["edited_vs_original_base_status"] == "unchanged"
+    assert month_preview["comparison_metrics"]["baseline_edited_vs_original_base_rmse"] == pytest.approx(
+        0.11547005383792515
+    )
+    assert month_preview["comparison_metrics"]["edited_vs_original_base_rmse"] == pytest.approx(
+        0.11547005383792515
+    )
+    assert month_preview["comparison_metrics"]["edited_vs_original_base_rmse_status"] == "unchanged"
+    assert month_preview["comparison_metrics"]["baseline_edited_vs_original_base_r2"] == pytest.approx(
+        -1.0
+    )
+    assert month_preview["comparison_metrics"]["edited_vs_original_base_r2"] == pytest.approx(
+        -1.0
+    )
+    assert month_preview["comparison_metrics"]["edited_vs_original_base_r2_status"] == "unchanged"
 
 
-def test_prepare_model_compare_rejects_unaligned_feature_x_values(ml_service):
+def test_prepare_model_compare_supports_numeric_x_value_mismatches_with_interpolated_mae(
+    ml_service,
+):
     original_artifact = _build_artifact(ml_service, target_column="ridership")
     edited_artifact = _build_artifact(ml_service, target_column="ridership")
     original = ml_service.prepare_model_compare_artifact(
@@ -770,8 +801,52 @@ def test_prepare_model_compare_rejects_unaligned_feature_x_values(ml_service):
     _set_prepared_shape_values(
         edited,
         "age",
-        x_values=[0.0, 12.0, 20.0, 29.0],
+        x_values=[0.0, 20.0, 29.0],
+        y_values=[0.0, 2.0, 3.0],
+    )
+    shared_features = ml_service._validate_model_compare_pair(original, edited)
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=[],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    age_preview = _get_feature_preview(preview, "age")
+
+    assert "age" in shared_features
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_mae"] == pytest.approx(
+        0.0
+    )
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_rmse"] == pytest.approx(
+        0.0
+    )
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_rmse"] == pytest.approx(0.0)
+    assert age_preview["comparison_metrics"]["baseline_edited_vs_original_base_r2"] == pytest.approx(
+        1.0
+    )
+    assert age_preview["comparison_metrics"]["edited_vs_original_base_r2"] == pytest.approx(1.0)
+
+
+def test_prepare_model_compare_rejects_unaligned_categorical_x_values(ml_service):
+    original_artifact = _build_artifact(ml_service, target_column="ridership")
+    edited_artifact = _build_artifact(ml_service, target_column="ridership")
+    original = ml_service.prepare_model_compare_artifact(
+        original_artifact,
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        edited_artifact,
+        filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        edited,
+        "month",
+        x_values=["1", "3"],
+        y_values=[0.1, 0.3],
     )
 
-    with pytest.raises(ValueError, match="same x_values order"):
+    with pytest.raises(ValueError, match="categorical feature 'month'"):
         ml_service._validate_model_compare_pair(original, edited)

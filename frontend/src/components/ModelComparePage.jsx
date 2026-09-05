@@ -55,7 +55,7 @@ const formatArtifactDate = (value, language) => {
   return parsed.toLocaleString(getDateLocale(language));
 };
 
-const formatMaeValue = (value, language) => {
+const formatMetricValue = (value, language) => {
   if (!Number.isFinite(value)) return "-";
   return new Intl.NumberFormat(getNumberLocale(language), {
     minimumFractionDigits: 3,
@@ -63,8 +63,8 @@ const formatMaeValue = (value, language) => {
   }).format(value);
 };
 
-const getMaeTone = (status) => {
-  if (status === "decreased") {
+const getMetricTone = (status) => {
+  if (status === "improved") {
     return {
       container: "border-emerald-200 bg-emerald-50",
       label: "text-emerald-700",
@@ -72,7 +72,7 @@ const getMaeTone = (status) => {
       status: "text-emerald-700",
     };
   }
-  if (status === "increased") {
+  if (status === "worsened") {
     return {
       container: "border-rose-200 bg-rose-50",
       label: "text-rose-700",
@@ -86,6 +86,14 @@ const getMaeTone = (status) => {
     value: "text-slate-900",
     status: "text-slate-600",
   };
+};
+
+const getMetricStatusTone = (direction, higherIsBetter = false) => {
+  if (direction === "unchanged") return "unchanged";
+  if (higherIsBetter) {
+    return direction === "increased" ? "improved" : "worsened";
+  }
+  return direction === "decreased" ? "improved" : "worsened";
 };
 
 const buildFeatureTitle = (featurePreview) => {
@@ -242,14 +250,23 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
   );
 };
 
-const FeatureMaeBadge = ({ label, mae, status, language, t }) => {
-  const tone = getMaeTone(status);
+const FeatureMetricBadge = ({
+  label,
+  metricLabel,
+  value,
+  status,
+  higherIsBetter = false,
+  language,
+  t,
+}) => {
+  const toneStatus = getMetricStatusTone(status, higherIsBetter);
+  const tone = getMetricTone(toneStatus);
   const statusLabel =
-    status === "decreased"
-      ? t("modelCompare.maeImproved")
-      : status === "increased"
-        ? t("modelCompare.maeWorsened")
-        : t("modelCompare.maeUnchanged");
+    toneStatus === "improved"
+      ? t("modelCompare.metricImproved")
+      : toneStatus === "worsened"
+        ? t("modelCompare.metricWorsened")
+        : t("modelCompare.metricUnchanged");
 
   return (
     <div className={`rounded-2xl border px-3 py-2 ${tone.container}`}>
@@ -257,7 +274,7 @@ const FeatureMaeBadge = ({ label, mae, status, language, t }) => {
         {label}
       </div>
       <div className={`mt-1 text-base font-semibold ${tone.value}`}>
-        {t("combined.mae")}: {formatMaeValue(mae, language)}
+        {metricLabel}: {formatMetricValue(value, language)}
       </div>
       <div className={`text-xs ${tone.status}`}>{statusLabel}</div>
     </div>
@@ -852,30 +869,90 @@ function ModelComparePage({ onBack, language = "en" }) {
                         <p className="text-sm text-slate-500">
                           {featurePreview.feature_name}
                         </p>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <FeatureMaeBadge
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          <FeatureMetricBadge
                             label={t("modelCompare.maeVsEditedBase")}
-                            mae={
-                              featurePreview?.mae_metrics
+                            metricLabel={t("combined.mae")}
+                            value={
+                              featurePreview?.comparison_metrics
                                 ?.edited_vs_edited_base_mae
                             }
                             status={
-                              featurePreview?.mae_metrics
+                              featurePreview?.comparison_metrics
                                 ?.edited_vs_edited_base_status
                             }
                             language={language}
                             t={t}
                           />
-                          <FeatureMaeBadge
+                          <FeatureMetricBadge
                             label={t("modelCompare.maeVsOriginalBase")}
-                            mae={
-                              featurePreview?.mae_metrics
+                            metricLabel={t("combined.mae")}
+                            value={
+                              featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_mae
                             }
                             status={
-                              featurePreview?.mae_metrics
+                              featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_status
                             }
+                            language={language}
+                            t={t}
+                          />
+                          <FeatureMetricBadge
+                            label={t("modelCompare.rmseVsEditedBase")}
+                            metricLabel={t("combined.rmse")}
+                            value={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_edited_base_rmse
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_edited_base_rmse_status
+                            }
+                            language={language}
+                            t={t}
+                          />
+                          <FeatureMetricBadge
+                            label={t("modelCompare.rmseVsOriginalBase")}
+                            metricLabel={t("combined.rmse")}
+                            value={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_rmse
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_rmse_status
+                            }
+                            language={language}
+                            t={t}
+                          />
+                          <FeatureMetricBadge
+                            label={t("modelCompare.r2VsEditedBase")}
+                            metricLabel={t("combined.r2")}
+                            value={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_edited_base_r2
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_edited_base_r2_status
+                            }
+                            higherIsBetter
+                            language={language}
+                            t={t}
+                          />
+                          <FeatureMetricBadge
+                            label={t("modelCompare.r2VsOriginalBase")}
+                            metricLabel={t("combined.r2")}
+                            value={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_r2
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_r2_status
+                            }
+                            higherIsBetter
                             language={language}
                             t={t}
                           />

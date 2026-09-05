@@ -946,7 +946,6 @@ function App() {
             modelTrained={modelStatus?.is_trained}
             featureSchema={modelStatus?.feature_schema || []}
             targetColumn={modelStatus?.target_column}
-            showCompetenceLevels={Boolean(modelStatus?.show_competence_levels)}
             language={language}
           />
         </div>

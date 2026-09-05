@@ -105,7 +105,6 @@ const PredictionForm = ({
   modelTrained,
   featureSchema = [],
   targetColumn,
-  showCompetenceLevels = false,
   language = "en",
 }) => {
   const [formData, setFormData] = useState({});
@@ -244,9 +243,7 @@ const PredictionForm = ({
             </div>
           </div>
 
-          {showCompetenceLevels && (
-            <CompetenceLevelsTable language={language} />
-          )}
+          <CompetenceLevelsTable language={language} />
         </>
       )}
     </div>

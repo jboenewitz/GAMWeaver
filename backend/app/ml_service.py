@@ -14,7 +14,7 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 from igann import IGANN
-from sklearn.metrics import mean_absolute_error, root_mean_squared_error
+from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 
 from .data_processing import (
     MISSING_CATEGORY_VALUE,
@@ -2959,14 +2959,15 @@ class MLService:
                 )
             left_x_values = list(left_shape.get("x_values") or [])
             right_x_values = list(right_shape.get("x_values") or [])
-            if len(left_x_values) != len(right_x_values):
-                raise ValueError(
-                    f"Compared artifacts must use aligned x_values for feature '{feature_name}'"
-                )
-            if left_x_values != right_x_values:
-                raise ValueError(
-                    f"Compared artifacts must use the same x_values order for feature '{feature_name}'"
-                )
+            if left_feature_type == "categorical":
+                if len(left_x_values) != len(right_x_values):
+                    raise ValueError(
+                        f"Compared artifacts must use aligned x_values for categorical feature '{feature_name}'"
+                    )
+                if left_x_values != right_x_values:
+                    raise ValueError(
+                        f"Compared artifacts must use the same x_values order for categorical feature '{feature_name}'"
+                    )
 
         return left_features
 
@@ -2982,6 +2983,190 @@ class MLService:
         return float(mean_absolute_error(baseline_y_values, effective_y_values))
 
     @staticmethod
+    def _compute_compare_rmse(
+        baseline_y_values: List[float],
+        effective_y_values: List[float],
+    ) -> float:
+        if len(baseline_y_values) != len(effective_y_values):
+            raise ValueError("Cannot compute compare RMSE for misaligned feature values")
+        if not baseline_y_values:
+            return 0.0
+        return float(root_mean_squared_error(baseline_y_values, effective_y_values))
+
+    @staticmethod
+    def _compute_compare_r2(
+        baseline_y_values: List[float],
+        effective_y_values: List[float],
+    ) -> float:
+        if len(baseline_y_values) != len(effective_y_values):
+            raise ValueError("Cannot compute compare R2 for misaligned feature values")
+        if len(baseline_y_values) < 2:
+            return 1.0
+        return float(r2_score(baseline_y_values, effective_y_values))
+
+    @staticmethod
+    def _interpolate_compare_values(
+        source_x_values: List[Any],
+        source_y_values: List[float],
+        target_x_values: List[Any],
+    ) -> List[float]:
+        if (
+            len(source_x_values) != len(source_y_values)
+            or not source_x_values
+            or not target_x_values
+        ):
+            return []
+
+        try:
+            source_x = np.asarray(source_x_values, dtype=float)
+            source_y = np.asarray(source_y_values, dtype=float)
+            target_x = np.asarray(target_x_values, dtype=float)
+        except (TypeError, ValueError):
+            return []
+
+        if (
+            source_x.size == 0
+            or source_y.size == 0
+            or source_x.size != source_y.size
+            or target_x.size == 0
+        ):
+            return []
+
+        order = np.argsort(source_x)
+        source_x = source_x[order]
+        source_y = source_y[order]
+
+        return [
+            float(value)
+            for value in np.interp(target_x, source_x, source_y).tolist()
+        ]
+
+    @classmethod
+    def _compute_numeric_compare_mae_on_reference_grid(
+        cls,
+        *,
+        reference_x_values: List[Any],
+        reference_y_values: List[float],
+        comparison_x_values: List[Any],
+        comparison_y_values: List[float],
+    ) -> float:
+        if (
+            len(reference_x_values) != len(reference_y_values)
+            or len(comparison_x_values) != len(comparison_y_values)
+            or not reference_x_values
+            or not comparison_x_values
+        ):
+            raise ValueError("Cannot compute compare MAE for invalid numeric feature values")
+
+        try:
+            comparison_numeric_x = np.asarray(comparison_x_values, dtype=float)
+            reference_numeric_x = np.asarray(reference_x_values, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Cannot compute compare MAE for non-numeric reference grid values"
+            ) from exc
+
+        if comparison_numeric_x.size == 0 or reference_numeric_x.size == 0:
+            raise ValueError("Cannot compute compare MAE without numeric feature values")
+
+        domain_min = float(np.min(comparison_numeric_x))
+        domain_max = float(np.max(comparison_numeric_x))
+        overlap_mask = (
+            (reference_numeric_x >= (domain_min - 1e-9))
+            & (reference_numeric_x <= (domain_max + 1e-9))
+        )
+        if not np.any(overlap_mask):
+            raise ValueError("Cannot compute compare MAE without overlapping numeric domain")
+
+        filtered_reference_x = reference_numeric_x[overlap_mask].tolist()
+        filtered_reference_y = [
+            float(value)
+            for include, value in zip(overlap_mask.tolist(), reference_y_values)
+            if include
+        ]
+        interpolated_comparison_y = cls._interpolate_compare_values(
+            comparison_x_values,
+            comparison_y_values,
+            filtered_reference_x,
+        )
+        return cls._compute_compare_mae(
+            filtered_reference_y,
+            interpolated_comparison_y,
+        )
+
+    @classmethod
+    def _compute_numeric_compare_metric_on_reference_grid(
+        cls,
+        *,
+        reference_x_values: List[Any],
+        reference_y_values: List[float],
+        comparison_x_values: List[Any],
+        comparison_y_values: List[float],
+        metric_name: str,
+    ) -> float:
+        if (
+            len(reference_x_values) != len(reference_y_values)
+            or len(comparison_x_values) != len(comparison_y_values)
+            or not reference_x_values
+            or not comparison_x_values
+        ):
+            raise ValueError(
+                f"Cannot compute compare {metric_name} for invalid numeric feature values"
+            )
+
+        try:
+            comparison_numeric_x = np.asarray(comparison_x_values, dtype=float)
+            reference_numeric_x = np.asarray(reference_x_values, dtype=float)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Cannot compute compare {metric_name} for non-numeric reference grid values"
+            ) from exc
+
+        if comparison_numeric_x.size == 0 or reference_numeric_x.size == 0:
+            raise ValueError(
+                f"Cannot compute compare {metric_name} without numeric feature values"
+            )
+
+        domain_min = float(np.min(comparison_numeric_x))
+        domain_max = float(np.max(comparison_numeric_x))
+        overlap_mask = (
+            (reference_numeric_x >= (domain_min - 1e-9))
+            & (reference_numeric_x <= (domain_max + 1e-9))
+        )
+        if not np.any(overlap_mask):
+            raise ValueError(
+                f"Cannot compute compare {metric_name} without overlapping numeric domain"
+            )
+
+        filtered_reference_x = reference_numeric_x[overlap_mask].tolist()
+        filtered_reference_y = [
+            float(value)
+            for include, value in zip(overlap_mask.tolist(), reference_y_values)
+            if include
+        ]
+        interpolated_comparison_y = cls._interpolate_compare_values(
+            comparison_x_values,
+            comparison_y_values,
+            filtered_reference_x,
+        )
+        if metric_name == "MAE":
+            return cls._compute_compare_mae(
+                filtered_reference_y,
+                interpolated_comparison_y,
+            )
+        if metric_name == "RMSE":
+            return cls._compute_compare_rmse(
+                filtered_reference_y,
+                interpolated_comparison_y,
+            )
+        if metric_name == "R2":
+            return cls._compute_compare_r2(
+                filtered_reference_y,
+                interpolated_comparison_y,
+            )
+        raise ValueError(f"Unsupported compare metric '{metric_name}'")
+
+    @staticmethod
     def _compare_mae_status(
         current_mae: float,
         baseline_mae: float,
@@ -2991,6 +3176,17 @@ class MLService:
         if current_mae < baseline_mae:
             return "decreased"
         return "increased"
+
+    @staticmethod
+    def _compare_r2_status(
+        current_r2: float,
+        baseline_r2: float,
+    ) -> str:
+        if abs(current_r2 - baseline_r2) < 0.000001:
+            return "unchanged"
+        if current_r2 > baseline_r2:
+            return "increased"
+        return "decreased"
 
     @staticmethod
     def _collect_compare_offsets(
@@ -3125,27 +3321,116 @@ class MLService:
                 )
                 right_effective_y_values.append(float(base_y) + float(offset))
 
+            feature_type = str(left_shape.get("feature_type", "numeric"))
             baseline_edited_vs_edited_base_mae = self._compute_compare_mae(
                 right_base_y_values,
                 right_base_y_values,
             )
-            baseline_edited_vs_original_base_mae = self._compute_compare_mae(
-                left_base_y_values,
+            baseline_edited_vs_edited_base_rmse = self._compute_compare_rmse(
+                right_base_y_values,
+                right_base_y_values,
+            )
+            baseline_edited_vs_edited_base_r2 = self._compute_compare_r2(
+                right_base_y_values,
                 right_base_y_values,
             )
             edited_vs_edited_base_mae = self._compute_compare_mae(
                 right_base_y_values,
                 right_effective_y_values,
             )
-            edited_vs_original_base_mae = self._compute_compare_mae(
-                left_base_y_values,
+            edited_vs_edited_base_rmse = self._compute_compare_rmse(
+                right_base_y_values,
                 right_effective_y_values,
             )
+            edited_vs_edited_base_r2 = self._compute_compare_r2(
+                right_base_y_values,
+                right_effective_y_values,
+            )
+            if feature_type == "numeric":
+                baseline_edited_vs_original_base_mae = (
+                    self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=right_x_values,
+                        comparison_y_values=right_base_y_values,
+                        metric_name="MAE",
+                    )
+                )
+                baseline_edited_vs_original_base_rmse = (
+                    self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=right_x_values,
+                        comparison_y_values=right_base_y_values,
+                        metric_name="RMSE",
+                    )
+                )
+                baseline_edited_vs_original_base_r2 = (
+                    self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=right_x_values,
+                        comparison_y_values=right_base_y_values,
+                        metric_name="R2",
+                    )
+                )
+                edited_vs_original_base_mae = (
+                    self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=right_x_values,
+                        comparison_y_values=right_effective_y_values,
+                        metric_name="MAE",
+                    )
+                )
+                edited_vs_original_base_rmse = (
+                    self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=right_x_values,
+                        comparison_y_values=right_effective_y_values,
+                        metric_name="RMSE",
+                    )
+                )
+                edited_vs_original_base_r2 = (
+                    self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=right_x_values,
+                        comparison_y_values=right_effective_y_values,
+                        metric_name="R2",
+                    )
+                )
+            else:
+                baseline_edited_vs_original_base_mae = self._compute_compare_mae(
+                    left_base_y_values,
+                    right_base_y_values,
+                )
+                baseline_edited_vs_original_base_rmse = self._compute_compare_rmse(
+                    left_base_y_values,
+                    right_base_y_values,
+                )
+                baseline_edited_vs_original_base_r2 = self._compute_compare_r2(
+                    left_base_y_values,
+                    right_base_y_values,
+                )
+                edited_vs_original_base_mae = self._compute_compare_mae(
+                    left_base_y_values,
+                    right_effective_y_values,
+                )
+                edited_vs_original_base_rmse = self._compute_compare_rmse(
+                    left_base_y_values,
+                    right_effective_y_values,
+                )
+                edited_vs_original_base_r2 = self._compute_compare_r2(
+                    left_base_y_values,
+                    right_effective_y_values,
+                )
 
             feature_previews.append(
                 {
                     "feature_name": feature_name,
-                    "feature_type": str(left_shape.get("feature_type", "numeric")),
+                    "feature_type": feature_type,
                     "left_x_values": left_x_values,
                     "left_x_tick_labels": left_shape.get("x_tick_labels"),
                     "right_x_values": right_x_values,
@@ -3156,7 +3441,7 @@ class MLService:
                     "right_effective_y_values": right_effective_y_values,
                     "left_chart_config": left_shape.get("chart_config") or {},
                     "right_chart_config": right_shape.get("chart_config") or {},
-                    "mae_metrics": {
+                    "comparison_metrics": {
                         "edited_vs_edited_base_mae": edited_vs_edited_base_mae,
                         "edited_vs_original_base_mae": edited_vs_original_base_mae,
                         "baseline_edited_vs_edited_base_mae": baseline_edited_vs_edited_base_mae,
@@ -3168,6 +3453,30 @@ class MLService:
                         "edited_vs_original_base_status": self._compare_mae_status(
                             edited_vs_original_base_mae,
                             baseline_edited_vs_original_base_mae,
+                        ),
+                        "edited_vs_edited_base_rmse": edited_vs_edited_base_rmse,
+                        "edited_vs_original_base_rmse": edited_vs_original_base_rmse,
+                        "baseline_edited_vs_edited_base_rmse": baseline_edited_vs_edited_base_rmse,
+                        "baseline_edited_vs_original_base_rmse": baseline_edited_vs_original_base_rmse,
+                        "edited_vs_edited_base_rmse_status": self._compare_mae_status(
+                            edited_vs_edited_base_rmse,
+                            baseline_edited_vs_edited_base_rmse,
+                        ),
+                        "edited_vs_original_base_rmse_status": self._compare_mae_status(
+                            edited_vs_original_base_rmse,
+                            baseline_edited_vs_original_base_rmse,
+                        ),
+                        "edited_vs_edited_base_r2": edited_vs_edited_base_r2,
+                        "edited_vs_original_base_r2": edited_vs_original_base_r2,
+                        "baseline_edited_vs_edited_base_r2": baseline_edited_vs_edited_base_r2,
+                        "baseline_edited_vs_original_base_r2": baseline_edited_vs_original_base_r2,
+                        "edited_vs_edited_base_r2_status": self._compare_r2_status(
+                            edited_vs_edited_base_r2,
+                            baseline_edited_vs_edited_base_r2,
+                        ),
+                        "edited_vs_original_base_r2_status": self._compare_r2_status(
+                            edited_vs_original_base_r2,
+                            baseline_edited_vs_original_base_r2,
                         ),
                     },
                 }
