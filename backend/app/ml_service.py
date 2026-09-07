@@ -1909,6 +1909,34 @@ class MLService:
             normalized["x_tick_labels"] = [str(label) for label in x_tick_labels]
         return normalized
 
+    @staticmethod
+    def _center_shape_function_for_visualization(
+        shape_function: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Center a rendered curve without changing its stored model values.
+
+        Shape-function charts in GAMWeaver use an unweighted mean over their
+        rendered points as the zero reference.  Imported artifacts must use the
+        same convention as locally trained charts; prediction continues to use
+        the untouched raw artifact curves held by ``ImportedIGANNRuntime``.
+        """
+        y_values = shape_function.get("y_values")
+        if not isinstance(y_values, list) or not y_values:
+            return shape_function
+
+        try:
+            numeric_y = np.asarray(y_values, dtype=float)
+        except (TypeError, ValueError):
+            return shape_function
+
+        if numeric_y.size == 0 or not np.all(np.isfinite(numeric_y)):
+            return shape_function
+
+        shape_function["y_values"] = [
+            float(value) for value in (numeric_y - np.mean(numeric_y)).tolist()
+        ]
+        return shape_function
+
     def _normalize_imported_public_shape_function(
         self,
         shape_function: Dict[str, Any],
@@ -1948,7 +1976,7 @@ class MLService:
             str(normalized_shape.get("feature_type")) != "numeric"
             or str(chart_config.get("chart_feature_type", "numeric")) != "numeric"
         ):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         x_values = normalized_shape.get("x_values") or []
         y_values = normalized_shape.get("y_values") or []
@@ -1958,16 +1986,16 @@ class MLService:
             or len(x_values) != len(y_values)
             or not x_values
         ):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         try:
             x_numeric = np.asarray(x_values, dtype=float)
             y_numeric = np.asarray(y_values, dtype=float)
         except (TypeError, ValueError):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         if x_numeric.size == 0 or y_numeric.size == 0 or x_numeric.size != y_numeric.size:
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         order = np.argsort(x_numeric)
         x_numeric = x_numeric[order]
@@ -1980,14 +2008,14 @@ class MLService:
             domain_min = float(schema_min)
             domain_max = float(schema_max)
         except (TypeError, ValueError):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         if (
             not np.isfinite(domain_min)
             or not np.isfinite(domain_max)
             or domain_max < domain_min
         ):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         if abs(domain_max - domain_min) < 1e-12:
             target_x = np.asarray([domain_min], dtype=float)
@@ -2009,7 +2037,7 @@ class MLService:
         else:
             normalized_shape.pop("x_tick_labels", None)
 
-        return normalized_shape
+        return self._center_shape_function_for_visualization(normalized_shape)
 
     @staticmethod
     def _infer_missing_indicator_map_from_artifact(
@@ -2508,7 +2536,7 @@ class MLService:
             str(normalized_shape.get("feature_type")) != "numeric"
             or str(chart_config.get("chart_feature_type", "numeric")) != "numeric"
         ):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         x_values = normalized_shape.get("x_values") or []
         y_values = normalized_shape.get("y_values") or []
@@ -2518,16 +2546,16 @@ class MLService:
             or len(x_values) != len(y_values)
             or not x_values
         ):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         try:
             x_numeric = np.asarray(x_values, dtype=float)
             y_numeric = np.asarray(y_values, dtype=float)
         except (TypeError, ValueError):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         if x_numeric.size == 0 or y_numeric.size == 0 or x_numeric.size != y_numeric.size:
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         order = np.argsort(x_numeric)
         x_numeric = x_numeric[order]
@@ -2540,14 +2568,14 @@ class MLService:
             domain_min = float(schema_min)
             domain_max = float(schema_max)
         except (TypeError, ValueError):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         if (
             not np.isfinite(domain_min)
             or not np.isfinite(domain_max)
             or domain_max < domain_min
         ):
-            return normalized_shape
+            return self._center_shape_function_for_visualization(normalized_shape)
 
         if abs(domain_max - domain_min) < 1e-12:
             target_x = np.asarray([domain_min], dtype=float)
@@ -2569,7 +2597,7 @@ class MLService:
         else:
             normalized_shape.pop("x_tick_labels", None)
 
-        return normalized_shape
+        return self._center_shape_function_for_visualization(normalized_shape)
 
     @staticmethod
     def _format_compare_numeric_display(value: Any) -> str:

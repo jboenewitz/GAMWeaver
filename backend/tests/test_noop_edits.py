@@ -6,7 +6,9 @@ from types import SimpleNamespace
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.app.db_service import DatabaseService
+from backend.app.database import User
 from backend.app.ml_service import MLService
+from backend.app.security import hash_password, verify_password
 from backend.app.noop_edits import (
     NOOP_EDIT_MESSAGE,
     complete_shape_function_edits_export,
@@ -153,3 +155,46 @@ def test_import_validation_preserves_the_noop_marker():
     )
 
     assert validated["edits"][0]["shape_functions"][0]["is_imputed_noop"] is True
+
+
+class _ImportUserQuery:
+    def __init__(self, user):
+        self.user = user
+
+    def filter(self, *_args):
+        return self
+
+    def first(self):
+        return self.user
+
+
+class _ImportUserDb:
+    def __init__(self, existing_user=None):
+        self.existing_user = existing_user
+        self.added = []
+
+    def query(self, _model):
+        return _ImportUserQuery(self.existing_user)
+
+    def add(self, user):
+        self.added.append(user)
+
+    def flush(self):
+        pass
+
+
+def test_imported_users_receive_the_standard_password():
+    existing_user = User(name="existing", password_hash=hash_password("old-password"))
+    existing_db = _ImportUserDb(existing_user)
+
+    imported_existing = DatabaseService._get_or_create_import_user(
+        existing_db, "existing"
+    )
+    new_db = _ImportUserDb()
+    imported_new = DatabaseService._get_or_create_import_user(new_db, "new-user")
+
+    assert imported_existing is existing_user
+    assert verify_password("1234", imported_existing.password_hash)
+    assert not verify_password("old-password", imported_existing.password_hash)
+    assert verify_password("1234", imported_new.password_hash)
+    assert new_db.added == [imported_new]

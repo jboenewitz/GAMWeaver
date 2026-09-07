@@ -25,6 +25,11 @@ from .noop_edits import (
 from uuid import uuid4
 
 
+# Model artifacts intentionally never contain credentials. Accounts restored
+# with an artifact therefore receive this known initial password.
+IMPORTED_USER_DEFAULT_PASSWORD = "1234"
+
+
 def _decode_numeric_x_for_display(raw_value: Any) -> Any:
     """Best-effort numeric x-value decoding for API display endpoints."""
     if raw_value is None:
@@ -351,16 +356,17 @@ class DatabaseService:
         user_name: str,
         profession: Optional[str] = None,
     ) -> User:
-        """Resolve an imported edit author to an existing or placeholder user."""
+        """Resolve an imported user and assign its artifact-import password."""
         existing_user = db.query(User).filter(User.name == user_name).first()
         if existing_user is not None:
             if profession and not existing_user.profession:
                 existing_user.profession = profession
+            existing_user.password_hash = hash_password(IMPORTED_USER_DEFAULT_PASSWORD)
             return existing_user
 
         user = User(
             name=user_name,
-            password_hash=None,
+            password_hash=hash_password(IMPORTED_USER_DEFAULT_PASSWORD),
             profession=profession,
             is_superadmin=False,
         )
@@ -899,6 +905,11 @@ class DatabaseService:
         try:
             db.query(ShapeFunctionEdit).delete()
             db.query(DeletedEditNotification).delete()
+
+            # Provision every declared artifact user, including users that
+            # have no edit rows, with the standard import password.
+            for user_name, profession in declared_user_professions.items():
+                self._get_or_create_import_user(db, user_name, profession)
 
             imported_user_names = set()
             imported_submission_count = 0

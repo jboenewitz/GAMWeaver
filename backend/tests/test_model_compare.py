@@ -174,6 +174,9 @@ def test_prepare_model_compare_accepts_valid_artifacts_without_edits(
     assert shared_features == ["age", "month"]
     assert left_prepared["metadata"]["has_edit_export"] is False
     assert right_prepared["metadata"]["has_edit_export"] is False
+    for prepared_artifact in (left_prepared, right_prepared):
+        for shape_function in prepared_artifact["shape_functions"]:
+            assert sum(shape_function["y_values"]) == pytest.approx(0.0)
     assert preview["use_confidence"] is True
     assert len(preview["feature_previews"]) == 2
 
@@ -317,8 +320,8 @@ def test_preview_weighted_mode_matches_current_weighting_semantics(
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["left_effective_y_values"][1] == pytest.approx(1.6)
-    assert age_preview["right_effective_y_values"][1] == pytest.approx(1.0)
+    assert age_preview["left_effective_y_values"][1] == pytest.approx(0.1)
+    assert age_preview["right_effective_y_values"][1] == pytest.approx(-0.5)
 
 
 def test_preview_unweighted_mode_ignores_saved_confidence(ml_service):
@@ -373,7 +376,7 @@ def test_preview_unweighted_mode_ignores_saved_confidence(ml_service):
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["left_effective_y_values"][1] == pytest.approx(2.5)
+    assert age_preview["left_effective_y_values"][1] == pytest.approx(1.0)
 
 
 def test_preview_deselecting_submission_removes_only_that_contribution(ml_service):
@@ -428,7 +431,7 @@ def test_preview_deselecting_submission_removes_only_that_contribution(ml_servic
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["left_effective_y_values"][1] == pytest.approx(1.8)
+    assert age_preview["left_effective_y_values"][1] == pytest.approx(0.3)
 
 
 def test_preview_supports_categorical_feature_submissions(ml_service):
@@ -470,7 +473,7 @@ def test_preview_supports_categorical_feature_submissions(ml_service):
     )
 
     month_preview = _get_feature_preview(preview, "month")
-    assert month_preview["left_effective_y_values"][1] == pytest.approx(0.7)
+    assert month_preview["left_effective_y_values"][1] == pytest.approx(0.5)
 
 
 def test_preview_does_not_mutate_live_runtime_state(ml_service):
@@ -514,7 +517,7 @@ def test_preview_does_not_mutate_live_runtime_state(ml_service):
         feature_names=["age"],
     )
 
-    assert _get_feature_preview(preview, "age")["left_effective_y_values"][1] == pytest.approx(1.5)
+    assert _get_feature_preview(preview, "age")["left_effective_y_values"][1] == pytest.approx(0.0)
     assert ml_service.shape_function_offsets == before_shape_offsets
     assert ml_service.selected_feature_columns == before_selected_features
     assert ml_service.model_source == before_model_source
@@ -562,7 +565,7 @@ def test_preview_returns_curve_metrics_for_edited_artifact(ml_service):
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["right_effective_y_values"][1] == pytest.approx(2.0)
+    assert age_preview["right_effective_y_values"][1] == pytest.approx(0.5)
     assert age_preview["comparison_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.0)
     assert age_preview["comparison_metrics"]["baseline_edited_vs_edited_base_mae"] == pytest.approx(0.0)
     assert age_preview["comparison_metrics"]["edited_vs_edited_base_status"] == "increased"
@@ -609,6 +612,11 @@ def test_preview_mae_status_decreases_when_edits_move_edited_artifact_toward_ori
     edited = ml_service.prepare_model_compare_artifact(
         _attach_edits_export(edited_artifact, edits_payload),
         filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        original,
+        "age",
+        y_values=[0.0, 1.0, 2.0, 3.0],
     )
     _set_prepared_shape_values(
         edited,
@@ -744,6 +752,11 @@ def test_preview_supports_categorical_edited_curve_metrics(ml_service):
         filename="edited.json",
     )
     _set_prepared_shape_values(
+        original,
+        "month",
+        y_values=[0.1, 0.2, 0.3],
+    )
+    _set_prepared_shape_values(
         edited,
         "month",
         y_values=[0.1, 0.4, 0.3],
@@ -797,6 +810,11 @@ def test_prepare_model_compare_supports_numeric_x_value_mismatches_with_interpol
     edited = ml_service.prepare_model_compare_artifact(
         edited_artifact,
         filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        original,
+        "age",
+        y_values=[0.0, 1.0, 2.0, 3.0],
     )
     _set_prepared_shape_values(
         edited,

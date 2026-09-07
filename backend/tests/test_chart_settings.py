@@ -593,6 +593,50 @@ def test_imported_numeric_shape_functions_expand_to_schema_domain(
     assert raw_age_shape["x_values"] == [1.4, 2.0, 3.0, 4.0]
 
 
+def test_imported_shape_function_visualizations_are_centered_but_raw_model_is_not(
+    ml_service,
+    monkeypatch,
+):
+    artifact = ml_service.export_model_artifact()
+    age_shape = next(
+        feature
+        for feature in artifact["shape_functions"]
+        if feature["feature_name"] == "age"
+    )
+    month_shape = next(
+        feature
+        for feature in artifact["shape_functions"]
+        if feature["feature_name"] == "month"
+    )
+    age_shape["y_values"] = [5.0, 7.0, 11.0, 17.0]
+    month_shape["y_values"] = [2.0, 3.0, 7.0]
+
+    monkeypatch.setattr(MLService, "_restore_active_dataset_metadata", lambda self: None)
+    monkeypatch.setattr(MLService, "_auto_load_persisted_dataset", lambda self: None)
+    imported = MLService()
+    imported.import_model_artifact(artifact)
+
+    displayed = {
+        shape_function["feature_name"]: shape_function
+        for shape_function in imported.get_shape_functions()
+    }
+    assert sum(displayed["age"]["y_values"]) == pytest.approx(0.0)
+    assert sum(displayed["month"]["y_values"]) == pytest.approx(0.0)
+
+    raw_age_shape = next(
+        feature
+        for feature in imported.model.export_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+    raw_month_shape = next(
+        feature
+        for feature in imported.model.export_shape_functions()
+        if feature["feature_name"] == "month"
+    )
+    assert raw_age_shape["y_values"] == [5.0, 7.0, 11.0, 17.0]
+    assert raw_month_shape["y_values"] == [2.0, 3.0, 7.0]
+
+
 def test_feature_chart_settings_require_superadmin(ml_service, monkeypatch):
     from backend.app import main as main_module
 
