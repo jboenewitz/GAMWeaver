@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
-import { createTranslator, getDateLocale } from "../i18n";
+import {
+  createTranslator,
+  getDateLocale,
+  getPredictionTargetLabel,
+} from "../i18n";
 import {
   getFeatureDisplayName,
   getShapeFunctionDisplayName,
@@ -40,6 +44,11 @@ const CombinedPredictionForm = ({
   const [prediction, setPrediction] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const displayedTarget = getPredictionTargetLabel(
+    language,
+    targetColumn,
+    targetColumn || t("common.target"),
+  );
 
   useEffect(() => {
     setFormData(buildInitialFormData(featureSchema));
@@ -103,7 +112,7 @@ const CombinedPredictionForm = ({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {(featureSchema || []).map((feature) => {
-            const choiceOptions = getFeatureChoiceOptions(feature);
+            const choiceOptions = getFeatureChoiceOptions(feature, language);
             const usesChoiceInput = featureUsesChoiceInput(feature);
 
             return (
@@ -155,7 +164,7 @@ const CombinedPredictionForm = ({
           {loading
             ? t("prediction.predicting")
             : t("combined.predictButton", {
-                target: targetColumn || t("common.target"),
+                target: displayedTarget,
               })}
         </button>
       </form>
@@ -165,7 +174,7 @@ const CombinedPredictionForm = ({
           <div className="text-center">
             <div className="text-sm text-slate-600">
               {t("combined.predictedResult", {
-                target: targetColumn || t("common.target"),
+                target: displayedTarget,
               })}
             </div>
             <div className="text-4xl font-bold text-primary-600 mt-1">

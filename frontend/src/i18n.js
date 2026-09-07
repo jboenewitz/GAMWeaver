@@ -160,6 +160,18 @@ const translations = {
     "prediction.competenceLevel": "Competence Level",
     "prediction.scoreValue": "Score",
     "prediction.assignment": "Assignment",
+    "prediction.target.germanReading": "German reading literacy",
+    "prediction.option.TR_TLS1.0": "No",
+    "prediction.option.TR_TLS1.1": "Yes",
+    "prediction.option.KBuecher.1": "0–10 books",
+    "prediction.option.KBuecher.2": "11–25 books",
+    "prediction.option.KBuecher.3": "26–100 books",
+    "prediction.option.KBuecher.4": "101–200 books",
+    "prediction.option.KBuecher.5": "201–500 books",
+    "prediction.option.KBuecher.6": "More than 500 books",
+    "prediction.option.KDezh16_r.1": "Never speaks German at home",
+    "prediction.option.KDezh16_r.2": "Speaks German and another language at home",
+    "prediction.option.KDezh16_r.3": "Always or almost always speaks German at home",
 
     "shapeFunctions.title": "Shape Functions",
     "shapeFunctions.emptyDescription":
@@ -301,6 +313,66 @@ const translations = {
     "shapeFunctions.detailsItemMean": "Item mean",
     "shapeFunctions.detailsIqbScale": "IQB scale",
     "shapeFunctions.detailsUnknownConstruction": "Derived feature",
+    "shapeFunctions.detailAnswerOption.agreement.1": "Strongly disagree",
+    "shapeFunctions.detailAnswerOption.agreement.2": "Rather disagree",
+    "shapeFunctions.detailAnswerOption.agreement.3": "Rather agree",
+    "shapeFunctions.detailAnswerOption.agreement.4": "Strongly agree",
+    "shapeFunctions.detailQuestion.Sdruckd01a":
+      "In German class, a lot is expected of us.",
+    "shapeFunctions.detailQuestion.Sdruckd01b":
+      "We often have unannounced tests in German class.",
+    "shapeFunctions.detailQuestion.Sdruckd01c":
+      "If you are sick too often, you quickly fall behind in German class.",
+    "shapeFunctions.detailQuestion.Sdruckd01d":
+      "If you do not study at the weekend, you can hardly keep up in German class.",
+    "shapeFunctions.detailQuestion.Sdruckd01e":
+      "We can hardly keep up with the homework in German class.",
+    "shapeFunctions.detailQuestion.Ssoe01a": "I am popular in my class.",
+    "shapeFunctions.detailQuestion.Ssoe01b":
+      "The other children in my class come to me with their problems.",
+    "shapeFunctions.detailQuestion.Ssoe01c":
+      "I have really good friends in my class.",
+    "shapeFunctions.detailQuestion.Ssoe01d":
+      "The other children in my class like me.",
+    "shapeFunctions.detailQuestion.Sind01a": "German is important.",
+    "shapeFunctions.detailQuestion.Sind01b": "German is fun.",
+    "shapeFunctions.detailQuestion.Sind01c": "I am interested in German.",
+    "shapeFunctions.detailQuestion.Sind01d":
+      "German is one of my favourite subjects.",
+    "shapeFunctions.detailQuestion.Sword01a":
+      "I worry that there will not be enough time in a German test.",
+    "shapeFunctions.detailQuestion.Sword01b":
+      "I worry that my teacher will call on me in German class.",
+    "shapeFunctions.detailQuestion.Sword01c":
+      "I worry that I cannot solve my German homework.",
+    "shapeFunctions.detailQuestion.Sword01d":
+      "I worry that I will not understand something in German class.",
+    "shapeFunctions.detailQuestion.Semod01a":
+      "I get nervous when there is not enough time in a German test.",
+    "shapeFunctions.detailQuestion.Semod01b":
+      "I get nervous when my teacher calls on me in German class.",
+    "shapeFunctions.detailQuestion.Semod01c":
+      "I get nervous when I cannot solve my German homework.",
+    "shapeFunctions.detailQuestion.Semod01d":
+      "I get nervous when I do not understand something in German class.",
+    "shapeFunctions.detailQuestion.Sumz21a": "I can type using a keyboard.",
+    "shapeFunctions.detailQuestion.Sumz21b": "I can click using a mouse.",
+    "shapeFunctions.detailQuestion.Sumz21c":
+      "I can work on assignments on a tablet.",
+    "shapeFunctions.detailQuestion.Sumz21d":
+      "I can work on assignments on a computer.",
+    "shapeFunctions.detailQuestion.Sumz21e":
+      "I can find something using a search engine.",
+    "shapeFunctions.detailQuestion.Sulkd01a": "My German teacher cares about me.",
+    "shapeFunctions.detailQuestion.Sulkd01b": "My German teacher encourages me.",
+    "shapeFunctions.detailQuestion.Sulkd01c": "My German teacher gives me advice.",
+    "shapeFunctions.detailQuestion.Sulkd01d":
+      "My German teacher tells me what I am already good at and what I still need to learn.",
+    "shapeFunctions.detailQuestion.Sulkd01e":
+      "My German teacher takes time for me.",
+    "shapeFunctions.detailQuestion.Sulkd01f": "My German teacher praises me.",
+    "shapeFunctions.detailQuestion.Sulkd01g":
+      "My German teacher gives me suggestions for improvement.",
 
     "predictionComparison.title": "Prediction Comparison",
     "predictionComparison.empty":
@@ -563,9 +635,9 @@ const translations = {
     "modelCompare.metricWorsened": "Worsened",
     "modelCompare.metricUnchanged": "Unchanged",
     "modelCompare.leftBase": "Original base",
-    "modelCompare.leftEffective": "Original effective",
+    "modelCompare.leftEffective": "Original",
     "modelCompare.rightBase": "Edited base",
-    "modelCompare.rightEffective": "Edited effective",
+    "modelCompare.rightEffective": "Edited",
     "modelCompare.editLeftSelections": "Edit original selections",
     "modelCompare.editRightSelections": "Edit edited selections",
   },
@@ -736,6 +808,20 @@ const translations = {
     "prediction.competenceLevel": "Kompetenzstufe",
     "prediction.scoreValue": "Punktwert",
     "prediction.assignment": "Zuordnung",
+    "prediction.target.germanReading": "Lesekompetenz Deutsch",
+    "prediction.option.TR_TLS1.0": "Nein",
+    "prediction.option.TR_TLS1.1": "Ja",
+    "prediction.option.KBuecher.1": "0–10 Bücher",
+    "prediction.option.KBuecher.2": "11–25 Bücher",
+    "prediction.option.KBuecher.3": "26–100 Bücher",
+    "prediction.option.KBuecher.4": "101–200 Bücher",
+    "prediction.option.KBuecher.5": "201–500 Bücher",
+    "prediction.option.KBuecher.6": "Mehr als 500 Bücher",
+    "prediction.option.KDezh16_r.1": "Spricht zu Hause nie Deutsch",
+    "prediction.option.KDezh16_r.2":
+      "Spricht zu Hause Deutsch und eine andere Sprache",
+    "prediction.option.KDezh16_r.3":
+      "Spricht zu Hause immer oder fast immer Deutsch",
 
     "shapeFunctions.title": "Shape-Funktionen",
     "shapeFunctions.emptyDescription":
@@ -889,6 +975,72 @@ const translations = {
     "shapeFunctions.detailsItemMean": "Itemmittelwert",
     "shapeFunctions.detailsIqbScale": "IQB-Skalenwert",
     "shapeFunctions.detailsUnknownConstruction": "Abgeleitetes Feature",
+    "shapeFunctions.detailAnswerOption.agreement.1": "stimmt gar nicht",
+    "shapeFunctions.detailAnswerOption.agreement.2": "stimmt eher nicht",
+    "shapeFunctions.detailAnswerOption.agreement.3": "stimmt eher",
+    "shapeFunctions.detailAnswerOption.agreement.4": "stimmt genau",
+    "shapeFunctions.detailQuestion.Sdruckd01a":
+      "Im Deutschunterricht wird viel verlangt.",
+    "shapeFunctions.detailQuestion.Sdruckd01b":
+      "Im Deutschunterricht gibt es oft unangekündigte Tests.",
+    "shapeFunctions.detailQuestion.Sdruckd01c":
+      "Wenn man zu oft krank ist, verpasst man im Deutschunterricht schnell den Anschluss.",
+    "shapeFunctions.detailQuestion.Sdruckd01d":
+      "Wenn man am Wochenende nicht lernt, kommt man im Deutschunterricht kaum mit.",
+    "shapeFunctions.detailQuestion.Sdruckd01e":
+      "Im Deutschunterricht kommen wir mit den Hausaufgaben kaum nach.",
+    "shapeFunctions.detailQuestion.Ssoe01a":
+      "Ich bin in meiner Klasse beliebt.",
+    "shapeFunctions.detailQuestion.Ssoe01b":
+      "Die anderen Kinder in meiner Klasse kommen mit ihren Problemen zu mir.",
+    "shapeFunctions.detailQuestion.Ssoe01c":
+      "Ich habe wirklich gute Freund:innen in meiner Klasse.",
+    "shapeFunctions.detailQuestion.Ssoe01d":
+      "Die anderen Kinder in meiner Klasse mögen mich.",
+    "shapeFunctions.detailQuestion.Sind01a": "Deutsch ist wichtig.",
+    "shapeFunctions.detailQuestion.Sind01b": "Deutsch macht Spaß.",
+    "shapeFunctions.detailQuestion.Sind01c": "Ich interessiere mich für Deutsch.",
+    "shapeFunctions.detailQuestion.Sind01d":
+      "Deutsch ist eines meiner Lieblingsfächer.",
+    "shapeFunctions.detailQuestion.Sword01a":
+      "Ich mache mir Sorgen, dass die Zeit in einem Deutschtest nicht reicht.",
+    "shapeFunctions.detailQuestion.Sword01b":
+      "Ich mache mir Sorgen, dass mich die Lehrkraft im Deutschunterricht aufruft.",
+    "shapeFunctions.detailQuestion.Sword01c":
+      "Ich mache mir Sorgen, dass ich die Deutschhausaufgaben nicht lösen kann.",
+    "shapeFunctions.detailQuestion.Sword01d":
+      "Ich mache mir Sorgen, dass ich im Deutschunterricht etwas nicht verstehe.",
+    "shapeFunctions.detailQuestion.Semod01a":
+      "Ich bin aufgeregt, wenn die Zeit in einem Deutschtest nicht reicht.",
+    "shapeFunctions.detailQuestion.Semod01b":
+      "Ich bin aufgeregt, wenn mich die Lehrkraft im Deutschunterricht aufruft.",
+    "shapeFunctions.detailQuestion.Semod01c":
+      "Ich bin aufgeregt, wenn ich die Deutschhausaufgaben nicht lösen kann.",
+    "shapeFunctions.detailQuestion.Semod01d":
+      "Ich bin aufgeregt, wenn ich im Deutschunterricht etwas nicht verstehe.",
+    "shapeFunctions.detailQuestion.Sumz21a":
+      "Ich kann mit einer Tastatur schreiben.",
+    "shapeFunctions.detailQuestion.Sumz21b": "Ich kann mit einer Maus klicken.",
+    "shapeFunctions.detailQuestion.Sumz21c":
+      "Ich kann Aufgaben auf einem Tablet bearbeiten.",
+    "shapeFunctions.detailQuestion.Sumz21d":
+      "Ich kann Aufgaben an einem Computer bearbeiten.",
+    "shapeFunctions.detailQuestion.Sumz21e":
+      "Ich kann mit einer Suchmaschine etwas finden.",
+    "shapeFunctions.detailQuestion.Sulkd01a":
+      "Meine Deutschlehrkraft kümmert sich um mich.",
+    "shapeFunctions.detailQuestion.Sulkd01b":
+      "Meine Deutschlehrkraft macht mir Mut.",
+    "shapeFunctions.detailQuestion.Sulkd01c":
+      "Meine Deutschlehrkraft gibt mir Tipps.",
+    "shapeFunctions.detailQuestion.Sulkd01d":
+      "Meine Deutschlehrkraft sagt mir, was ich schon gut kann und was ich noch lernen muss.",
+    "shapeFunctions.detailQuestion.Sulkd01e":
+      "Meine Deutschlehrkraft nimmt sich Zeit für mich.",
+    "shapeFunctions.detailQuestion.Sulkd01f":
+      "Meine Deutschlehrkraft lobt mich.",
+    "shapeFunctions.detailQuestion.Sulkd01g":
+      "Meine Deutschlehrkraft gibt mir Hinweise zur Verbesserung.",
 
     "predictionComparison.title": "Vorhersagevergleich",
     "predictionComparison.empty":
@@ -1176,9 +1328,9 @@ const translations = {
     "modelCompare.metricWorsened": "Verschlechtert",
     "modelCompare.metricUnchanged": "Unverändert",
     "modelCompare.leftBase": "Original-Basis",
-    "modelCompare.leftEffective": "Original-Vorschau",
+    "modelCompare.leftEffective": "Original",
     "modelCompare.rightBase": "Bearbeitete Basis",
-    "modelCompare.rightEffective": "Bearbeitete Vorschau",
+    "modelCompare.rightEffective": "Bearbeitet",
     "modelCompare.editLeftSelections": "Original-Auswahl bearbeiten",
     "modelCompare.editRightSelections": "Bearbeitete Auswahl bearbeiten",
   },
@@ -1196,9 +1348,147 @@ export const getNumberLocale = (language) =>
 export const getDateLocale = (language) =>
   language === "de" ? "de-DE" : "en-US";
 
+const FIXED_DETAIL_QUESTION_VARIABLES = new Set([
+  "Sdruckd01a",
+  "Sdruckd01b",
+  "Sdruckd01c",
+  "Sdruckd01d",
+  "Sdruckd01e",
+  "Ssoe01a",
+  "Ssoe01b",
+  "Ssoe01c",
+  "Ssoe01d",
+  "Sind01a",
+  "Sind01b",
+  "Sind01c",
+  "Sind01d",
+  "Sword01a",
+  "Sword01b",
+  "Sword01c",
+  "Sword01d",
+  "Semod01a",
+  "Semod01b",
+  "Semod01c",
+  "Semod01d",
+  "Sumz21a",
+  "Sumz21b",
+  "Sumz21c",
+  "Sumz21d",
+  "Sumz21e",
+  "Sulkd01a",
+  "Sulkd01b",
+  "Sulkd01c",
+  "Sulkd01d",
+  "Sulkd01e",
+  "Sulkd01f",
+  "Sulkd01g",
+]);
+
+const FIXED_PREDICTION_TARGET_KEYS = new Map([
+  [
+    "Zielvariable – Lesekompetenz Deutsch",
+    "prediction.target.germanReading",
+  ],
+]);
+
+const FIXED_PREDICTION_OPTION_VARIABLES = new Set([
+  "TR_TLS1",
+  "KBuecher",
+  "KDezh16_r",
+]);
+
+const getTranslationTemplate = (language, key) =>
+  translations[language]?.[key] ?? translations[DEFAULT_LANGUAGE]?.[key];
+
+export const getFeatureDetailQuestionLabel = (language, variable, fallback) =>
+  getTranslationTemplate(
+    language,
+    `shapeFunctions.detailQuestion.${String(variable || "").trim()}`,
+  ) || fallback || variable || "";
+
+export const getFeatureDetailAnswerOptionLabel = (
+  language,
+  sourceVariables,
+  value,
+  fallback,
+) => {
+  if (
+    !Array.isArray(sourceVariables) ||
+    !sourceVariables.some((variable) =>
+      FIXED_DETAIL_QUESTION_VARIABLES.has(String(variable || "").trim()),
+    )
+  ) {
+    return fallback || "";
+  }
+
+  const numericValue = Number(value);
+  if (!Number.isInteger(numericValue)) return fallback || "";
+
+  return (
+    getTranslationTemplate(
+      language,
+      `shapeFunctions.detailAnswerOption.agreement.${numericValue}`,
+    ) || fallback || ""
+  );
+};
+
+export const getPredictionTargetLabel = (language, target, fallback) => {
+  const normalizedTarget = String(target || "").trim();
+  const key = FIXED_PREDICTION_TARGET_KEYS.get(normalizedTarget);
+  return getTranslationTemplate(language, key) || fallback || target || "";
+};
+
+const getFeatureProvenanceVariables = (feature) => {
+  const provenance = feature?.feature_provenance || {};
+  const sourceVariables = Array.isArray(provenance.source_variables)
+    ? provenance.source_variables
+    : [];
+  const sourceDetailVariables = Array.isArray(provenance.source_details)
+    ? provenance.source_details.map((detail) => detail?.variable)
+    : [];
+
+  return [...sourceVariables, ...sourceDetailVariables]
+    .map((variable) => String(variable || "").trim())
+    .filter(Boolean);
+};
+
+const normalizePredictionOptionValue = (value) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue)
+    ? String(numericValue)
+    : String(value || "").trim();
+};
+
+export const getPredictionOptionLabel = (language, feature, value, fallback) => {
+  const sourceVariables = getFeatureProvenanceVariables(feature);
+  const normalizedValue = normalizePredictionOptionValue(value);
+
+  if (
+    sourceVariables.some((variable) =>
+      FIXED_DETAIL_QUESTION_VARIABLES.has(variable),
+    )
+  ) {
+    return (
+      getTranslationTemplate(
+        language,
+        `shapeFunctions.detailAnswerOption.agreement.${normalizedValue}`,
+      ) || fallback || ""
+    );
+  }
+
+  const sourceVariable = sourceVariables.find((variable) =>
+    FIXED_PREDICTION_OPTION_VARIABLES.has(variable),
+  );
+  return (
+    getTranslationTemplate(
+      language,
+      `prediction.option.${sourceVariable}.${normalizedValue}`,
+    ) || fallback || ""
+  );
+};
+
 export const createTranslator = (language) => (key, variables = {}) => {
-  const template =
-    translations[language]?.[key] ?? translations[DEFAULT_LANGUAGE]?.[key] ?? key;
+  const template = getTranslationTemplate(language, key) ?? key;
 
   return template.replace(/\{(\w+)\}/g, (_, variableName) => {
     const value = variables[variableName];

@@ -100,7 +100,9 @@ const buildFeatureTitle = (featurePreview) => {
   const shapeLike = {
     feature_name: featurePreview?.feature_name,
     chart_config:
-      featurePreview?.left_chart_config || featurePreview?.right_chart_config || {},
+      featurePreview?.left_chart_config ||
+      featurePreview?.right_chart_config ||
+      {},
   };
   return getShapeFunctionDisplayName(shapeLike);
 };
@@ -117,7 +119,8 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
           type: "bar",
           name: t("modelCompare.leftBase"),
           marker: { color: LEFT_COLORS.base, opacity: 0.35 },
-          customdata: featurePreview.left_x_tick_labels || featurePreview.left_x_values,
+          customdata:
+            featurePreview.left_x_tick_labels || featurePreview.left_x_values,
           hovertemplate:
             "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
             t("modelCompare.leftBase") +
@@ -164,7 +167,8 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
           type: "bar",
           name: t("modelCompare.leftEffective"),
           marker: { color: LEFT_COLORS.effective, opacity: 0.95 },
-          customdata: featurePreview.left_x_tick_labels || featurePreview.left_x_values,
+          customdata:
+            featurePreview.left_x_tick_labels || featurePreview.left_x_values,
           hovertemplate:
             "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
             t("modelCompare.leftEffective") +
@@ -227,7 +231,7 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
       zerolinecolor: "#94a3b8",
     },
     height: 360,
-    margin: { l: 55, r: 24, t: 50, b: 55 },
+    margin: { l: 55, r: 24, t: 80, b: 55 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
     legend: {
@@ -270,7 +274,9 @@ const FeatureMetricBadge = ({
 
   return (
     <div className={`rounded-2xl border px-3 py-2 ${tone.container}`}>
-      <div className={`text-[11px] font-semibold uppercase tracking-wide ${tone.label}`}>
+      <div
+        className={`text-[11px] font-semibold uppercase tracking-wide ${tone.label}`}
+      >
         {label}
       </div>
       <div className={`mt-1 text-base font-semibold ${tone.value}`}>
@@ -339,7 +345,9 @@ const ArtifactSummaryCard = ({
           <div className="text-xs uppercase tracking-wide text-slate-400">
             {t("modelCompare.editExport")}
           </div>
-          <div>{metadata.has_edit_export ? t("common.yes") : t("common.no")}</div>
+          <div>
+            {metadata.has_edit_export ? t("common.yes") : t("common.no")}
+          </div>
         </div>
         <div>
           <div className="text-xs uppercase tracking-wide text-slate-400">
@@ -368,7 +376,9 @@ const FeatureSelectionModal = ({
 }) => {
   if (!open || !featureName) return null;
   const submissions = getFeatureSubmissions(artifact, featureName);
-  const featureTitle = getShapeFunctionDisplayName({ feature_name: featureName });
+  const featureTitle = getShapeFunctionDisplayName({
+    feature_name: featureName,
+  });
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
       <div className="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
@@ -467,7 +477,9 @@ const FeatureSelectionModal = ({
 
         <div className="flex items-center justify-between gap-4 border-t border-slate-200 px-6 py-4">
           <div className="text-sm text-slate-500">
-            {busy ? t("modelCompare.recomputing") : t("modelCompare.previewOnly")}
+            {busy
+              ? t("modelCompare.recomputing")
+              : t("modelCompare.previewOnly")}
           </div>
           <button
             type="button"
@@ -518,15 +530,21 @@ function ModelComparePage({ onBack, language = "en" }) {
       const result = await apiService.previewModelComparison({
         left_artifact: comparePayload.left_artifact,
         right_artifact: comparePayload.right_artifact,
-        left_selected_submission_ids: getSelectedSubmissionIds(nextSelectionState.left),
-        right_selected_submission_ids: getSelectedSubmissionIds(nextSelectionState.right),
+        left_selected_submission_ids: getSelectedSubmissionIds(
+          nextSelectionState.left,
+        ),
+        right_selected_submission_ids: getSelectedSubmissionIds(
+          nextSelectionState.right,
+        ),
         use_confidence: nextUseConfidence,
         feature_names: comparePayload.shared_features,
       });
       setPreview(result);
     } catch (err) {
       setError(
-        err?.response?.data?.detail || err?.message || t("modelCompare.previewError"),
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("modelCompare.previewError"),
       );
     } finally {
       setPreviewLoading(false);
@@ -541,7 +559,10 @@ function ModelComparePage({ onBack, language = "en" }) {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiService.prepareModelComparison(leftFile, rightFile);
+      const result = await apiService.prepareModelComparison(
+        leftFile,
+        rightFile,
+      );
       const nextSelectionState = {
         left: buildSelectionMap(result.left_artifact),
         right: buildSelectionMap(result.right_artifact),
@@ -555,7 +576,9 @@ function ModelComparePage({ onBack, language = "en" }) {
     } catch (err) {
       resetPreparedState();
       setError(
-        err?.response?.data?.detail || err?.message || t("modelCompare.prepareError"),
+        err?.response?.data?.detail ||
+          err?.message ||
+          t("modelCompare.prepareError"),
       );
     } finally {
       setLoading(false);
@@ -723,7 +746,9 @@ function ModelComparePage({ onBack, language = "en" }) {
                 disabled={loading || !leftFile || !rightFile}
                 className="mt-5 w-full rounded-xl bg-indigo-500 px-4 py-3 font-medium text-white transition-colors hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading ? t("modelCompare.preparing") : t("modelCompare.compareArtifacts")}
+                {loading
+                  ? t("modelCompare.preparing")
+                  : t("modelCompare.compareArtifacts")}
               </button>
             </div>
           </div>
@@ -764,7 +789,9 @@ function ModelComparePage({ onBack, language = "en" }) {
                     <input
                       type="checkbox"
                       checked={useConfidence}
-                      onChange={(event) => handleConfidenceToggle(event.target.checked)}
+                      onChange={(event) =>
+                        handleConfidenceToggle(event.target.checked)
+                      }
                       className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     />
                     <div>
@@ -812,11 +839,13 @@ function ModelComparePage({ onBack, language = "en" }) {
                       onChange={(event) => setJumpFeature(event.target.value)}
                       className="rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                     >
-                      {(comparePayload.shared_features || []).map((featureName) => (
-                        <option key={featureName} value={featureName}>
-                          {featureName}
-                        </option>
-                      ))}
+                      {(comparePayload.shared_features || []).map(
+                        (featureName) => (
+                          <option key={featureName} value={featureName}>
+                            {featureName}
+                          </option>
+                        ),
+                      )}
                     </select>
                     <button
                       onClick={handleJumpToFeature}
@@ -885,20 +914,6 @@ function ModelComparePage({ onBack, language = "en" }) {
                             t={t}
                           />
                           <FeatureMetricBadge
-                            label={t("modelCompare.maeVsOriginalBase")}
-                            metricLabel={t("combined.mae")}
-                            value={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_mae
-                            }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_status
-                            }
-                            language={language}
-                            t={t}
-                          />
-                          <FeatureMetricBadge
                             label={t("modelCompare.rmseVsEditedBase")}
                             metricLabel={t("combined.rmse")}
                             value={
@@ -908,20 +923,6 @@ function ModelComparePage({ onBack, language = "en" }) {
                             status={
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_edited_base_rmse_status
-                            }
-                            language={language}
-                            t={t}
-                          />
-                          <FeatureMetricBadge
-                            label={t("modelCompare.rmseVsOriginalBase")}
-                            metricLabel={t("combined.rmse")}
-                            value={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_rmse
-                            }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_rmse_status
                             }
                             language={language}
                             t={t}
@@ -941,6 +942,36 @@ function ModelComparePage({ onBack, language = "en" }) {
                             language={language}
                             t={t}
                           />
+                          <FeatureMetricBadge
+                            label={t("modelCompare.maeVsOriginalBase")}
+                            metricLabel={t("combined.mae")}
+                            value={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_mae
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_status
+                            }
+                            language={language}
+                            t={t}
+                          />
+
+                          <FeatureMetricBadge
+                            label={t("modelCompare.rmseVsOriginalBase")}
+                            metricLabel={t("combined.rmse")}
+                            value={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_rmse
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_rmse_status
+                            }
+                            language={language}
+                            t={t}
+                          />
+
                           <FeatureMetricBadge
                             label={t("modelCompare.r2VsOriginalBase")}
                             metricLabel={t("combined.r2")}
@@ -962,7 +993,10 @@ function ModelComparePage({ onBack, language = "en" }) {
                         <button
                           type="button"
                           onClick={() =>
-                            openSelectionModal("left", featurePreview.feature_name)
+                            openSelectionModal(
+                              "left",
+                              featurePreview.feature_name,
+                            )
                           }
                           className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
                         >
@@ -973,16 +1007,21 @@ function ModelComparePage({ onBack, language = "en" }) {
                             selectionState.left,
                           )}
                           /
-                          {getFeatureSubmissions(
-                            comparePayload.left_artifact,
-                            featurePreview.feature_name,
-                          ).length}
+                          {
+                            getFeatureSubmissions(
+                              comparePayload.left_artifact,
+                              featurePreview.feature_name,
+                            ).length
+                          }
                           )
                         </button>
                         <button
                           type="button"
                           onClick={() =>
-                            openSelectionModal("right", featurePreview.feature_name)
+                            openSelectionModal(
+                              "right",
+                              featurePreview.feature_name,
+                            )
                           }
                           className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-100"
                         >
@@ -993,10 +1032,12 @@ function ModelComparePage({ onBack, language = "en" }) {
                             selectionState.right,
                           )}
                           /
-                          {getFeatureSubmissions(
-                            comparePayload.right_artifact,
-                            featurePreview.feature_name,
-                          ).length}
+                          {
+                            getFeatureSubmissions(
+                              comparePayload.right_artifact,
+                              featurePreview.feature_name,
+                            ).length
+                          }
                           )
                         </button>
                       </div>

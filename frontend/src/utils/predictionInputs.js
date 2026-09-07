@@ -1,3 +1,5 @@
+import { getPredictionOptionLabel } from "../i18n";
+
 const roundToTwoDecimals = (value) => Math.round(value * 100) / 100;
 
 const normalizeChoiceValue = (value, isNumericFeature = false) => {
@@ -67,12 +69,17 @@ export const getFeatureResponseOptions = (feature) => {
   return firstSourceWithOptions?.response_options || [];
 };
 
-export const getFeatureChoiceOptions = (feature) => {
+export const getFeatureChoiceOptions = (feature, language) => {
   if (feature?.feature_type === "categorical") {
     const normalizedResponseOptions = getFeatureResponseOptions(feature)
       .map((option) => ({
         value: normalizeChoiceValue(option?.value, false),
-        label: String(option?.label ?? "").trim(),
+        label: getPredictionOptionLabel(
+          language,
+          feature,
+          option?.value,
+          String(option?.label ?? "").trim(),
+        ),
       }))
       .filter((option) => option.value);
     const labelByValue = new Map(
@@ -88,7 +95,15 @@ export const getFeatureChoiceOptions = (feature) => {
 
     return Array.from(new Set(optionValues)).map((value) => ({
       value,
-      label: formatChoiceLabel(value, labelByValue.get(value)),
+      label: formatChoiceLabel(
+        value,
+        getPredictionOptionLabel(
+          language,
+          feature,
+          value,
+          labelByValue.get(value),
+        ),
+      ),
     }));
   }
 

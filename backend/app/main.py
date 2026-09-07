@@ -344,7 +344,9 @@ async def export_model(http_request: Request, include_edits: bool = False):
         )
         if include_edits:
             artifact["shape_function_edits_export"] = (
-                db_service.export_shape_function_edits_artifact()
+                db_service.export_shape_function_edits_artifact(
+                    shape_functions=artifact["shape_functions"],
+                )
             )
         timestamp = artifact.get("exported_at", "").replace(":", "-").replace(".", "-")
         suffix = "-with-edits" if include_edits else ""

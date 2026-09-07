@@ -16,6 +16,12 @@ from .database import (
 from .config import settings
 from .security import hash_password, verify_password
 from .ml_service import ml_service
+from .noop_edits import (
+    NOOP_EDIT_MESSAGE,
+    NOOP_EDIT_WEIGHT,
+    build_imputed_noop_submission,
+    complete_shape_function_edits_export,
+)
 from uuid import uuid4
 
 
@@ -180,6 +186,7 @@ class DatabaseService:
                     "profession": user_metadata.get(row.user_id, {}).get("profession"),
                     "message": row.message or "",
                     "sureness": round(float(row.weight) * 10),
+                    "is_imputed_noop": bool(row.is_imputed_noop),
                     "rows": [],
                     "_latest_created_at": created_at,
                     "_latest_row_id": row.id,
@@ -201,6 +208,60 @@ class DatabaseService:
                 latest_by_user_feature[latest_key] = submission
 
         return list(latest_by_user_feature.values())
+
+    @staticmethod
+    def _base_shape_functions() -> List[Dict[str, Any]]:
+        """Return loaded public shape functions used to construct no-op rows."""
+        if not ml_service.original_shape_functions and ml_service.is_trained:
+            ml_service.get_shape_functions()
+        return list(ml_service.original_shape_functions.values())
+
+    def _insert_noop_submission(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        shape_function: Dict[str, Any],
+    ) -> None:
+        """Persist one complete system-generated no-op curve."""
+        noop = build_imputed_noop_submission(shape_function)
+        for point in noop["edited_points"]:
+            db.add(
+                ShapeFunctionEdit(
+                    user_id=user_id,
+                    feature_name=noop["feature_name"],
+                    feature_type=noop["feature_type"],
+                    x_value=str(point["x_value"]),
+                    y_offset=0.0,
+                    weight=NOOP_EDIT_WEIGHT,
+                    message=NOOP_EDIT_MESSAGE,
+                    submission_id=noop["submission_id"],
+                    is_imputed_noop=True,
+                )
+            )
+
+    def _ensure_user_noop_submissions(self, db: Session, user_id: int) -> None:
+        """Fill any absent chart for a user who still has a real submission."""
+        base_shapes = self._base_shape_functions()
+        if not base_shapes:
+            return
+
+        rows = (
+            db.query(ShapeFunctionEdit)
+            .filter(ShapeFunctionEdit.user_id == user_id)
+            .all()
+        )
+        if not any(not bool(row.is_imputed_noop) for row in rows):
+            return
+
+        existing_features = {row.feature_name for row in rows}
+        for shape_function in base_shapes:
+            if shape_function["feature_name"] not in existing_features:
+                self._insert_noop_submission(
+                    db,
+                    user_id=user_id,
+                    shape_function=shape_function,
+                )
 
     @staticmethod
     def _rows_to_storage_feature(rows: List[ShapeFunctionEdit]) -> Dict[str, Any]:
@@ -453,7 +514,12 @@ class DatabaseService:
         db = self.get_db()
         try:
             # Get distinct user IDs from edits
-            user_ids_with_edits = db.query(ShapeFunctionEdit.user_id).distinct().all()
+            user_ids_with_edits = (
+                db.query(ShapeFunctionEdit.user_id)
+                .filter(ShapeFunctionEdit.is_imputed_noop.is_(False))
+                .distinct()
+                .all()
+            )
             user_ids = [uid[0] for uid in user_ids_with_edits]
             
             if not user_ids:
@@ -545,8 +611,11 @@ class DatabaseService:
                         weight=weight,
                         message=message,
                         submission_id=submission_id,
+                        is_imputed_noop=False,
                     )
                     db.add(edit)
+
+            self._ensure_user_noop_submissions(db, user_id)
             
             db.commit()
             return True
@@ -563,6 +632,8 @@ class DatabaseService:
             submissions = self._get_effective_submissions(db, user_id=user_id)
             result: Dict[str, Dict[str, float]] = {}
             for submission in submissions:
+                if submission["is_imputed_noop"]:
+                    continue
                 feature_points = {}
                 for edit in submission["rows"]:
                     feature_points[edit.x_value] = edit.y_offset
@@ -578,6 +649,8 @@ class DatabaseService:
             result: Dict[str, Dict[str, Dict[str, float]]] = {}
             submissions = self._get_effective_submissions(db, user_id=user_id)
             for submission in submissions:
+                if submission["is_imputed_noop"]:
+                    continue
                 feature_name = submission["feature_name"]
                 result[feature_name] = {}
                 for edit in submission["rows"]:
@@ -596,6 +669,8 @@ class DatabaseService:
             submissions = self._get_effective_submissions(db, user_id=user_id)
             features = []
             for submission in sorted(submissions, key=lambda item: item["feature_name"]):
+                if submission["is_imputed_noop"]:
+                    continue
                 storage_feature = self._rows_to_storage_feature(submission["rows"])
                 display_points = []
                 for point in storage_feature["edited_points"]:
@@ -629,6 +704,7 @@ class DatabaseService:
             return [
                 self._rows_to_storage_feature(submission["rows"])
                 for submission in sorted(submissions, key=lambda item: item["feature_name"])
+                if not submission["is_imputed_noop"]
             ]
         finally:
             db.close()
@@ -656,6 +732,20 @@ class DatabaseService:
                 ShapeFunctionEdit.user_id == user_id,
                 ShapeFunctionEdit.feature_name == feature_name
             ).delete()
+            self._ensure_user_noop_submissions(db, user_id)
+            remaining_real_edits = (
+                db.query(ShapeFunctionEdit)
+                .filter(
+                    ShapeFunctionEdit.user_id == user_id,
+                    ShapeFunctionEdit.is_imputed_noop.is_(False),
+                )
+                .count()
+            )
+            if remaining_real_edits == 0:
+                db.query(ShapeFunctionEdit).filter(
+                    ShapeFunctionEdit.user_id == user_id,
+                    ShapeFunctionEdit.is_imputed_noop.is_(True),
+                ).delete(synchronize_session=False)
             db.commit()
             return True
         except Exception as e:
@@ -678,7 +768,11 @@ class DatabaseService:
         finally:
             db.close()
 
-    def export_shape_function_edits_artifact(self) -> Dict[str, Any]:
+    def export_shape_function_edits_artifact(
+        self,
+        *,
+        shape_functions: Optional[List[Dict[str, Any]]] = None,
+    ) -> Dict[str, Any]:
         """Export the active saved shape-function edits in a model-artifact friendly shape."""
         db = self.get_db()
         try:
@@ -750,6 +844,7 @@ class DatabaseService:
                     "submission_id": submission["persisted_submission_id"] or submission["submission_id"],
                     "message": submission["message"],
                     "sureness": submission["sureness"],
+                    "is_imputed_noop": bool(submission["is_imputed_noop"]),
                     "edited_points": edited_points,
                 }
                 if created_candidates:
@@ -759,13 +854,17 @@ class DatabaseService:
                 user_edit_group["shape_functions"].append(shape_payload)
                 total_submissions += 1
 
-            return {
+            payload = {
                 "included": True,
                 "users": users,
                 "edits": edits,
                 "user_count": len(users),
                 "submission_count": total_submissions,
             }
+            return complete_shape_function_edits_export(
+                payload,
+                shape_functions or self._base_shape_functions(),
+            )
         finally:
             db.close()
 
@@ -874,6 +973,7 @@ class DatabaseService:
                             weight=weight,
                             message=message,
                             submission_id=submission_id,
+                            is_imputed_noop=bool(shape_function.get("is_imputed_noop", False)),
                             created_at=created_at or datetime.utcnow(),
                             updated_at=updated_at or created_at or datetime.utcnow(),
                         )
@@ -909,6 +1009,21 @@ class DatabaseService:
         db = self.get_db()
         try:
             submissions = self._get_effective_submissions(db)
+            participant_ids = {
+                submission["user_id"]
+                for submission in submissions
+                if not submission["is_imputed_noop"]
+            }
+            submissions = [
+                submission
+                for submission in submissions
+                if submission["user_id"] in participant_ids
+            ]
+            submitted_users_by_feature: Dict[str, set[int]] = {}
+            for submission in submissions:
+                submitted_users_by_feature.setdefault(
+                    submission["feature_name"], set()
+                ).add(submission["user_id"])
             aggregate: Dict[str, Dict[Any, Dict[str, float]]] = {}
 
             for submission in submissions:
@@ -930,8 +1045,11 @@ class DatabaseService:
             combined: Dict[str, Dict[Any, float]] = {}
             for feature_name, points in aggregate.items():
                 combined[feature_name] = {}
+                missing_noop_users = len(participant_ids - submitted_users_by_feature[feature_name])
                 for x_value, stats in points.items():
-                    user_count = stats["user_count"]
+                    # A user without a submission for this chart contributes an
+                    # implicit full zero-offset curve at every coordinate.
+                    user_count = stats["user_count"] + missing_noop_users
                     avg_offset = stats["offset_sum"] / user_count if user_count > 0 else 0.0
                     combined[feature_name][x_value] = avg_offset
             return combined
@@ -946,14 +1064,28 @@ class DatabaseService:
         db = self.get_db()
         try:
             submissions = self._get_effective_submissions(db)
-            total_users = len({submission["user_id"] for submission in submissions})
+            participant_ids = {
+                submission["user_id"]
+                for submission in submissions
+                if not submission["is_imputed_noop"]
+            }
+            submissions = [
+                submission
+                for submission in submissions
+                if submission["user_id"] in participant_ids
+            ]
+            total_users = len(participant_ids)
 
             features: Dict[str, Dict[str, Any]] = {}
             point_stats: Dict[Tuple[str, Any], Dict[str, Any]] = {}
+            submitted_users_by_feature: Dict[str, set[int]] = {}
 
             for submission in submissions:
                 feature_name = submission["feature_name"]
                 feature_type = submission["feature_type"]
+                submitted_users_by_feature.setdefault(feature_name, set()).add(
+                    submission["user_id"]
+                )
                 features.setdefault(
                     feature_name,
                     {
@@ -987,7 +1119,15 @@ class DatabaseService:
 
             for stats in point_stats.values():
                 feature = features[stats["feature_name"]]
-                user_count = stats["user_count"]
+                missing_noop_users = len(
+                    participant_ids
+                    - submitted_users_by_feature[stats["feature_name"]]
+                )
+                user_count = stats["user_count"] + missing_noop_users
+                if missing_noop_users:
+                    stats["min_weighted"] = min(stats["min_weighted"], 0.0)
+                    stats["max_weighted"] = max(stats["max_weighted"], 0.0)
+                    stats["weight_sum"] += NOOP_EDIT_WEIGHT * missing_noop_users
                 feature["edited_points"].append(
                     {
                         "x_value": (
@@ -1091,6 +1231,7 @@ class DatabaseService:
                         "created_at": submission["_latest_created_at"].isoformat(),
                         "sureness": submission["sureness"],
                         "message": submission["message"],
+                        "is_imputed_noop": bool(submission["is_imputed_noop"]),
                         "point_count": len(rows),
                         "raw_input_total": raw_input_total,
                         "weighted_total": weighted_total,
@@ -1182,6 +1323,21 @@ class DatabaseService:
 
             for edit in edits:
                 db.delete(edit)
+            db.flush()
+            self._ensure_user_noop_submissions(db, first_edit.user_id)
+            remaining_real_edits = (
+                db.query(ShapeFunctionEdit)
+                .filter(
+                    ShapeFunctionEdit.user_id == first_edit.user_id,
+                    ShapeFunctionEdit.is_imputed_noop.is_(False),
+                )
+                .count()
+            )
+            if remaining_real_edits == 0:
+                db.query(ShapeFunctionEdit).filter(
+                    ShapeFunctionEdit.user_id == first_edit.user_id,
+                    ShapeFunctionEdit.is_imputed_noop.is_(True),
+                ).delete(synchronize_session=False)
             db.commit()
             return True
         except Exception as e:

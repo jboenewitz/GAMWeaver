@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createTranslator } from "../i18n";
+import {
+  createTranslator,
+  getPredictionOptionLabel,
+  getPredictionTargetLabel,
+} from "../i18n";
 import CompetenceLevelsTable from "./CompetenceLevelsTable";
 import { getFeatureDisplayName } from "../utils/featureDisplay";
 import {
@@ -26,11 +30,16 @@ const formatTooltipNumber = (value) => {
     : String(Math.round(value * 100) / 100);
 };
 
-const buildScaleTooltipText = (feature, t) => {
+const buildScaleTooltipText = (feature, t, language) => {
   const responseOptions = getFeatureResponseOptions(feature)
     .map((option) => ({
       value: String(option?.value ?? "").trim(),
-      label: String(option?.label ?? "").trim(),
+      label: getPredictionOptionLabel(
+        language,
+        feature,
+        option?.value,
+        String(option?.label ?? "").trim(),
+      ),
     }))
     .filter((option) => option.value);
 
@@ -44,8 +53,8 @@ const buildScaleTooltipText = (feature, t) => {
   }
 
   if (feature.feature_type === "categorical") {
-    const values = (feature.categorical_options || [])
-      .map((option) => String(option ?? "").trim())
+    const values = getFeatureChoiceOptions(feature, language)
+      .map((option) => option.label)
       .filter(Boolean);
     if (values.length > 0) {
       return t("prediction.scaleTooltipAvailableValues", {
@@ -74,8 +83,8 @@ const buildScaleTooltipText = (feature, t) => {
   return "";
 };
 
-const FeatureScaleTooltip = ({ feature, label, t }) => {
-  const tooltipText = buildScaleTooltipText(feature, t);
+const FeatureScaleTooltip = ({ feature, label, t, language }) => {
+  const tooltipText = buildScaleTooltipText(feature, t, language);
 
   if (!tooltipText) return null;
 
@@ -111,13 +120,18 @@ const PredictionForm = ({
   const [prediction, setPrediction] = useState(null);
   const hasFeatures = featureSchema && featureSchema.length > 0;
   const t = createTranslator(language);
+  const displayedTarget = getPredictionTargetLabel(
+    language,
+    targetColumn,
+    targetColumn || t("common.target"),
+  );
 
   const title = useMemo(
     () =>
       t("prediction.predictTarget", {
-        target: targetColumn || t("common.target"),
+        target: displayedTarget,
       }),
-    [t, targetColumn],
+    [displayedTarget, t],
   );
 
   useEffect(() => {
@@ -166,7 +180,7 @@ const PredictionForm = ({
           {featureSchema.map((feature) => {
             const featureLabel = getFeatureDisplayName(feature);
             const inputId = getFeatureInputId(feature.name);
-            const choiceOptions = getFeatureChoiceOptions(feature);
+            const choiceOptions = getFeatureChoiceOptions(feature, language);
             const usesChoiceInput = featureUsesChoiceInput(feature);
 
             return (
@@ -179,6 +193,7 @@ const PredictionForm = ({
                     feature={feature}
                     label={featureLabel}
                     t={t}
+                    language={language}
                   />
                 </div>
                 {usesChoiceInput ? (
@@ -234,7 +249,7 @@ const PredictionForm = ({
             <div className="text-center">
               <div className="text-sm text-gray-600">
                 {t("prediction.predictedTarget", {
-                  target: targetColumn || t("common.target"),
+                  target: displayedTarget,
                 })}
               </div>
               <div className="text-4xl font-bold text-primary-600 mt-1">

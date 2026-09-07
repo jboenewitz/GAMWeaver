@@ -7,7 +7,11 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import Plot from "react-plotly.js";
-import { createTranslator } from "../i18n";
+import {
+  createTranslator,
+  getFeatureDetailAnswerOptionLabel,
+  getFeatureDetailQuestionLabel,
+} from "../i18n";
 import {
   getChartDisplayTitle,
   getFeatureDisplayName,
@@ -368,6 +372,7 @@ const FeatureDetailsDrawer = ({
   featureSchemaEntry,
   onClose,
   t,
+  language,
 }) => {
   const provenance = getFeatureProvenance(featureSchemaEntry);
   const featureDisplayName =
@@ -381,6 +386,9 @@ const FeatureDetailsDrawer = ({
   const sharedResponseOptions = Array.isArray(provenance?.response_options)
     ? provenance.response_options
     : [];
+  const answerScaleVariables = [...sourceRows, ...scaleItemRows].map(
+    (row) => row.variable,
+  );
   const hasMetadata = Boolean(provenance);
 
   useEffect(() => {
@@ -474,7 +482,14 @@ const FeatureDetailsDrawer = ({
                       <span className="min-w-[3rem] rounded-md bg-white px-2 py-1 text-center font-mono text-xs text-slate-600 shadow-sm">
                         {option?.value || "?"}
                       </span>
-                      <span className="pt-1">{option?.label || ""}</span>
+                      <span className="pt-1">
+                        {getFeatureDetailAnswerOptionLabel(
+                          language,
+                          answerScaleVariables,
+                          option?.value,
+                          option?.label,
+                        )}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -502,7 +517,11 @@ const FeatureDetailsDrawer = ({
                       </div>
                     )}
                     <div className="mt-1 text-sm text-slate-800">
-                      {row.label || row.variable}
+                      {getFeatureDetailQuestionLabel(
+                        language,
+                        row.variable,
+                        row.label,
+                      )}
                     </div>
                   </div>
                 ))}
@@ -527,7 +546,11 @@ const FeatureDetailsDrawer = ({
                       </div>
                     )}
                     <div className="mt-1 text-sm text-slate-800">
-                      {row.label || row.variable}
+                      {getFeatureDetailQuestionLabel(
+                        language,
+                        row.variable,
+                        row.label,
+                      )}
                     </div>
                     {sharedResponseOptions.length === 0 &&
                       Array.isArray(row.response_options) &&
@@ -544,7 +567,14 @@ const FeatureDetailsDrawer = ({
                               <span className="min-w-[3rem] rounded-md bg-slate-100 px-2 py-1 text-center font-mono text-xs text-slate-600">
                                 {option?.value || "?"}
                               </span>
-                              <span>{option?.label || ""}</span>
+                              <span>
+                                {getFeatureDetailAnswerOptionLabel(
+                                  language,
+                                  [row.variable],
+                                  option?.value,
+                                  option?.label,
+                                )}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1162,7 +1192,7 @@ const EditableShapeFunctionChart = ({
     }
   }, [isNumeric, isDragging, clearCategoricalHover]);
 
-  // ---- Categorical: native mousedown (hover-then-click) ----
+  // ---- Categorical: native mouse interactions (hover-then-click) ----
   useEffect(() => {
     if (isNumeric) return;
     const container = containerRef.current;
@@ -1174,28 +1204,25 @@ const EditableShapeFunctionChart = ({
       if (pointIndex === null) return;
 
       e.preventDefault();
-      const now = Date.now();
-
-      if (
-        lastMouseDownRef.current.pointIndex === pointIndex &&
-        now - lastMouseDownRef.current.time < 400
-      ) {
-        lastMouseDownRef.current = { time: 0, pointIndex: null, xValue: null };
-        stopDragInteraction();
-
-        const xValue = x_values[pointIndex];
-        const currentY = getCurrentYValues()[pointIndex];
-        const displayX =
-          typeof xValue === "number" ? parseFloat(xValue.toFixed(3)) : xValue;
-        setPreciseValue(currentY.toFixed(3));
-        setPreciseEntry({ xValue, displayX, pointIndex });
-      } else {
-        lastMouseDownRef.current = { time: now, pointIndex, xValue: null };
-        startCategoricalDrag(pointIndex, e.clientY);
-      }
+      startCategoricalDrag(pointIndex, e.clientY);
     };
 
-    const onDblClick = (e) => e.preventDefault();
+    const onDblClick = (e) => {
+      const pointIndex = hoveredPointRef.current;
+      if (pointIndex === null) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      stopDragInteraction();
+
+      const xValue = x_values[pointIndex];
+      const currentY = getCurrentYValues()[pointIndex];
+      const displayX =
+        typeof xValue === "number" ? parseFloat(xValue.toFixed(3)) : xValue;
+      setPreciseValue(currentY.toFixed(3));
+      setPreciseEntry({ xValue, displayX, pointIndex });
+    };
+
     container.addEventListener("mousedown", onMouseDown, true);
     container.addEventListener("dblclick", onDblClick, true);
     return () => {
@@ -3148,6 +3175,7 @@ const EditableShapeFunctionsGrid = ({
         featureSchemaEntry={activeFeatureSchemaEntry}
         onClose={handleCloseDetails}
         t={t}
+        language={language}
       />
 
       <div className="flex items-center justify-between mb-4">

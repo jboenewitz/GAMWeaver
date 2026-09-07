@@ -21,15 +21,18 @@ from .data_processing import (
     MISSING_INDICATOR_SUFFIX,
     prepare_training_data,
 )
+from .noop_edits import encode_numeric_storage_key
 
 DATA_FILE_NAME = "bike.csv"
 MAX_PREVIEW_ROWS = 500
 SHAPE_DISTRIBUTION_DEFAULT_BIN_COUNT = 20
 MODEL_ARTIFACT_VERSION = "1.0"
 MODEL_ARTIFACT_VERSION_WITH_EDITS = "1.1"
+MODEL_ARTIFACT_VERSION_WITH_NOOP_EDITS = "1.2"
 SUPPORTED_MODEL_ARTIFACT_VERSIONS = {
     MODEL_ARTIFACT_VERSION,
     MODEL_ARTIFACT_VERSION_WITH_EDITS,
+    MODEL_ARTIFACT_VERSION_WITH_NOOP_EDITS,
 }
 
 
@@ -1836,7 +1839,7 @@ class MLService:
 
         artifact = {
             "artifact_version": (
-                MODEL_ARTIFACT_VERSION_WITH_EDITS
+                MODEL_ARTIFACT_VERSION_WITH_NOOP_EDITS
                 if include_shape_function_edits
                 else MODEL_ARTIFACT_VERSION
             ),
@@ -2135,6 +2138,7 @@ class MLService:
                     "feature_type": feature_type,
                     "submission_id": str(shape_function.get("submission_id", "") or ""),
                     "message": str(shape_function.get("message", "") or ""),
+                    "is_imputed_noop": bool(shape_function.get("is_imputed_noop", False)),
                     "edited_points": normalized_points,
                 }
                 if shape_function.get("created_at"):
@@ -2855,6 +2859,7 @@ class MLService:
                         "user_name": user_name,
                         "profession": declared_professions.get(user_name),
                         "message": str(shape_function.get("message", "") or ""),
+                        "is_imputed_noop": bool(shape_function.get("is_imputed_noop", False)),
                         "sureness": sureness_value,
                         "point_count": len(edited_points),
                         "x_summary": self._build_compare_x_summary(
@@ -4965,7 +4970,7 @@ class MLService:
     @staticmethod
     def _encode_numeric_storage_key(x_value: float) -> str:
         """Encode numeric x values with an explicit prefix for persistence."""
-        return f"x:{x_value:.12g}"
+        return encode_numeric_storage_key(x_value)
 
     @staticmethod
     def _decode_numeric_storage_key(raw_key: Any, original_x: List[Any]) -> Optional[float]:

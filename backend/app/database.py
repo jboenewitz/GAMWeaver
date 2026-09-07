@@ -61,6 +61,7 @@ class ShapeFunctionEdit(Base):
     weight = Column(Float, nullable=False, default=0.5)  # Sureness weight (0.1 to 1.0, derived from 1-10 slider)
     message = Column(Text, nullable=True, default="")  # Commit message for the edit
     submission_id = Column(String(64), nullable=True, default=None)  # Groups point rows from a single curve submission
+    is_imputed_noop = Column(Boolean, nullable=False, default=False)  # System-generated "let the chart be" curve
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -220,6 +221,15 @@ def init_db():
                 conn.execute(
                     text(
                         "ALTER TABLE shape_function_edits ADD COLUMN submission_id TEXT DEFAULT NULL"
+                    )
+                )
+                conn.commit()
+        if "is_imputed_noop" not in edit_columns:
+            with engine.connect() as conn:
+                conn.execute(
+                    text(
+                        "ALTER TABLE shape_function_edits "
+                        "ADD COLUMN is_imputed_noop BOOLEAN NOT NULL DEFAULT 0"
                     )
                 )
                 conn.commit()
