@@ -63,6 +63,12 @@ const formatMetricValue = (value, language) => {
   }).format(value);
 };
 
+const formatSignedMetricValue = (value, language) => {
+  if (!Number.isFinite(value)) return "-";
+  const prefix = value > 0 ? "+" : "";
+  return prefix + formatMetricValue(value, language);
+};
+
 const getMetricTone = (status) => {
   if (status === "improved") {
     return {
@@ -282,7 +288,7 @@ const FeatureMetricBadge = ({
       <div className={`mt-1 text-base font-semibold ${tone.value}`}>
         {metricLabel}: {formatMetricValue(value, language)}
       </div>
-      <div className={`text-xs ${tone.status}`}>{statusLabel}</div>
+      {status && <div className={`text-xs ${tone.status}`}>{statusLabel}</div>}
     </div>
   );
 };
@@ -503,6 +509,7 @@ function ModelComparePage({ onBack, language = "en" }) {
   const [preview, setPreview] = useState(null);
   const [selectionState, setSelectionState] = useState({ left: {}, right: {} });
   const [useConfidence, setUseConfidence] = useState(true);
+  const [averageScoreMethod, setAverageScoreMethod] = useState("uniform");
   const [showBaseTraces, setShowBaseTraces] = useState(true);
   const [featureSearch, setFeatureSearch] = useState("");
   const [jumpFeature, setJumpFeature] = useState("");
@@ -516,6 +523,7 @@ function ModelComparePage({ onBack, language = "en" }) {
     setPreview(null);
     setSelectionState({ left: {}, right: {} });
     setUseConfidence(true);
+    setAverageScoreMethod("uniform");
     setShowBaseTraces(true);
     setJumpFeature("");
     setSelectionModal(null);
@@ -625,6 +633,19 @@ function ModelComparePage({ onBack, language = "en" }) {
       );
     });
   }, [featureSearch, preview]);
+
+  const selectedAverageScores =
+    averageScoreMethod === "data_weighted"
+      ? preview?.data_weighted_average_prediction_scores
+      : preview?.average_prediction_scores;
+  const selectedContributionRows =
+    [...(preview?.average_prediction_feature_contributions?.[averageScoreMethod] || [])]
+      .sort((left, right) => {
+        if (left.is_base_offset !== right.is_base_offset) {
+          return left.is_base_offset ? -1 : 1;
+        }
+        return Math.abs(right.difference) - Math.abs(left.difference);
+      });
 
   const handleJumpToFeature = () => {
     if (!jumpFeature) return;
@@ -773,6 +794,142 @@ function ModelComparePage({ onBack, language = "en" }) {
               />
             </section>
 
+            <section className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-5 shadow-sm">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    {t("modelCompare.averagePredictedScore")}
+                  </h2>
+                  <p className="text-sm text-slate-600">
+                    {averageScoreMethod === "uniform"
+                      ? t("modelCompare.uniformAverageDescription")
+                      : t("modelCompare.dataWeightedAverageDescription")}
+                  </p>
+                </div>
+                {previewLoading && (
+                  <div className="text-sm text-slate-500">
+                    {t("modelCompare.recomputing")}
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 inline-flex rounded-xl border border-indigo-200 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setAverageScoreMethod("uniform")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    averageScoreMethod === "uniform"
+                      ? "bg-indigo-600 text-white"
+                      : "text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  {t("modelCompare.uniformAverage")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAverageScoreMethod("data_weighted")}
+                  disabled={!preview?.data_weighted_average_prediction_scores}
+                  title={
+                    preview?.data_weighted_average_prediction_scores
+                      ? ""
+                      : t("modelCompare.dataWeightedUnavailable")
+                  }
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                    averageScoreMethod === "data_weighted"
+                      ? "bg-indigo-600 text-white"
+                      : "text-slate-700 hover:bg-slate-100"
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {t("modelCompare.dataWeightedAverage")}
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-blue-200 bg-white px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
+                    {t("modelCompare.originalAveragePredictedScore")}
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold text-blue-950">
+                    {formatMetricValue(
+                      selectedAverageScores?.original,
+                      language,
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-white px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                    {t("modelCompare.editedAveragePredictedScore")}
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold text-amber-950">
+                    {formatMetricValue(
+                      selectedAverageScores?.edited,
+                      language,
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-indigo-200 bg-white px-4 py-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                    {t("modelCompare.averagePredictedScoreDifference")}
+                  </div>
+                  <div className="mt-1 text-2xl font-semibold text-indigo-950">
+                    {formatSignedMetricValue(
+                      selectedAverageScores?.difference,
+                      language,
+                    )}
+                  </div>
+                </div>
+              </div>
+              <details className="mt-4 rounded-xl border border-indigo-200 bg-white px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-indigo-950">
+                  {t("modelCompare.showAverageContributions")}
+                </summary>
+                <p className="mt-2 text-sm text-slate-600">
+                  {t("modelCompare.averageContributionsDescription")}
+                </p>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-2 py-2 font-semibold">
+                          {t("modelCompare.contributionFeature")}
+                        </th>
+                        <th className="px-2 py-2 text-right font-semibold">
+                          {t("modelCompare.originalAveragePredictedScore")}
+                        </th>
+                        <th className="px-2 py-2 text-right font-semibold">
+                          {t("modelCompare.editedAveragePredictedScore")}
+                        </th>
+                        <th className="px-2 py-2 text-right font-semibold">
+                          {t("modelCompare.averagePredictedScoreDifference")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700">
+                      {selectedContributionRows.map((row) => (
+                        <tr
+                          key={row.feature_name}
+                          className={row.is_base_offset ? "bg-slate-50" : ""}
+                        >
+                          <td className="px-2 py-2 font-medium">
+                            {row.is_base_offset
+                              ? t("modelCompare.basePredictionOffset")
+                              : row.feature_name}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {formatMetricValue(row.original, language)}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {formatMetricValue(row.edited, language)}
+                          </td>
+                          <td className="px-2 py-2 text-right tabular-nums">
+                            {formatSignedMetricValue(row.difference, language)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            </section>
+
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
@@ -898,90 +1055,33 @@ function ModelComparePage({ onBack, language = "en" }) {
                         <p className="text-sm text-slate-500">
                           {featurePreview.feature_name}
                         </p>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                           <FeatureMetricBadge
-                            label={t("modelCompare.maeVsEditedBase")}
-                            metricLabel={t("combined.mae")}
-                            value={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_edited_base_mae
-                            }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_edited_base_status
-                            }
-                            language={language}
-                            t={t}
-                          />
-                          <FeatureMetricBadge
-                            label={t("modelCompare.rmseVsEditedBase")}
-                            metricLabel={t("combined.rmse")}
-                            value={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_edited_base_rmse
-                            }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_edited_base_rmse_status
-                            }
-                            language={language}
-                            t={t}
-                          />
-                          <FeatureMetricBadge
-                            label={t("modelCompare.r2VsEditedBase")}
-                            metricLabel={t("combined.r2")}
-                            value={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_edited_base_r2
-                            }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_edited_base_r2_status
-                            }
-                            higherIsBetter
-                            language={language}
-                            t={t}
-                          />
-                          <FeatureMetricBadge
-                            label={t("modelCompare.maeVsOriginalBase")}
+                            label={t("modelCompare.maeOriginalVsEdited")}
                             metricLabel={t("combined.mae")}
                             value={
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_mae
                             }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_status
-                            }
                             language={language}
                             t={t}
                           />
-
                           <FeatureMetricBadge
-                            label={t("modelCompare.rmseVsOriginalBase")}
+                            label={t("modelCompare.rmseOriginalVsEdited")}
                             metricLabel={t("combined.rmse")}
                             value={
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_rmse
                             }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_rmse_status
-                            }
                             language={language}
                             t={t}
                           />
-
                           <FeatureMetricBadge
-                            label={t("modelCompare.r2VsOriginalBase")}
+                            label={t("modelCompare.r2OriginalVsEdited")}
                             metricLabel={t("combined.r2")}
                             value={
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_r2
-                            }
-                            status={
-                              featurePreview?.comparison_metrics
-                                ?.edited_vs_original_base_r2_status
                             }
                             higherIsBetter
                             language={language}

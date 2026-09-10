@@ -392,6 +392,7 @@ class ModelCompareShapeFunction(BaseModel):
     y_values: List[float]
     x_tick_labels: Optional[List[str]] = None
     chart_config: Optional[Dict[str, Any]] = None
+    distribution: Optional[ShapeFunctionDistribution] = None
 
 
 class ModelCompareEditedPoint(BaseModel):
@@ -429,6 +430,7 @@ class ModelCompareFeatureSubmissions(BaseModel):
 class ModelComparePreparedArtifact(BaseModel):
     """Canonical compare payload for one uploaded model artifact."""
     metadata: ModelCompareArtifactMetadata
+    base_prediction_offset: float = 0.0
     selected_feature_columns: List[str]
     cat_features: List[str] = Field(default_factory=list)
     num_features: List[str] = Field(default_factory=list)
@@ -487,10 +489,31 @@ class ModelComparePreviewRequest(BaseModel):
     feature_names: Optional[List[str]] = None
 
 
+class ModelCompareAveragePredictionScores(BaseModel):
+    """Average predictions reconstructed from the artifacts' displayed curves."""
+    original: float
+    edited: float
+    difference: float
+
+
+class ModelCompareAverageFeatureContribution(BaseModel):
+    """One additive term behind an average-prediction score."""
+    feature_name: str
+    original: float
+    edited: float
+    difference: float
+    is_base_offset: bool = False
+
+
 class ModelComparePreviewResponse(BaseModel):
     """Response with recalculated preview traces for compared features."""
     use_confidence: bool = True
     feature_previews: List[ModelCompareFeaturePreview] = Field(default_factory=list)
+    average_prediction_scores: ModelCompareAveragePredictionScores
+    data_weighted_average_prediction_scores: Optional[ModelCompareAveragePredictionScores] = None
+    average_prediction_feature_contributions: Dict[
+        str, Optional[List[ModelCompareAverageFeatureContribution]]
+    ] = Field(default_factory=dict)
 
 
 class ModelComparePrepareResponse(BaseModel):

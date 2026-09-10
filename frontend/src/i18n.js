@@ -622,6 +622,25 @@ const translations = {
     "modelCompare.featureCharts": "Feature charts",
     "modelCompare.featureChartsDescription":
       "Dashed traces show each artifact's base shape. Solid traces show the preview after applying selected submissions.",
+    "modelCompare.averagePredictedScore": "Average predicted score",
+    "modelCompare.averagePredictedScoreDescription":
+      "Estimated uniformly across the feature values shown below; selected edits and confidence weighting are included.",
+    "modelCompare.uniformAverage": "Uniform curve grid",
+    "modelCompare.dataWeightedAverage": "Data-weighted",
+    "modelCompare.uniformAverageDescription":
+      "Each displayed curve position has equal weight; useful for seeing overall shape movement.",
+    "modelCompare.dataWeightedAverageDescription":
+      "Each curve is weighted by its exported feature distribution; selected edits and confidence weighting are included.",
+    "modelCompare.dataWeightedUnavailable":
+      "Data-weighted averages require artifacts exported with feature distribution metadata.",
+    "modelCompare.originalAveragePredictedScore": "Original artifact",
+    "modelCompare.editedAveragePredictedScore": "Edited artifact",
+    "modelCompare.averagePredictedScoreDifference": "Edited − original",
+    "modelCompare.showAverageContributions": "Show contribution breakdown",
+    "modelCompare.averageContributionsDescription":
+      "These additive terms explain the displayed average and how the edits changed it.",
+    "modelCompare.contributionFeature": "Feature",
+    "modelCompare.basePredictionOffset": "Base prediction offset",
     "modelCompare.recomputing": "Recomputing preview...",
     "modelCompare.noMatchingFeatures":
       "No feature charts match the current search.",
@@ -631,6 +650,9 @@ const translations = {
     "modelCompare.rmseVsOriginalBase": "Edited vs original base",
     "modelCompare.r2VsEditedBase": "Edited vs edited base",
     "modelCompare.r2VsOriginalBase": "Edited vs original base",
+    "modelCompare.maeOriginalVsEdited": "Original vs Edited",
+    "modelCompare.rmseOriginalVsEdited": "Original vs Edited",
+    "modelCompare.r2OriginalVsEdited": "Original vs Edited",
     "modelCompare.metricImproved": "Improved",
     "modelCompare.metricWorsened": "Worsened",
     "modelCompare.metricUnchanged": "Unchanged",
@@ -1315,6 +1337,25 @@ const translations = {
     "modelCompare.featureCharts": "Feature-Diagramme",
     "modelCompare.featureChartsDescription":
       "Gestrichelte Linien zeigen die Basisform jedes Artefakts. Durchgezogene Linien zeigen die Vorschau nach den ausgewählten Einreichungen.",
+    "modelCompare.averagePredictedScore": "Durchschnittlicher vorhergesagter Wert",
+    "modelCompare.averagePredictedScoreDescription":
+      "Gleichmäßig über die unten dargestellten Feature-Werte geschätzt; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
+    "modelCompare.uniformAverage": "Gleichmäßiges Kurvenraster",
+    "modelCompare.dataWeightedAverage": "Datensatzgewichtet",
+    "modelCompare.uniformAverageDescription":
+      "Jede dargestellte Kurvenposition wird gleich gewichtet; nützlich, um die gesamte Kurvenverschiebung zu sehen.",
+    "modelCompare.dataWeightedAverageDescription":
+      "Jede Kurve wird mit ihrer exportierten Feature-Verteilung gewichtet; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
+    "modelCompare.dataWeightedUnavailable":
+      "Datensatzgewichtete Mittelwerte benötigen Artefakte, die mit Feature-Verteilungsdaten exportiert wurden.",
+    "modelCompare.originalAveragePredictedScore": "Original-Artefakt",
+    "modelCompare.editedAveragePredictedScore": "Bearbeitetes Artefakt",
+    "modelCompare.averagePredictedScoreDifference": "Bearbeitet − Original",
+    "modelCompare.showAverageContributions": "Beitragsaufschlüsselung anzeigen",
+    "modelCompare.averageContributionsDescription":
+      "Diese additiven Terme erklären den angezeigten Mittelwert und wie die Bearbeitungen ihn verändert haben.",
+    "modelCompare.contributionFeature": "Feature",
+    "modelCompare.basePredictionOffset": "Basis-Vorhersageoffset",
     "modelCompare.recomputing": "Vorschau wird neu berechnet...",
     "modelCompare.noMatchingFeatures":
       "Keine Feature-Diagramme passen zur aktuellen Suche.",
@@ -1324,6 +1365,9 @@ const translations = {
     "modelCompare.rmseVsOriginalBase": "Bearbeitet vs Original-Basis",
     "modelCompare.r2VsEditedBase": "Bearbeitet vs bearbeitete Basis",
     "modelCompare.r2VsOriginalBase": "Bearbeitet vs Original-Basis",
+    "modelCompare.maeOriginalVsEdited": "Original vs Bearbeitet",
+    "modelCompare.rmseOriginalVsEdited": "Original vs Bearbeitet",
+    "modelCompare.r2OriginalVsEdited": "Original vs Bearbeitet",
     "modelCompare.metricImproved": "Verbessert",
     "modelCompare.metricWorsened": "Verschlechtert",
     "modelCompare.metricUnchanged": "Unverändert",

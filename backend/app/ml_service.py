@@ -1777,6 +1777,14 @@ class MLService:
                 exported_shape["x_tick_labels"] = [
                     str(value) for value in _json_safe(raw_shape.get("x", []))
                 ]
+            distribution = self._build_shape_function_distribution(
+                feature_name,
+                feature_type,
+                exported_shape["x_values"],
+                x_tick_labels=exported_shape.get("x_tick_labels"),
+            )
+            if distribution is not None:
+                exported_shape["distribution"] = _json_safe(distribution)
             exported.append(exported_shape)
         if not exported:
             raise ValueError("Unable to export any shape functions for the trained model")
@@ -1904,44 +1912,35 @@ class MLService:
             "feature_type": feature_type,
             "chart_config": shape_function.get("chart_config") or {},
         }
+        distribution = shape_function.get("distribution")
+        if distribution is not None:
+            if not isinstance(distribution, dict):
+                raise ValueError(
+                    f"Shape function '{feature_name}' distribution must be an object"
+                )
+            chart_type = str(distribution.get("chart_type", "")).strip()
+            if chart_type not in {"numeric", "categorical"}:
+                raise ValueError(
+                    f"Shape function '{feature_name}' distribution has an invalid chart_type"
+                )
+            bins = distribution.get("bins", [])
+            counts = distribution.get("counts", [])
+            if not isinstance(bins, list) or not isinstance(counts, list):
+                raise ValueError(
+                    f"Shape function '{feature_name}' distribution bins and counts must be arrays"
+                )
+            normalized["distribution"] = _json_safe(distribution)
         x_tick_labels = shape_function.get("x_tick_labels")
         if isinstance(x_tick_labels, list):
             normalized["x_tick_labels"] = [str(label) for label in x_tick_labels]
         return normalized
-
-    @staticmethod
-    def _center_shape_function_for_visualization(
-        shape_function: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Center a rendered curve without changing its stored model values.
-
-        Shape-function charts in GAMWeaver use an unweighted mean over their
-        rendered points as the zero reference.  Imported artifacts must use the
-        same convention as locally trained charts; prediction continues to use
-        the untouched raw artifact curves held by ``ImportedIGANNRuntime``.
-        """
-        y_values = shape_function.get("y_values")
-        if not isinstance(y_values, list) or not y_values:
-            return shape_function
-
-        try:
-            numeric_y = np.asarray(y_values, dtype=float)
-        except (TypeError, ValueError):
-            return shape_function
-
-        if numeric_y.size == 0 or not np.all(np.isfinite(numeric_y)):
-            return shape_function
-
-        shape_function["y_values"] = [
-            float(value) for value in (numeric_y - np.mean(numeric_y)).tolist()
-        ]
-        return shape_function
 
     def _normalize_imported_public_shape_function(
         self,
         shape_function: Dict[str, Any],
     ) -> Dict[str, Any]:
         normalized_shape = _json_safe(shape_function)
+
         feature_name = str(normalized_shape.get("feature_name", "")).strip()
         if not feature_name:
             return normalized_shape
@@ -1976,7 +1975,7 @@ class MLService:
             str(normalized_shape.get("feature_type")) != "numeric"
             or str(chart_config.get("chart_feature_type", "numeric")) != "numeric"
         ):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         x_values = normalized_shape.get("x_values") or []
         y_values = normalized_shape.get("y_values") or []
@@ -1986,16 +1985,16 @@ class MLService:
             or len(x_values) != len(y_values)
             or not x_values
         ):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         try:
             x_numeric = np.asarray(x_values, dtype=float)
             y_numeric = np.asarray(y_values, dtype=float)
         except (TypeError, ValueError):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         if x_numeric.size == 0 or y_numeric.size == 0 or x_numeric.size != y_numeric.size:
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         order = np.argsort(x_numeric)
         x_numeric = x_numeric[order]
@@ -2008,14 +2007,14 @@ class MLService:
             domain_min = float(schema_min)
             domain_max = float(schema_max)
         except (TypeError, ValueError):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         if (
             not np.isfinite(domain_min)
             or not np.isfinite(domain_max)
             or domain_max < domain_min
         ):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         if abs(domain_max - domain_min) < 1e-12:
             target_x = np.asarray([domain_min], dtype=float)
@@ -2037,7 +2036,7 @@ class MLService:
         else:
             normalized_shape.pop("x_tick_labels", None)
 
-        return self._center_shape_function_for_visualization(normalized_shape)
+        return normalized_shape
 
     @staticmethod
     def _infer_missing_indicator_map_from_artifact(
@@ -2500,6 +2499,7 @@ class MLService:
         feature_schema_map: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Any]:
         normalized_shape = _json_safe(shape_function)
+
         feature_name = str(normalized_shape.get("feature_name", "")).strip()
         if not feature_name:
             return normalized_shape
@@ -2536,7 +2536,7 @@ class MLService:
             str(normalized_shape.get("feature_type")) != "numeric"
             or str(chart_config.get("chart_feature_type", "numeric")) != "numeric"
         ):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         x_values = normalized_shape.get("x_values") or []
         y_values = normalized_shape.get("y_values") or []
@@ -2546,16 +2546,16 @@ class MLService:
             or len(x_values) != len(y_values)
             or not x_values
         ):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         try:
             x_numeric = np.asarray(x_values, dtype=float)
             y_numeric = np.asarray(y_values, dtype=float)
         except (TypeError, ValueError):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         if x_numeric.size == 0 or y_numeric.size == 0 or x_numeric.size != y_numeric.size:
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         order = np.argsort(x_numeric)
         x_numeric = x_numeric[order]
@@ -2568,14 +2568,14 @@ class MLService:
             domain_min = float(schema_min)
             domain_max = float(schema_max)
         except (TypeError, ValueError):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         if (
             not np.isfinite(domain_min)
             or not np.isfinite(domain_max)
             or domain_max < domain_min
         ):
-            return self._center_shape_function_for_visualization(normalized_shape)
+            return normalized_shape
 
         if abs(domain_max - domain_min) < 1e-12:
             target_x = np.asarray([domain_min], dtype=float)
@@ -2597,7 +2597,7 @@ class MLService:
         else:
             normalized_shape.pop("x_tick_labels", None)
 
-        return self._center_shape_function_for_visualization(normalized_shape)
+        return normalized_shape
 
     @staticmethod
     def _format_compare_numeric_display(value: Any) -> str:
@@ -2932,6 +2932,7 @@ class MLService:
 
         return {
             "metadata": metadata,
+            "base_prediction_offset": validated["base_prediction_offset"],
             "selected_feature_columns": list(validated["selected_feature_columns"]),
             "cat_features": list(validated["cat_features"]),
             "num_features": list(validated["num_features"]),
@@ -3268,6 +3269,148 @@ class MLService:
                 )
         return combined
 
+    @classmethod
+    def _compute_compare_average_prediction_score(
+        cls,
+        prepared_artifact: Dict[str, Any],
+        offsets: Dict[str, Dict[Any, float]],
+    ) -> float:
+        """Estimate an artifact's mean prediction across its displayed grids.
+
+        Each feature curve is sampled uniformly over the same x-values shown on
+        the comparison page. Their means are additive in the exported IGANN
+        representation, together with the artifact's base prediction offset.
+        """
+        contributions = cls._compute_compare_feature_average_contributions(
+            prepared_artifact,
+            offsets,
+            method="uniform",
+        )
+        return float(prepared_artifact.get("base_prediction_offset", 0.0) or 0.0) + sum(
+            contributions.values()
+        )
+
+    @classmethod
+    def _compute_compare_data_weighted_average_prediction_score(
+        cls,
+        prepared_artifact: Dict[str, Any],
+        offsets: Dict[str, Dict[Any, float]],
+    ) -> Optional[float]:
+        """Estimate an average using the artifact's feature distributions.
+
+        Unlike the uniform measure, each contribution is weighted by the
+        observed frequency of that feature value (or numeric bin). This is a
+        marginal shape-function estimate, not a reconstruction of joint rows.
+        """
+        contributions = cls._compute_compare_feature_average_contributions(
+            prepared_artifact,
+            offsets,
+            method="data_weighted",
+        )
+        if contributions is None:
+            return None
+        return float(prepared_artifact.get("base_prediction_offset", 0.0) or 0.0) + sum(
+            contributions.values()
+        )
+
+    @classmethod
+    def _compute_compare_feature_average_contributions(
+        cls,
+        prepared_artifact: Dict[str, Any],
+        offsets: Dict[str, Dict[Any, float]],
+        *,
+        method: str,
+    ) -> Optional[Dict[str, float]]:
+        """Return one averaging-method contribution per public shape function."""
+        categorical_features = {
+            str(feature_name)
+            for feature_name in (prepared_artifact.get("cat_features") or [])
+        }
+        contributions: Dict[str, float] = {}
+
+        for shape_function in prepared_artifact.get("shape_functions") or []:
+            feature_name = str(shape_function.get("feature_name", "")).strip()
+            if not feature_name:
+                continue
+
+            if method == "uniform":
+                x_values = list(shape_function.get("x_values") or [])
+                y_values = shape_function.get("y_values") or []
+                if len(x_values) != len(y_values) or not x_values:
+                    continue
+                weighted_values = [(value, 1) for value in x_values]
+            elif method == "data_weighted":
+                distribution = shape_function.get("distribution") or {}
+                if not distribution:
+                    return None
+                if distribution.get("chart_type") == "categorical":
+                    weighted_values = [
+                        (item.get("x_value"), int(item.get("count", 0) or 0))
+                        for item in (distribution.get("counts") or [])
+                        if int(item.get("count", 0) or 0) > 0
+                    ]
+                elif distribution.get("chart_type") == "numeric":
+                    weighted_values = [
+                        (item.get("center"), int(item.get("count", 0) or 0))
+                        for item in (distribution.get("bins") or [])
+                        if int(item.get("count", 0) or 0) > 0
+                    ]
+                else:
+                    return None
+            else:
+                raise ValueError(f"Unknown average contribution method '{method}'")
+
+            total_weight = sum(weight for _, weight in weighted_values)
+            if total_weight <= 0:
+                return None
+
+            contribution = 0.0
+            for value, weight in weighted_values:
+                if shape_function.get("feature_type") == "categorical":
+                    base_value = cls._predict_categorical_shape_value(
+                        shape_function,
+                        value,
+                    )
+                else:
+                    base_value = cls._predict_numeric_shape_value(
+                        shape_function,
+                        value,
+                    )
+                offset = cls._get_compare_offset_for_feature_value(
+                    shape_function=shape_function,
+                    original_is_categorical=feature_name in categorical_features,
+                    value=value,
+                    offsets=offsets.get(feature_name, {}),
+                )
+                contribution += weight * (base_value + float(offset))
+            contributions[feature_name] = contribution / total_weight
+
+        return contributions
+
+    @staticmethod
+    def _predict_numeric_shape_value(
+        shape_function: Dict[str, Any],
+        value: Any,
+    ) -> float:
+        try:
+            x_values = np.asarray(shape_function.get("x_values") or [], dtype=float)
+            y_values = np.asarray(shape_function.get("y_values") or [], dtype=float)
+            return float(np.interp(float(value), x_values, y_values))
+        except (TypeError, ValueError):
+            return 0.0
+
+    @staticmethod
+    def _predict_categorical_shape_value(
+        shape_function: Dict[str, Any],
+        value: Any,
+    ) -> float:
+        x_values = [str(item) for item in (shape_function.get("x_values") or [])]
+        y_values = shape_function.get("y_values") or []
+        try:
+            return float(y_values[x_values.index(str(value))])
+        except (ValueError, IndexError, TypeError):
+            return 0.0
+
     def build_model_compare_preview(
         self,
         *,
@@ -3319,6 +3462,92 @@ class MLService:
             str(feature_name)
             for feature_name in (right_artifact.get("cat_features") or [])
         }
+        original_average_prediction_score = (
+            self._compute_compare_average_prediction_score(
+                left_artifact,
+                left_offsets,
+            )
+        )
+        edited_average_prediction_score = (
+            self._compute_compare_average_prediction_score(
+                right_artifact,
+                right_offsets,
+            )
+        )
+        original_data_weighted_average_prediction_score = (
+            self._compute_compare_data_weighted_average_prediction_score(
+                left_artifact,
+                left_offsets,
+            )
+        )
+        edited_data_weighted_average_prediction_score = (
+            self._compute_compare_data_weighted_average_prediction_score(
+                right_artifact,
+                right_offsets,
+            )
+        )
+        original_uniform_contributions = (
+            self._compute_compare_feature_average_contributions(
+                left_artifact,
+                left_offsets,
+                method="uniform",
+            )
+        )
+        edited_uniform_contributions = (
+            self._compute_compare_feature_average_contributions(
+                right_artifact,
+                right_offsets,
+                method="uniform",
+            )
+        )
+        original_data_weighted_contributions = (
+            self._compute_compare_feature_average_contributions(
+                left_artifact,
+                left_offsets,
+                method="data_weighted",
+            )
+        )
+        edited_data_weighted_contributions = (
+            self._compute_compare_feature_average_contributions(
+                right_artifact,
+                right_offsets,
+                method="data_weighted",
+            )
+        )
+
+        def build_contribution_rows(
+            original_contributions: Optional[Dict[str, float]],
+            edited_contributions: Optional[Dict[str, float]],
+        ) -> Optional[List[Dict[str, Any]]]:
+            if original_contributions is None or edited_contributions is None:
+                return None
+
+            original_base = float(left_artifact.get("base_prediction_offset", 0.0) or 0.0)
+            edited_base = float(right_artifact.get("base_prediction_offset", 0.0) or 0.0)
+            rows: List[Dict[str, Any]] = [
+                {
+                    "feature_name": "__base_prediction_offset__",
+                    "original": original_base,
+                    "edited": edited_base,
+                    "difference": edited_base - original_base,
+                    "is_base_offset": True,
+                }
+            ]
+            for feature_name in left_artifact.get("selected_feature_columns") or []:
+                if feature_name not in original_contributions or feature_name not in edited_contributions:
+                    continue
+                original_value = float(original_contributions[feature_name])
+                edited_value = float(edited_contributions[feature_name])
+                rows.append(
+                    {
+                        "feature_name": str(feature_name),
+                        "original": original_value,
+                        "edited": edited_value,
+                        "difference": edited_value - original_value,
+                        "is_base_offset": False,
+                    }
+                )
+            return rows
 
         feature_previews = []
         for feature_name in active_features:
@@ -3330,9 +3559,13 @@ class MLService:
             left_x_values = list(left_shape.get("x_values") or [])
             right_x_values = list(right_shape.get("x_values") or [])
             left_base_y_values = [float(value) for value in (left_shape.get("y_values") or [])]
-            right_base_y_values = [float(value) for value in (right_shape.get("y_values") or [])]
-            if len(left_x_values) != len(left_base_y_values) or len(right_x_values) != len(right_base_y_values):
+            right_model_base_y_values = [
+                float(value) for value in (right_shape.get("y_values") or [])
+            ]
+            if len(left_x_values) != len(left_base_y_values) or len(right_x_values) != len(right_model_base_y_values):
                 continue
+
+            right_base_y_values = list(right_model_base_y_values)
 
             left_effective_y_values = []
             for x_value, base_y in zip(left_x_values, left_base_y_values):
@@ -3345,7 +3578,7 @@ class MLService:
                 left_effective_y_values.append(float(base_y) + float(offset))
 
             right_effective_y_values = []
-            for x_value, base_y in zip(right_x_values, right_base_y_values):
+            for x_value, base_y in zip(right_x_values, right_model_base_y_values):
                 offset = self._get_compare_offset_for_feature_value(
                     shape_function=right_shape,
                     original_is_categorical=feature_name in right_cat_features,
@@ -3356,27 +3589,27 @@ class MLService:
 
             feature_type = str(left_shape.get("feature_type", "numeric"))
             baseline_edited_vs_edited_base_mae = self._compute_compare_mae(
-                right_base_y_values,
-                right_base_y_values,
+                right_model_base_y_values,
+                right_model_base_y_values,
             )
             baseline_edited_vs_edited_base_rmse = self._compute_compare_rmse(
-                right_base_y_values,
-                right_base_y_values,
+                right_model_base_y_values,
+                right_model_base_y_values,
             )
             baseline_edited_vs_edited_base_r2 = self._compute_compare_r2(
-                right_base_y_values,
-                right_base_y_values,
+                right_model_base_y_values,
+                right_model_base_y_values,
             )
             edited_vs_edited_base_mae = self._compute_compare_mae(
-                right_base_y_values,
+                right_model_base_y_values,
                 right_effective_y_values,
             )
             edited_vs_edited_base_rmse = self._compute_compare_rmse(
-                right_base_y_values,
+                right_model_base_y_values,
                 right_effective_y_values,
             )
             edited_vs_edited_base_r2 = self._compute_compare_r2(
-                right_base_y_values,
+                right_model_base_y_values,
                 right_effective_y_values,
             )
             if feature_type == "numeric":
@@ -3385,7 +3618,7 @@ class MLService:
                         reference_x_values=left_x_values,
                         reference_y_values=left_base_y_values,
                         comparison_x_values=right_x_values,
-                        comparison_y_values=right_base_y_values,
+                        comparison_y_values=right_model_base_y_values,
                         metric_name="MAE",
                     )
                 )
@@ -3394,7 +3627,7 @@ class MLService:
                         reference_x_values=left_x_values,
                         reference_y_values=left_base_y_values,
                         comparison_x_values=right_x_values,
-                        comparison_y_values=right_base_y_values,
+                        comparison_y_values=right_model_base_y_values,
                         metric_name="RMSE",
                     )
                 )
@@ -3403,14 +3636,14 @@ class MLService:
                         reference_x_values=left_x_values,
                         reference_y_values=left_base_y_values,
                         comparison_x_values=right_x_values,
-                        comparison_y_values=right_base_y_values,
+                        comparison_y_values=right_model_base_y_values,
                         metric_name="R2",
                     )
                 )
                 edited_vs_original_base_mae = (
                     self._compute_numeric_compare_metric_on_reference_grid(
                         reference_x_values=left_x_values,
-                        reference_y_values=left_base_y_values,
+                        reference_y_values=left_effective_y_values,
                         comparison_x_values=right_x_values,
                         comparison_y_values=right_effective_y_values,
                         metric_name="MAE",
@@ -3419,7 +3652,7 @@ class MLService:
                 edited_vs_original_base_rmse = (
                     self._compute_numeric_compare_metric_on_reference_grid(
                         reference_x_values=left_x_values,
-                        reference_y_values=left_base_y_values,
+                        reference_y_values=left_effective_y_values,
                         comparison_x_values=right_x_values,
                         comparison_y_values=right_effective_y_values,
                         metric_name="RMSE",
@@ -3428,7 +3661,7 @@ class MLService:
                 edited_vs_original_base_r2 = (
                     self._compute_numeric_compare_metric_on_reference_grid(
                         reference_x_values=left_x_values,
-                        reference_y_values=left_base_y_values,
+                        reference_y_values=left_effective_y_values,
                         comparison_x_values=right_x_values,
                         comparison_y_values=right_effective_y_values,
                         metric_name="R2",
@@ -3437,26 +3670,26 @@ class MLService:
             else:
                 baseline_edited_vs_original_base_mae = self._compute_compare_mae(
                     left_base_y_values,
-                    right_base_y_values,
+                    right_model_base_y_values,
                 )
                 baseline_edited_vs_original_base_rmse = self._compute_compare_rmse(
                     left_base_y_values,
-                    right_base_y_values,
+                    right_model_base_y_values,
                 )
                 baseline_edited_vs_original_base_r2 = self._compute_compare_r2(
                     left_base_y_values,
-                    right_base_y_values,
+                    right_model_base_y_values,
                 )
                 edited_vs_original_base_mae = self._compute_compare_mae(
-                    left_base_y_values,
+                    left_effective_y_values,
                     right_effective_y_values,
                 )
                 edited_vs_original_base_rmse = self._compute_compare_rmse(
-                    left_base_y_values,
+                    left_effective_y_values,
                     right_effective_y_values,
                 )
                 edited_vs_original_base_r2 = self._compute_compare_r2(
-                    left_base_y_values,
+                    left_effective_y_values,
                     right_effective_y_values,
                 )
 
@@ -3518,6 +3751,36 @@ class MLService:
         return {
             "use_confidence": bool(use_confidence),
             "feature_previews": feature_previews,
+            "average_prediction_scores": {
+                "original": original_average_prediction_score,
+                "edited": edited_average_prediction_score,
+                "difference": (
+                    edited_average_prediction_score - original_average_prediction_score
+                ),
+            },
+            "data_weighted_average_prediction_scores": (
+                {
+                    "original": original_data_weighted_average_prediction_score,
+                    "edited": edited_data_weighted_average_prediction_score,
+                    "difference": (
+                        edited_data_weighted_average_prediction_score
+                        - original_data_weighted_average_prediction_score
+                    ),
+                }
+                if original_data_weighted_average_prediction_score is not None
+                and edited_data_weighted_average_prediction_score is not None
+                else None
+            ),
+            "average_prediction_feature_contributions": {
+                "uniform": build_contribution_rows(
+                    original_uniform_contributions,
+                    edited_uniform_contributions,
+                ),
+                "data_weighted": build_contribution_rows(
+                    original_data_weighted_contributions,
+                    edited_data_weighted_contributions,
+                ),
+            },
         }
 
     def _validate_dataset_compatibility(
@@ -4207,7 +4470,6 @@ class MLService:
         self,
         feature_name: str,
         baseline: Dict[str, Any],
-        centered_mean: float,
     ) -> Optional[Dict[str, Any]]:
         missing_count = self._get_public_missing_count(feature_name)
         if missing_count <= 0:
@@ -4234,10 +4496,11 @@ class MLService:
             return None
 
         prediction = self._predict_shape_function_sample(sample_data)
+        baseline_prediction = self._predict_shape_function_sample(baseline)
         return {
             "label": MISSING_CATEGORY_VALUE,
             "count": missing_count,
-            "y_value": prediction - centered_mean,
+            "y_value": prediction - baseline_prediction,
         }
 
     def _build_model_row_from_public_features(
@@ -4687,6 +4950,38 @@ class MLService:
         )
         numeric_tick_labels = chart_setting.get("numeric_tick_labels", {}) or {}
         baseline = self._build_shape_baseline()
+        if self.model is None or not hasattr(self.model, "get_shape_functions_as_dict"):
+            raise ValueError("Native model shape functions are unavailable")
+        native_shape = self.model.get_shape_functions_as_dict().get(feature_name)
+        if not native_shape:
+            raise ValueError(f"No native shape function is available for '{feature_name}'")
+
+        raw_native_x_values = native_shape.get("x", [])
+        raw_native_y_values = native_shape.get("y", [])
+        native_x_values = (
+            list(raw_native_x_values) if raw_native_x_values is not None else []
+        )
+        native_y_values = (
+            list(raw_native_y_values) if raw_native_y_values is not None else []
+        )
+        if len(native_x_values) != len(native_y_values) or not native_x_values:
+            raise ValueError(f"Native shape function for '{feature_name}' is invalid")
+        native_is_categorical = (
+            str(native_shape.get("datatype", "")).strip() == "categorical"
+        )
+
+        def native_effect_at(value: Any) -> float:
+            if native_is_categorical:
+                try:
+                    return float(native_y_values[[str(x) for x in native_x_values].index(str(value))])
+                except (ValueError, IndexError, TypeError):
+                    return 0.0
+            try:
+                native_x_numeric = np.asarray(native_x_values, dtype=float)
+                native_y_numeric = np.asarray(native_y_values, dtype=float)
+                return float(np.interp(float(value), native_x_numeric, native_y_numeric))
+            except (TypeError, ValueError):
+                return 0.0
 
         if is_categorical:
             raw_x_values = self._get_chart_x_values(
@@ -4721,16 +5016,13 @@ class MLService:
                             sample_data[indicator_name] = "Observed"
                 else:
                     sample_data[feature_name] = raw_value
-                pred_val = self._predict_shape_function_sample(sample_data)
-                shape_values.append(pred_val)
+                shape_values.append(native_effect_at(raw_value))
                 effective_x_values.append(raw_value)
 
             if not effective_x_values:
                 is_categorical = False
 
             if is_categorical:
-                mean_val = np.mean(shape_values)
-                shape_values = [value - mean_val for value in shape_values]
                 x_tick_labels = [
                     str(categorical_value_labels.get(raw_value, raw_value))
                     for raw_value in effective_x_values
@@ -4763,17 +5055,13 @@ class MLService:
                 for raw_value, numeric_x in numeric_pairs:
                     sample_data = baseline.copy()
                     sample_data[feature_name] = raw_value
-                    pred_val = self._predict_shape_function_sample(sample_data)
-                    shape_values.append(pred_val)
+                    shape_values.append(native_effect_at(raw_value))
                     x_values_numeric.append(float(numeric_x))
 
-                mean_val = np.mean(shape_values)
-                shape_values = [value - mean_val for value in shape_values]
                 missing_bucket = (
                     self._build_numeric_chart_missing_bucket(
                         feature_name,
                         baseline,
-                        mean_val,
                     )
                     if self.show_missing_bars
                     else None
@@ -4810,16 +5098,12 @@ class MLService:
             indicator_name = self._missing_indicator_feature_name(feature_name)
             if indicator_name:
                 sample_data[indicator_name] = "Observed"
-            pred_val = self._predict_shape_function_sample(sample_data)
-            shape_values.append(pred_val)
+            shape_values.append(native_effect_at(x_val))
 
-        mean_val = np.mean(shape_values)
-        shape_values = [value - mean_val for value in shape_values]
         missing_bucket = (
             self._build_numeric_chart_missing_bucket(
                 feature_name,
                 baseline,
-                mean_val,
             )
             if self.show_missing_bars
             else None

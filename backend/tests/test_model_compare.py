@@ -176,9 +176,66 @@ def test_prepare_model_compare_accepts_valid_artifacts_without_edits(
     assert right_prepared["metadata"]["has_edit_export"] is False
     for prepared_artifact in (left_prepared, right_prepared):
         for shape_function in prepared_artifact["shape_functions"]:
-            assert sum(shape_function["y_values"]) == pytest.approx(0.0)
+            source_shape = next(
+                source_shape
+                for source_shape in left_artifact["shape_functions"]
+                if source_shape["feature_name"] == shape_function["feature_name"]
+            )
+            assert shape_function["y_values"] == pytest.approx(
+                source_shape["y_values"]
+            )
     assert preview["use_confidence"] is True
     assert len(preview["feature_previews"]) == 2
+    assert preview["average_prediction_scores"] == pytest.approx(
+        {
+            "original": 1.7,
+            "edited": 1.7,
+            "difference": 0.0,
+        }
+    )
+
+
+def test_prepare_model_compare_preserves_non_centered_curve_positions(ml_service):
+    artifact = _build_artifact(ml_service, target_column="ridership")
+    age_shape = next(
+        shape_function
+        for shape_function in artifact["shape_functions"]
+        if shape_function["feature_name"] == "age"
+    )
+    age_shape["x_values"] = [1.4, 2.0, 3.0, 4.0]
+    age_shape["y_values"] = [5.0, 7.0, 11.0, 17.0]
+    age_schema = next(
+        feature for feature in artifact["feature_schema"] if feature["name"] == "age"
+    )
+    age_schema["min_value"] = 1.0
+    age_schema["max_value"] = 4.0
+    prepared = ml_service.prepare_model_compare_artifact(
+        artifact,
+        filename="non-centered.json",
+    )
+
+    prepared_age = next(
+        shape_function
+        for shape_function in prepared["shape_functions"]
+        if shape_function["feature_name"] == "age"
+    )
+    assert len(prepared_age["x_values"]) == 30
+    assert prepared_age["y_values"][:4] == pytest.approx([5.0] * 4)
+    assert prepared_age["y_values"][-1] == pytest.approx(17.0)
+    assert sum(prepared_age["y_values"]) != pytest.approx(0.0)
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=prepared,
+        right_artifact=prepared,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=[],
+        feature_names=["age"],
+    )
+    age_preview = _get_feature_preview(preview, "age")
+    assert age_preview["right_base_y_values"] == pytest.approx(prepared_age["y_values"])
+    assert age_preview["right_effective_y_values"] == pytest.approx(
+        prepared_age["y_values"]
+    )
 
 
 def test_prepare_model_compare_returns_submission_tree_for_imported_edits(
@@ -320,8 +377,13 @@ def test_preview_weighted_mode_matches_current_weighting_semantics(
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["left_effective_y_values"][1] == pytest.approx(0.1)
-    assert age_preview["right_effective_y_values"][1] == pytest.approx(-0.5)
+    assert (
+        age_preview["left_effective_y_values"][1]
+        - age_preview["left_base_y_values"][1]
+    ) == pytest.approx(0.6)
+    assert age_preview["right_effective_y_values"][1] == pytest.approx(
+        age_preview["right_base_y_values"][1]
+    )
 
 
 def test_preview_unweighted_mode_ignores_saved_confidence(ml_service):
@@ -376,7 +438,10 @@ def test_preview_unweighted_mode_ignores_saved_confidence(ml_service):
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["left_effective_y_values"][1] == pytest.approx(1.0)
+    assert (
+        age_preview["left_effective_y_values"][1]
+        - age_preview["left_base_y_values"][1]
+    ) == pytest.approx(1.5)
 
 
 def test_preview_deselecting_submission_removes_only_that_contribution(ml_service):
@@ -431,7 +496,10 @@ def test_preview_deselecting_submission_removes_only_that_contribution(ml_servic
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["left_effective_y_values"][1] == pytest.approx(0.3)
+    assert (
+        age_preview["left_effective_y_values"][1]
+        - age_preview["left_base_y_values"][1]
+    ) == pytest.approx(0.8)
 
 
 def test_preview_supports_categorical_feature_submissions(ml_service):
@@ -473,7 +541,10 @@ def test_preview_supports_categorical_feature_submissions(ml_service):
     )
 
     month_preview = _get_feature_preview(preview, "month")
-    assert month_preview["left_effective_y_values"][1] == pytest.approx(0.5)
+    assert (
+        month_preview["left_effective_y_values"][1]
+        - month_preview["left_base_y_values"][1]
+    ) == pytest.approx(0.5)
 
 
 def test_preview_does_not_mutate_live_runtime_state(ml_service):
@@ -517,7 +588,11 @@ def test_preview_does_not_mutate_live_runtime_state(ml_service):
         feature_names=["age"],
     )
 
-    assert _get_feature_preview(preview, "age")["left_effective_y_values"][1] == pytest.approx(0.0)
+    age_preview = _get_feature_preview(preview, "age")
+    assert (
+        age_preview["left_effective_y_values"][1]
+        - age_preview["left_base_y_values"][1]
+    ) == pytest.approx(0.5)
     assert ml_service.shape_function_offsets == before_shape_offsets
     assert ml_service.selected_feature_columns == before_selected_features
     assert ml_service.model_source == before_model_source
@@ -565,7 +640,10 @@ def test_preview_returns_curve_metrics_for_edited_artifact(ml_service):
     )
 
     age_preview = _get_feature_preview(preview, "age")
-    assert age_preview["right_effective_y_values"][1] == pytest.approx(0.5)
+    assert (
+        age_preview["right_effective_y_values"][1]
+        - age_preview["right_base_y_values"][1]
+    ) == pytest.approx(1.0)
     assert age_preview["comparison_metrics"]["edited_vs_edited_base_mae"] == pytest.approx(1.0)
     assert age_preview["comparison_metrics"]["baseline_edited_vs_edited_base_mae"] == pytest.approx(0.0)
     assert age_preview["comparison_metrics"]["edited_vs_edited_base_status"] == "increased"
@@ -578,6 +656,13 @@ def test_preview_returns_curve_metrics_for_edited_artifact(ml_service):
     assert age_preview["comparison_metrics"]["edited_vs_original_base_r2"] == pytest.approx(0.2)
     assert age_preview["comparison_metrics"]["edited_vs_edited_base_r2_status"] == "decreased"
     assert age_preview["comparison_metrics"]["edited_vs_original_base_r2_status"] == "decreased"
+    assert preview["average_prediction_scores"] == pytest.approx(
+        {
+            "original": 1.7,
+            "edited": 2.7,
+            "difference": 1.0,
+        }
+    )
 
 
 def test_preview_mae_status_decreases_when_edits_move_edited_artifact_toward_original(

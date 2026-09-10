@@ -404,6 +404,23 @@ def test_numeric_shape_functions_include_sparse_tick_labels(ml_service):
     assert label_by_x == {0: "Start", 10: "Checkpoint"}
 
 
+def test_locally_extracted_shape_functions_use_native_effects(ml_service):
+    shape_functions = {
+        shape_function["feature_name"]: shape_function
+        for shape_function in ml_service.get_shape_functions()
+    }
+
+    assert shape_functions["age"]["y_values"] == pytest.approx(
+        [
+            min(max(value / 10.0, 0.0), 2.0)
+            if value <= 20
+            else 2.0 + ((value - 20.0) / 9.0)
+            for value in shape_functions["age"]["x_values"]
+        ]
+    )
+    assert shape_functions["month"]["y_values"] == pytest.approx([0.1, 0.2, 0.3])
+
+
 def test_export_import_roundtrip_preserves_chart_label_maps(ml_service, monkeypatch):
     ml_service.update_feature_chart_setting(
         "age",
@@ -593,7 +610,7 @@ def test_imported_numeric_shape_functions_expand_to_schema_domain(
     assert raw_age_shape["x_values"] == [1.4, 2.0, 3.0, 4.0]
 
 
-def test_imported_shape_function_visualizations_are_centered_but_raw_model_is_not(
+def test_imported_shape_function_visualizations_preserve_native_effects(
     ml_service,
     monkeypatch,
 ):
@@ -620,8 +637,8 @@ def test_imported_shape_function_visualizations_are_centered_but_raw_model_is_no
         shape_function["feature_name"]: shape_function
         for shape_function in imported.get_shape_functions()
     }
-    assert sum(displayed["age"]["y_values"]) == pytest.approx(0.0)
-    assert sum(displayed["month"]["y_values"]) == pytest.approx(0.0)
+    assert displayed["age"]["y_values"] == pytest.approx([5.0, 7.0, 11.0, 17.0])
+    assert displayed["month"]["y_values"] == pytest.approx([2.0, 3.0, 7.0])
 
     raw_age_shape = next(
         feature
@@ -635,6 +652,49 @@ def test_imported_shape_function_visualizations_are_centered_but_raw_model_is_no
     )
     assert raw_age_shape["y_values"] == [5.0, 7.0, 11.0, 17.0]
     assert raw_month_shape["y_values"] == [2.0, 3.0, 7.0]
+
+
+def test_standard_import_preserves_source_curve_positions(
+    ml_service,
+    monkeypatch,
+):
+    artifact = ml_service.export_model_artifact()
+    age_shape = next(
+        feature
+        for feature in artifact["shape_functions"]
+        if feature["feature_name"] == "age"
+    )
+    age_shape["x_values"] = [1.4, 2.0, 3.0, 4.0]
+    age_shape["y_values"] = [5.0, 7.0, 11.0, 17.0]
+    age_schema = next(
+        feature for feature in artifact["feature_schema"] if feature["name"] == "age"
+    )
+    age_schema["min_value"] = 1.0
+    age_schema["max_value"] = 4.0
+
+    monkeypatch.setattr(MLService, "_restore_active_dataset_metadata", lambda self: None)
+    monkeypatch.setattr(MLService, "_auto_load_persisted_dataset", lambda self: None)
+    imported = MLService()
+    imported.import_model_artifact(artifact)
+
+    displayed_age_shape = next(
+        feature
+        for feature in imported.get_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+    assert displayed_age_shape["x_values"] == pytest.approx(
+        [1.0 + index * (3.0 / 29.0) for index in range(30)]
+    )
+    assert displayed_age_shape["y_values"][:4] == pytest.approx([5.0] * 4)
+    assert displayed_age_shape["y_values"][-1] == pytest.approx(17.0)
+    assert sum(displayed_age_shape["y_values"]) != pytest.approx(0.0)
+
+    raw_age_shape = next(
+        feature
+        for feature in imported.model.export_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+    assert raw_age_shape["y_values"] == [5.0, 7.0, 11.0, 17.0]
 
 
 def test_feature_chart_settings_require_superadmin(ml_service, monkeypatch):
