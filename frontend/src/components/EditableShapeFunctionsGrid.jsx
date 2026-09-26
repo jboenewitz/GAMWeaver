@@ -64,6 +64,17 @@ const toSortedCurvePoints = (xValues, yValues) =>
     .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
     .sort((a, b) => a.x - b.x);
 
+const getCurveMean = (yValues) => {
+  const finiteValues = (yValues || []).filter((value) =>
+    Number.isFinite(Number(value)),
+  );
+  if (finiteValues.length === 0) return 0;
+  return (
+    finiteValues.reduce((sum, value) => sum + Number(value), 0) /
+    finiteValues.length
+  );
+};
+
 const normalizeNumericPoints = (points) =>
   (points || [])
     .map((p) => ({
@@ -643,6 +654,7 @@ const EditableShapeFunctionChart = ({
   brushHardness = 50,
   enlarged = false,
   sharedYRange = null,
+  centerCurves = false,
   headerContent = null,
   t,
 }) => {
@@ -653,6 +665,15 @@ const EditableShapeFunctionChart = ({
     shapeFunction;
   const displayName = getShapeFunctionDisplayName(shapeFunction);
   const isNumeric = feature_type === "numeric";
+  // Centering is deliberately display-only. Edits and model data remain in
+  // their original coordinate system, so toggling views cannot change them.
+  const originalCurveMean = centerCurves ? getCurveMean(y_values) : 0;
+  const comparisonCurveMean = centerCurves
+    ? getCurveMean(comparisonShapeFunction?.y_values)
+    : 0;
+  const toOriginalDisplayY = (value) => Number(value) - originalCurveMean;
+  const toComparisonDisplayY = (value) =>
+    Number(value) - comparisonCurveMean;
   const missingBucket = shapeFunction?.missing_bucket || null;
   const xTickLabels =
     Array.isArray(x_tick_labels) && x_tick_labels.length === x_values.length
@@ -795,6 +816,13 @@ const EditableShapeFunctionChart = ({
     };
   }, [isNumeric, isDragging, dragCurvePoints, shapeFunction, editedPoints]);
 
+  const activeCurveYValues = isNumeric
+    ? mergedLineData?.y || y_values
+    : currentYValues;
+  const activeCurveMean = centerCurves ? getCurveMean(activeCurveYValues) : 0;
+  const toDisplayY = (value) => Number(value) - activeCurveMean;
+  const toRawY = (value) => Number(value) + activeCurveMean;
+
   // Linear interpolation to get y at an arbitrary x from the current curve
   const getYAtX = useCallback(
     (targetX) => {
@@ -841,18 +869,25 @@ const EditableShapeFunctionChart = ({
   // Calculate y-axis range
   const allYValues = isNumeric
     ? [
-        ...y_values,
-        ...(mergedLineData?.y || []),
-        ...(dragYValue !== null ? [dragYValue] : []),
+        ...y_values.map(toOriginalDisplayY),
+        ...(mergedLineData?.y || []).map(toDisplayY),
+        ...(dragYValue !== null ? [toDisplayY(dragYValue)] : []),
         ...(missingBucket && Number.isFinite(Number(missingBucket.y_value))
-          ? [Number(missingBucket.y_value)]
+          ? [toDisplayY(missingBucket.y_value)]
           : []),
         ...(comparisonShapeFunction?.missing_bucket &&
         Number.isFinite(Number(comparisonShapeFunction.missing_bucket.y_value))
-          ? [Number(comparisonShapeFunction.missing_bucket.y_value)]
+          ? [
+              toComparisonDisplayY(
+                comparisonShapeFunction.missing_bucket.y_value,
+              ),
+            ]
           : []),
       ]
-    : [...y_values, ...currentYValues];
+    : [
+        ...y_values.map(toOriginalDisplayY),
+        ...currentYValues.map(toDisplayY),
+      ];
   const numericDragYRangeCap =
     isNumeric && isDragging && !sharedYRange ? NUMERIC_DRAG_Y_AXIS_LIMIT : null;
   const yRange =
@@ -1023,8 +1058,9 @@ const EditableShapeFunctionChart = ({
     const handleMouseMove = (e) => {
       if (!isDraggingRef.current || preciseEntryOpenRef.current) return;
       e.preventDefault();
-      const newY = clientYToDataY(e.clientY);
-      if (newY === null) return;
+      const displayY = clientYToDataY(e.clientY);
+      if (displayY === null) return;
+      const newY = toRawY(displayY);
 
       setLocalYValues((prev) => {
         if (!prev) return prev;
@@ -1073,6 +1109,7 @@ const EditableShapeFunctionChart = ({
     feature_type,
     onPointEdit,
     clientYToDataY,
+    toRawY,
     stopDragInteraction,
     clearCategoricalHover,
   ]);
@@ -1086,14 +1123,14 @@ const EditableShapeFunctionChart = ({
       if (!isDraggingRef.current || preciseEntryOpenRef.current) return;
       e.preventDefault();
       const newX = clientXToDataX(e.clientX);
-      const newY = clientYToDataY(e.clientY);
-      if (newX !== null && newY !== null) {
+      const displayY = clientYToDataY(e.clientY);
+      if (newX !== null && displayY !== null) {
         const clampedX = clampX(newX);
         if (lastDragYRef.current === null) {
-          lastDragYRef.current = newY;
+          lastDragYRef.current = displayY;
         }
-        const deltaY = newY - lastDragYRef.current;
-        lastDragYRef.current = newY;
+        const deltaY = displayY - lastDragYRef.current;
+        lastDragYRef.current = displayY;
 
         if (Math.abs(deltaY) > 1e-8 && dragCurvePointsRef.current.length > 0) {
           const deformed = applyGaussianBrushDeformation(
@@ -1108,7 +1145,7 @@ const EditableShapeFunctionChart = ({
         }
 
         setDragXValue(clampedX);
-        setDragYValue(newY);
+        setDragYValue(toRawY(displayY));
       }
     };
 
@@ -1147,6 +1184,7 @@ const EditableShapeFunctionChart = ({
     clientYToDataY,
     clampX,
     getBrushSigma,
+    toRawY,
     stopDragInteraction,
   ]);
 
@@ -1219,7 +1257,7 @@ const EditableShapeFunctionChart = ({
       const currentY = getCurrentYValues()[pointIndex];
       const displayX =
         typeof xValue === "number" ? parseFloat(xValue.toFixed(3)) : xValue;
-      setPreciseValue(currentY.toFixed(3));
+      setPreciseValue(toDisplayY(currentY).toFixed(3));
       setPreciseEntry({ xValue, displayX, pointIndex });
     };
 
@@ -1236,6 +1274,7 @@ const EditableShapeFunctionChart = ({
     startCategoricalDrag,
     getCurrentYValues,
     stopDragInteraction,
+    toDisplayY,
   ]);
 
   // ---- Numeric continuous: native mousedown (click-anywhere) ----
@@ -1259,8 +1298,8 @@ const EditableShapeFunctionChart = ({
 
       e.preventDefault();
       const rawX = clientXToDataX(e.clientX);
-      const rawY = clientYToDataY(e.clientY);
-      if (rawX === null || rawY === null) return;
+      const displayY = clientYToDataY(e.clientY);
+      if (rawX === null || displayY === null) return;
       if (
         numericMissingLayout &&
         rawX <= Number(numericMissingLayout.interactionCutoffX)
@@ -1285,7 +1324,7 @@ const EditableShapeFunctionChart = ({
         stopDragInteraction();
 
         const currentY = getYAtX(clampedX);
-        setPreciseValue(currentY.toFixed(3));
+        setPreciseValue(toDisplayY(currentY).toFixed(3));
         setPreciseEntry({
           xValue: clampedX,
           displayX:
@@ -1309,9 +1348,9 @@ const EditableShapeFunctionChart = ({
       dragCurvePointsRef.current = startingCurve;
       setDragCurvePoints(startingCurve);
       dragModifiedRef.current = false;
-      lastDragYRef.current = rawY;
+      lastDragYRef.current = displayY;
       setDragXValue(clampedX);
-      setDragYValue(rawY);
+      setDragYValue(toRawY(displayY));
       setIsDragging(true);
       isDraggingRef.current = true;
       dragStartYRef.current = e.clientY;
@@ -1338,6 +1377,8 @@ const EditableShapeFunctionChart = ({
     shapeFunction,
     editedPoints,
     numericMissingLayout,
+    toDisplayY,
+    toRawY,
   ]);
 
   // Build traces
@@ -1349,7 +1390,7 @@ const EditableShapeFunctionChart = ({
 
     const originalTrace = {
       x: x_values,
-      y: y_values,
+      y: y_values.map(toOriginalDisplayY),
       type: "scatter",
       mode: "lines",
       name: t("shapeFunctions.original"),
@@ -1361,7 +1402,7 @@ const EditableShapeFunctionChart = ({
 
     const currentTrace = {
       x: merged.x,
-      y: merged.y,
+      y: merged.y.map(toDisplayY),
       type: "scatter",
       mode: "lines",
       name: hasEdits ? t("shapeFunctions.edited") : t("shapeFunctions.current"),
@@ -1379,7 +1420,7 @@ const EditableShapeFunctionChart = ({
       Array.isArray(comparisonShapeFunction.y_values)
         ? {
             x: comparisonShapeFunction.x_values,
-            y: comparisonShapeFunction.y_values,
+            y: comparisonShapeFunction.y_values.map(toComparisonDisplayY),
             type: "scatter",
             mode: "lines",
             name: t("shapeFunctions.comparison"),
@@ -1394,7 +1435,7 @@ const EditableShapeFunctionChart = ({
       Number.isFinite(Number(missingBucket.y_value))
         ? {
             x: [numericMissingLayout.anchor],
-            y: [Number(missingBucket.y_value)],
+            y: [toDisplayY(missingBucket.y_value)],
             width: [numericMissingLayout.width],
             type: "bar",
             name: t("shapeFunctions.missing"),
@@ -1414,7 +1455,11 @@ const EditableShapeFunctionChart = ({
             x: [
               numericMissingLayout.anchor + numericMissingLayout.width * 0.28,
             ],
-            y: [Number(comparisonShapeFunction.missing_bucket.y_value)],
+            y: [
+              toComparisonDisplayY(
+                comparisonShapeFunction.missing_bucket.y_value,
+              ),
+            ],
             width: [numericMissingLayout.width * 0.55],
             type: "bar",
             name: `${t("shapeFunctions.comparison")} ${t("shapeFunctions.missing")}`,
@@ -1429,7 +1474,10 @@ const EditableShapeFunctionChart = ({
     const dragHighlightTraces =
       isDragging && dragXValue !== null && dragCurvePoints.length > 1
         ? buildDragHighlightSegments(
-            dragCurvePoints,
+            dragCurvePoints.map((point) => ({
+              ...point,
+              y: toDisplayY(point.y),
+            })),
             dragXValue,
             getBrushSigma(),
           )
@@ -1455,7 +1503,7 @@ const EditableShapeFunctionChart = ({
       editMarkerPoints.length > 0
         ? {
             x: editMarkerPoints.map((p) => Number(p.x_value)),
-            y: editMarkerPoints.map((p) => p.y_value),
+            y: editMarkerPoints.map((p) => toDisplayY(p.y_value)),
             type: "scatter",
             mode: "markers",
             name: t("shapeFunctions.editPoints"),
@@ -1483,7 +1531,7 @@ const EditableShapeFunctionChart = ({
     // ---- Categorical bar chart traces (unchanged) ----
     const originalTrace = {
       x: x_values,
-      y: y_values,
+      y: y_values.map(toOriginalDisplayY),
       type: "bar",
       name: t("shapeFunctions.original"),
       marker: { color: "#9ca3af", size: 4 },
@@ -1506,7 +1554,7 @@ const EditableShapeFunctionChart = ({
 
     const editableTrace = {
       x: x_values,
-      y: currentYValues,
+      y: currentYValues.map(toDisplayY),
       type: "bar",
       name: hasEdits ? t("shapeFunctions.edited") : t("shapeFunctions.current"),
       customdata: xTickLabels || x_values,
@@ -1524,7 +1572,7 @@ const EditableShapeFunctionChart = ({
       Array.isArray(comparisonShapeFunction.y_values)
         ? {
             x: comparisonShapeFunction.x_values,
-            y: comparisonShapeFunction.y_values,
+            y: comparisonShapeFunction.y_values.map(toComparisonDisplayY),
             type: "bar",
             name: t("shapeFunctions.comparison"),
             customdata:
@@ -1588,7 +1636,10 @@ const EditableShapeFunctionChart = ({
       },
     },
     xaxis: {
-      title: { text: displayName, font: { size: enlarged ? 14 : 12 } },
+      title: {
+        text: chartConfig.x_axis_label || displayName,
+        font: { size: enlarged ? 14 : 12 },
+      },
       gridcolor: "#e5e7eb",
       tickfont: { size: enlarged ? 12 : 10 },
       fixedrange: true,
@@ -1921,13 +1972,13 @@ const EditableShapeFunctionChart = ({
                   if (isNumeric) {
                     applyPreciseNumericEdit(
                       Number(preciseEntry.xValue),
-                      parseFloat(preciseValue),
+                      toRawY(parseFloat(preciseValue)),
                     );
                   } else {
                     onPointEdit(
                       feature_name,
                       preciseEntry.xValue,
-                      parseFloat(preciseValue),
+                      toRawY(parseFloat(preciseValue)),
                       feature_type,
                     );
                   }
@@ -1950,13 +2001,13 @@ const EditableShapeFunctionChart = ({
                     if (isNumeric) {
                       applyPreciseNumericEdit(
                         Number(preciseEntry.xValue),
-                        parseFloat(preciseValue),
+                        toRawY(parseFloat(preciseValue)),
                       );
                     } else {
                       onPointEdit(
                         feature_name,
                         preciseEntry.xValue,
-                        parseFloat(preciseValue),
+                        toRawY(parseFloat(preciseValue)),
                         feature_type,
                       );
                     }
@@ -2262,6 +2313,7 @@ const FeatureChartSettingsModal = ({
 }) => {
   const [selectedChartType, setSelectedChartType] = useState("numeric");
   const [displayTitle, setDisplayTitle] = useState("");
+  const [xAxisLabel, setXAxisLabel] = useState("");
   const [categoricalValueLabels, setCategoricalValueLabels] = useState({});
   const [numericTickLabels, setNumericTickLabels] = useState({});
   const [saving, setSaving] = useState(false);
@@ -2326,6 +2378,7 @@ const FeatureChartSettingsModal = ({
     if (!isOpen || !shapeFunction) return;
     setSelectedChartType(currentChartType);
     setDisplayTitle(getChartDisplayTitle(chartConfig));
+    setXAxisLabel(chartConfig.x_axis_label || "");
     setCategoricalValueLabels({
       ...(chartConfig.categorical_value_labels ||
         chartConfig.value_labels ||
@@ -2338,6 +2391,7 @@ const FeatureChartSettingsModal = ({
     isOpen,
     shapeFunction,
     currentChartType,
+    chartConfig.x_axis_label,
     chartConfig.categorical_value_labels,
     chartConfig.numeric_tick_labels,
     chartConfig.value_labels,
@@ -2413,6 +2467,7 @@ const FeatureChartSettingsModal = ({
             ? selectedChartType === "numeric"
             : false,
         display_title: displayTitle.trim(),
+        x_axis_label: xAxisLabel.trim(),
         categorical_value_labels: normalizeLabels(
           availableCategoricalValues,
           categoricalValueLabels,
@@ -2463,6 +2518,23 @@ const FeatureChartSettingsModal = ({
               value={displayTitle}
               onChange={(e) => setDisplayTitle(e.target.value)}
               placeholder={featureName}
+              disabled={saving}
+              className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <label className="block text-sm font-medium text-slate-700">
+              {t("shapeFunctions.xAxisLabel")}
+            </label>
+            <p className="mt-1 text-xs text-slate-500">
+              {t("shapeFunctions.xAxisLabelHint")}
+            </p>
+            <input
+              type="text"
+              value={xAxisLabel}
+              onChange={(e) => setXAxisLabel(e.target.value)}
+              placeholder={featureDisplayName}
               disabled={saving}
               className="mt-3 w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500"
             />
@@ -2596,6 +2668,7 @@ const FeatureEditCard = ({
   isSuperadmin = false,
   showMissingBars = false,
   sharedYRange = null,
+  centerCurves = false,
   t,
 }) => {
   const [isEnlarged, setIsEnlarged] = useState(false);
@@ -2616,6 +2689,7 @@ const FeatureEditCard = ({
         showMissingBars={showMissingBars}
         brushHardness={brushHardness}
         sharedYRange={sharedYRange}
+        centerCurves={centerCurves}
         headerContent={
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -2771,6 +2845,7 @@ const FeatureEditCard = ({
                   brushHardness={brushHardness}
                   enlarged
                   sharedYRange={sharedYRange}
+                  centerCurves={centerCurves}
                   t={t}
                 />
               </div>
@@ -2840,6 +2915,7 @@ const EditableShapeFunctionsGrid = ({
   const [showSurenessModal, setShowSurenessModal] = useState(false);
   const [pendingFeatureSubmit, setPendingFeatureSubmit] = useState(null);
   const [syncAxes, setSyncAxes] = useState(true);
+  const [centerCurves, setCenterCurves] = useState(false);
   const [brushHardness, setBrushHardness] = useState(50);
   const [chartSettingsFeature, setChartSettingsFeature] = useState(null);
   const [detailsFeatureName, setDetailsFeatureName] = useState(null);
@@ -2883,26 +2959,47 @@ const EditableShapeFunctionsGrid = ({
       return null;
     const allY = [];
     shapeFunctions.forEach((sf) => {
-      allY.push(...sf.y_values);
+      const originalValues = sf.y_values || [];
+      const originalCurveMean = centerCurves
+        ? getCurveMean(originalValues)
+        : 0;
+      const editMap = new Map();
+      (initialEditedPoints[sf.feature_name] || []).forEach((point) => {
+        editMap.set(String(point.x_value), point.y_value);
+      });
+      (editedPoints[sf.feature_name] || []).forEach((point) => {
+        editMap.set(String(point.x_value), point.y_value);
+      });
+      const currentValues = (sf.x_values || []).map((xValue, index) =>
+        editMap.has(String(xValue))
+          ? Number(editMap.get(String(xValue)))
+          : Number(originalValues[index]),
+      );
+      const currentCurveMean = centerCurves
+        ? getCurveMean(currentValues)
+        : 0;
+
+      allY.push(
+        ...originalValues.map((value) => Number(value) - originalCurveMean),
+        ...currentValues.map((value) => Number(value) - currentCurveMean),
+      );
       if (
         showMissingBars &&
         Number.isFinite(Number(sf?.missing_bucket?.y_value))
       ) {
-        allY.push(Number(sf.missing_bucket.y_value));
+        allY.push(Number(sf.missing_bucket.y_value) - currentCurveMean);
       }
-      (initialEditedPoints[sf.feature_name] || []).forEach((p) =>
-        allY.push(p.y_value),
-      );
-      (editedPoints[sf.feature_name] || []).forEach((p) =>
-        allY.push(p.y_value),
-      );
     });
     (comparisonShapeFunctions || []).forEach((sf) => {
+      const curveMean = centerCurves ? getCurveMean(sf.y_values) : 0;
+      allY.push(
+        ...(sf.y_values || []).map((value) => Number(value) - curveMean),
+      );
       if (
         showMissingBars &&
         Number.isFinite(Number(sf?.missing_bucket?.y_value))
       ) {
-        allY.push(Number(sf.missing_bucket.y_value));
+        allY.push(Number(sf.missing_bucket.y_value) - curveMean);
       }
     });
     if (allY.length === 0) return null;
@@ -2917,6 +3014,7 @@ const EditableShapeFunctionsGrid = ({
     initialEditedPoints,
     editedPoints,
     showMissingBars,
+    centerCurves,
   ]);
 
   // Only reset unsaved edits when a completely new model is trained
@@ -3198,6 +3296,20 @@ const EditableShapeFunctionsGrid = ({
               {t("shapeFunctions.resetAll")}
             </button>
           )}
+          {isSuperadmin && (
+            <label
+              className="flex cursor-pointer items-center gap-2 rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
+              title={t("shapeFunctions.centerCurvesHint")}
+            >
+              <input
+                type="checkbox"
+                checked={centerCurves}
+                onChange={(event) => setCenterCurves(event.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <span>{t("shapeFunctions.centerCurves")}</span>
+            </label>
+          )}
           <button
             onClick={() => setSyncAxes((v) => !v)}
             title={
@@ -3288,6 +3400,7 @@ const EditableShapeFunctionsGrid = ({
             isSuperadmin={isSuperadmin}
             showMissingBars={showMissingBars}
             sharedYRange={globalYRange}
+            centerCurves={centerCurves}
             t={t}
           />
         ))}

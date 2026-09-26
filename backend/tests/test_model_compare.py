@@ -386,6 +386,61 @@ def test_preview_weighted_mode_matches_current_weighting_semantics(
     )
 
 
+def test_preview_can_uniformly_scale_edited_offsets_to_limit_mean_drift(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-age",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 1.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-age"],
+        use_confidence=True,
+        limit_edited_mean_deviation=True,
+        feature_names=["age", "month"],
+    )
+
+    constraint = preview["mean_deviation_constraint"]
+    assert constraint["applied"] is True
+    assert constraint["scale_factor"] == pytest.approx(0.17)
+    assert constraint["satisfied"] is True
+    assert preview["average_prediction_scores"]["original"] == pytest.approx(1.7)
+    assert preview["average_prediction_scores"]["edited"] == pytest.approx(1.87)
+    age_preview = _get_feature_preview(preview, "age")
+    assert (
+        age_preview["right_effective_y_values"][1]
+        - age_preview["right_base_y_values"][1]
+    ) == pytest.approx(0.17)
+    assert age_preview["right_individual_edit_traces"][0]["y_values"][1] == pytest.approx(
+        age_preview["right_effective_y_values"][1]
+    )
+
+
 def test_preview_unweighted_mode_ignores_saved_confidence(ml_service):
     edits_payload = {
         "included": True,
@@ -804,6 +859,258 @@ def test_preview_unweighted_mode_changes_edited_curve_metrics(ml_service):
     assert unweighted_age["comparison_metrics"]["edited_vs_edited_base_rmse"] == pytest.approx(1.5)
     assert weighted_age["comparison_metrics"]["edited_vs_edited_base_r2"] == pytest.approx(0.712)
     assert unweighted_age["comparison_metrics"]["edited_vs_edited_base_r2"] == pytest.approx(-0.8)
+
+
+def test_preview_curve_metrics_change_with_selected_edits(ml_service):
+    original_edits_payload = {
+        "included": True,
+        "users": [{"name": "carol"}],
+        "edits": [
+            {
+                "user_name": "carol",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-original",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 9.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}, {"name": "bob"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-a",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 1.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            },
+            {
+                "user_name": "bob",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-b",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 3.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), original_edits_payload),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    no_edits_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=[],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    alice_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-a"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    bob_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-b"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    original_edit_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=["sub-original"],
+        right_selected_submission_ids=[],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    aggregated_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=["sub-original"],
+        right_selected_submission_ids=["sub-a", "sub-b"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+
+    no_edits_metrics = _get_feature_preview(no_edits_preview, "age")["comparison_metrics"]
+    alice_metrics = _get_feature_preview(alice_preview, "age")["comparison_metrics"]
+    bob_metrics = _get_feature_preview(bob_preview, "age")["comparison_metrics"]
+    original_edit_metrics = _get_feature_preview(
+        original_edit_preview, "age"
+    )["comparison_metrics"]
+    aggregated_metrics = _get_feature_preview(aggregated_preview, "age")[
+        "comparison_metrics"
+    ]
+
+    assert no_edits_metrics["edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert original_edit_metrics["edited_vs_original_base_mae"] == pytest.approx(0.0)
+    assert alice_metrics["edited_vs_original_base_mae"] == pytest.approx(1.0)
+    assert bob_metrics["edited_vs_original_base_mae"] == pytest.approx(3.0)
+    assert aggregated_metrics["edited_vs_original_base_mae"] == pytest.approx(2.0)
+    assert alice_metrics["edited_vs_original_base_rmse"] == pytest.approx(1.0)
+    assert bob_metrics["edited_vs_original_base_rmse"] == pytest.approx(3.0)
+    assert aggregated_metrics["edited_vs_original_base_rmse"] == pytest.approx(2.0)
+    assert alice_metrics["edited_vs_original_base_r2"] == pytest.approx(0.2)
+    assert bob_metrics["edited_vs_original_base_r2"] == pytest.approx(-6.2)
+    assert aggregated_metrics["edited_vs_original_base_r2"] == pytest.approx(-2.2)
+
+
+def test_preview_returns_one_trace_per_selected_edit(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}, {"name": "bob"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-a",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 2.0, "weight": 0.2}
+                        ],
+                    }
+                ],
+            },
+            {
+                "user_name": "bob",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-b",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 1.0, "weight": 0.8}
+                        ],
+                    }
+                ],
+            },
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service), filename="original.json"
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-a", "sub-b"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+
+    age_preview = _get_feature_preview(preview, "age")
+    assert age_preview["right_effective_y_values"] == pytest.approx(
+        [0.6, 1.6, 2.6, 3.6]
+    )
+    traces_by_id = {
+        trace["submission_id"]: trace
+        for trace in age_preview["right_individual_edit_traces"]
+    }
+    assert set(traces_by_id) == {"sub-a", "sub-b"}
+    assert traces_by_id["sub-a"]["user_name"] == "alice"
+    assert traces_by_id["sub-a"]["sureness"] == 2
+    assert traces_by_id["sub-a"]["y_values"] == pytest.approx(
+        [0.4, 1.4, 2.4, 3.4]
+    )
+    assert traces_by_id["sub-b"]["user_name"] == "bob"
+    assert traces_by_id["sub-b"]["sureness"] == 8
+    assert traces_by_id["sub-b"]["y_values"] == pytest.approx(
+        [0.8, 1.8, 2.8, 3.8]
+    )
+
+    single_edit_preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-a"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+    single_edit_age_preview = _get_feature_preview(single_edit_preview, "age")
+    single_edit_trace = single_edit_age_preview["right_individual_edit_traces"][0]
+
+    assert single_edit_trace["original_base_mae"] == pytest.approx(
+        single_edit_age_preview["comparison_metrics"]["edited_vs_original_base_mae"]
+    )
+
+
+def test_preview_uses_expert_prefix_for_anonymized_chart_trace_labels(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "P1"}],
+        "edits": [
+            {
+                "user_name": "P1",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-p1-age",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 2.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service), filename="original.json"
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-p1-age"],
+        use_confidence=True,
+        feature_names=["age"],
+    )
+
+    trace = _get_feature_preview(preview, "age")["right_individual_edit_traces"][0]
+    assert trace["user_name"] == "E1"
 
 
 def test_preview_supports_categorical_edited_curve_metrics(ml_service):

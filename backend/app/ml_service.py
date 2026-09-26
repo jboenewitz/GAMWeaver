@@ -55,6 +55,13 @@ def _json_safe(value: Any) -> Any:
     return value
 
 
+def _format_compare_chart_trace_user_name(user_name: Any) -> str:
+    """Use the expert prefix for anonymized labels in comparison chart traces."""
+    name = str(user_name or "").strip()
+    match = re.fullmatch(r"P(\d+)", name, flags=re.IGNORECASE)
+    return f"E{match.group(1)}" if match else name
+
+
 class ImportedIGANNRuntime:
     """Lightweight predictor that reconstructs model output from exported shape functions."""
 
@@ -1149,6 +1156,7 @@ class MLService:
         if not isinstance(raw_setting, dict):
             return {}
         display_title = str(raw_setting.get("display_title", "") or "").strip()
+        x_axis_label = str(raw_setting.get("x_axis_label", "") or "").strip()
         categorical_value_labels = cls._sanitize_chart_label_map(
             raw_setting.get("categorical_value_labels", raw_setting.get("value_labels")),
         )
@@ -1157,6 +1165,7 @@ class MLService:
         )
         return {
             "display_title": display_title,
+            "x_axis_label": x_axis_label,
             "treat_as_categorical": bool(raw_setting.get("treat_as_categorical")),
             "treat_as_numeric": bool(raw_setting.get("treat_as_numeric")),
             "categorical_value_labels": categorical_value_labels,
@@ -1170,6 +1179,7 @@ class MLService:
         if not normalized:
             return {
                 "display_title": "",
+                "x_axis_label": "",
                 "treat_as_categorical": False,
                 "treat_as_numeric": False,
                 "categorical_value_labels": {},
@@ -1432,6 +1442,7 @@ class MLService:
         return {
             "feature_name": feature_name,
             "display_title": str(stored.get("display_title", "") or "").strip(),
+            "x_axis_label": str(stored.get("x_axis_label", "") or "").strip(),
             "base_feature_type": base_feature_type,
             "chart_feature_type": chart_feature_type,
             "is_numeric": is_numeric,
@@ -1459,6 +1470,7 @@ class MLService:
         treat_as_categorical: bool,
         treat_as_numeric: bool = False,
         display_title: Optional[str] = None,
+        x_axis_label: Optional[str] = None,
         categorical_value_labels: Optional[Dict[str, str]] = None,
         numeric_tick_labels: Optional[Dict[str, str]] = None,
         value_labels: Optional[Dict[str, str]] = None,
@@ -1541,9 +1553,15 @@ class MLService:
             if display_title is None
             else str(display_title or "").strip()
         )
+        sanitized_x_axis_label = (
+            str(current.get("x_axis_label", "") or "").strip()
+            if x_axis_label is None
+            else str(x_axis_label or "").strip()
+        )
 
         normalized_setting = {
             "display_title": sanitized_display_title,
+            "x_axis_label": sanitized_x_axis_label,
             "treat_as_categorical": normalized_treat_as_categorical,
             "treat_as_numeric": normalized_treat_as_numeric,
             "categorical_value_labels": sanitized_categorical_labels,
@@ -1552,6 +1570,7 @@ class MLService:
 
         if (
             not normalized_setting["display_title"]
+            and not normalized_setting["x_axis_label"]
             and not normalized_setting["treat_as_categorical"]
             and not normalized_setting["treat_as_numeric"]
             and not normalized_setting["categorical_value_labels"]
@@ -1825,7 +1844,7 @@ class MLService:
                 "chart_config": {
                     key: value
                     for key, value in ((shape_function.get("chart_config") or {}).items())
-                    if key != "display_title"
+                    if key not in {"display_title", "x_axis_label"}
                 },
             }
             for shape_function in self._export_shape_functions_payload()
@@ -1872,7 +1891,7 @@ class MLService:
                     feature_name: {
                         key: value
                         for key, value in (setting or {}).items()
-                        if key != "display_title"
+                        if key not in {"display_title", "x_axis_label"}
                     }
                     for feature_name, setting in self.feature_chart_settings.items()
                 }
@@ -1949,6 +1968,8 @@ class MLService:
         chart_config = _json_safe(normalized_shape.get("chart_config") or {})
         if not str(chart_config.get("display_title", "") or "").strip():
             chart_config["display_title"] = stored_chart_config.get("display_title", "")
+        if not str(chart_config.get("x_axis_label", "") or "").strip():
+            chart_config["x_axis_label"] = stored_chart_config.get("x_axis_label", "")
         if not (chart_config.get("categorical_value_labels") or {}):
             chart_config["categorical_value_labels"] = stored_chart_config.get(
                 "categorical_value_labels",
@@ -2510,6 +2531,8 @@ class MLService:
         chart_config = _json_safe(normalized_shape.get("chart_config") or {})
         if not str(chart_config.get("display_title", "") or "").strip():
             chart_config["display_title"] = stored_chart_config.get("display_title", "")
+        if not str(chart_config.get("x_axis_label", "") or "").strip():
+            chart_config["x_axis_label"] = stored_chart_config.get("x_axis_label", "")
         if not (chart_config.get("categorical_value_labels") or {}):
             chart_config["categorical_value_labels"] = stored_chart_config.get(
                 "categorical_value_labels",
@@ -3269,6 +3292,64 @@ class MLService:
                 )
         return combined
 
+    @staticmethod
+    def _collect_compare_submission_offsets(
+        prepared_artifact: Dict[str, Any],
+        selected_submission_ids: Optional[List[str]],
+        *,
+        use_confidence: bool,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Return one offset map per selected submission, grouped by feature.
+
+        The aggregate preview averages all selected point contributions.  The
+        individual-trace preview deliberately keeps each submission separate,
+        while applying the same confidence weighting to its points.
+        """
+        selected_set = (
+            {str(submission_id) for submission_id in selected_submission_ids}
+            if selected_submission_ids is not None
+            else None
+        )
+        traces: Dict[str, List[Dict[str, Any]]] = {}
+
+        for feature_group in prepared_artifact.get("submissions_by_feature") or []:
+            feature_name = str(feature_group.get("feature_name", "")).strip()
+            if not feature_name:
+                continue
+            for submission in feature_group.get("submissions") or []:
+                submission_id = str(submission.get("submission_id", "")).strip()
+                if selected_set is not None and submission_id not in selected_set:
+                    continue
+
+                point_stats: Dict[Any, Dict[str, float]] = {}
+                for point in submission.get("edited_points") or []:
+                    raw_x_value = point.get("x_value")
+                    stats = point_stats.setdefault(
+                        raw_x_value,
+                        {"offset_sum": 0.0, "point_count": 0.0},
+                    )
+                    contribution = float(point.get("y_value", 0.0))
+                    if use_confidence:
+                        contribution *= float(point.get("weight", 0.5))
+                    stats["offset_sum"] += contribution
+                    stats["point_count"] += 1.0
+
+                offsets = {
+                    raw_x_value: float(stats["offset_sum"])
+                    / float(stats["point_count"])
+                    for raw_x_value, stats in point_stats.items()
+                    if float(stats["point_count"]) > 0
+                }
+                traces.setdefault(feature_name, []).append(
+                    {
+                        "submission_id": submission_id,
+                        "user_name": str(submission.get("user_name", "") or ""),
+                        "sureness": int(submission.get("sureness", 0) or 0),
+                        "offsets": offsets,
+                    }
+                )
+        return traces
+
     @classmethod
     def _compute_compare_average_prediction_score(
         cls,
@@ -3411,6 +3492,20 @@ class MLService:
         except (ValueError, IndexError, TypeError):
             return 0.0
 
+    @staticmethod
+    def _scale_compare_offsets(
+        offsets: Dict[str, Dict[Any, float]],
+        scale_factor: float,
+    ) -> Dict[str, Dict[Any, float]]:
+        """Scale every selected edit offset by the same preview-only factor."""
+        return {
+            feature_name: {
+                value: float(offset) * scale_factor
+                for value, offset in point_offsets.items()
+            }
+            for feature_name, point_offsets in offsets.items()
+        }
+
     def build_model_compare_preview(
         self,
         *,
@@ -3419,6 +3514,7 @@ class MLService:
         left_selected_submission_ids: Optional[List[str]],
         right_selected_submission_ids: Optional[List[str]],
         use_confidence: bool = True,
+        limit_edited_mean_deviation: bool = False,
         feature_names: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         shared_features = self._validate_model_compare_pair(
@@ -3454,6 +3550,16 @@ class MLService:
             right_selected_submission_ids,
             use_confidence=use_confidence,
         )
+        left_submission_offsets = self._collect_compare_submission_offsets(
+            left_artifact,
+            left_selected_submission_ids,
+            use_confidence=use_confidence,
+        )
+        right_submission_offsets = self._collect_compare_submission_offsets(
+            right_artifact,
+            right_selected_submission_ids,
+            use_confidence=use_confidence,
+        )
         left_cat_features = {
             str(feature_name)
             for feature_name in (left_artifact.get("cat_features") or [])
@@ -3468,12 +3574,73 @@ class MLService:
                 left_offsets,
             )
         )
+        unconstrained_edited_average_prediction_score = (
+            self._compute_compare_average_prediction_score(
+                right_artifact,
+                right_offsets,
+            )
+        )
+        right_base_average_prediction_score = (
+            self._compute_compare_average_prediction_score(right_artifact, {})
+        )
+        mean_deviation_limit = 0.10 * abs(original_average_prediction_score)
+        scale_factor = 1.0
+        if (
+            limit_edited_mean_deviation
+            and abs(
+                unconstrained_edited_average_prediction_score
+                - original_average_prediction_score
+            )
+            > mean_deviation_limit
+        ):
+            lower_bound = original_average_prediction_score - mean_deviation_limit
+            upper_bound = original_average_prediction_score + mean_deviation_limit
+            target_average = min(
+                max(unconstrained_edited_average_prediction_score, lower_bound),
+                upper_bound,
+            )
+            edit_mean_effect = (
+                unconstrained_edited_average_prediction_score
+                - right_base_average_prediction_score
+            )
+            if abs(edit_mean_effect) > 1e-12:
+                scale_factor = min(
+                    1.0,
+                    max(
+                        0.0,
+                        (target_average - right_base_average_prediction_score)
+                        / edit_mean_effect,
+                    ),
+                )
+                right_offsets = self._scale_compare_offsets(
+                    right_offsets,
+                    scale_factor,
+                )
+                for trace in right_submission_offsets.values():
+                    for submission_trace in trace:
+                        submission_trace["offsets"] = {
+                            value: float(offset) * scale_factor
+                            for value, offset in submission_trace["offsets"].items()
+                        }
         edited_average_prediction_score = (
             self._compute_compare_average_prediction_score(
                 right_artifact,
                 right_offsets,
             )
         )
+        mean_deviation_constraint = {
+            "enabled": bool(limit_edited_mean_deviation),
+            "applied": bool(scale_factor < (1.0 - 1e-12)),
+            "scale_factor": scale_factor,
+            "limit": mean_deviation_limit,
+            "original_average": original_average_prediction_score,
+            "unconstrained_edited_average": unconstrained_edited_average_prediction_score,
+            "constrained_edited_average": edited_average_prediction_score,
+            "satisfied": bool(
+                abs(edited_average_prediction_score - original_average_prediction_score)
+                <= mean_deviation_limit + 1e-9
+            ),
+        }
         original_data_weighted_average_prediction_score = (
             self._compute_compare_data_weighted_average_prediction_score(
                 left_artifact,
@@ -3587,7 +3754,77 @@ class MLService:
                 )
                 right_effective_y_values.append(float(base_y) + float(offset))
 
+            def build_individual_edit_traces(
+                submission_offsets: List[Dict[str, Any]],
+                *,
+                shape_function: Dict[str, Any],
+                is_categorical: bool,
+                x_values: List[Any],
+                base_y_values: List[float],
+            ) -> List[Dict[str, Any]]:
+                return [
+                    {
+                        "submission_id": trace["submission_id"],
+                        "user_name": _format_compare_chart_trace_user_name(
+                            trace["user_name"]
+                        ),
+                        "sureness": trace["sureness"],
+                        "y_values": [
+                            float(base_y)
+                            + self._get_compare_offset_for_feature_value(
+                                shape_function=shape_function,
+                                original_is_categorical=is_categorical,
+                                value=x_value,
+                                offsets=trace["offsets"],
+                            )
+                            for x_value, base_y in zip(x_values, base_y_values)
+                        ],
+                    }
+                    for trace in submission_offsets
+                ]
+
+            left_individual_edit_traces = build_individual_edit_traces(
+                left_submission_offsets.get(feature_name, []),
+                shape_function=left_shape,
+                is_categorical=feature_name in left_cat_features,
+                x_values=left_x_values,
+                base_y_values=left_base_y_values,
+            )
+            right_individual_edit_traces = build_individual_edit_traces(
+                right_submission_offsets.get(feature_name, []),
+                shape_function=right_shape,
+                is_categorical=feature_name in right_cat_features,
+                x_values=right_x_values,
+                base_y_values=right_model_base_y_values,
+            )
+
             feature_type = str(left_shape.get("feature_type", "numeric"))
+
+            def calculate_original_base_mae(
+                trace_x_values: List[Any],
+                trace_y_values: List[float],
+            ) -> float:
+                if feature_type == "numeric":
+                    return self._compute_numeric_compare_metric_on_reference_grid(
+                        reference_x_values=left_x_values,
+                        reference_y_values=left_base_y_values,
+                        comparison_x_values=trace_x_values,
+                        comparison_y_values=trace_y_values,
+                        metric_name="MAE",
+                    )
+                return self._compute_compare_mae(left_base_y_values, trace_y_values)
+
+            for trace in left_individual_edit_traces:
+                trace["original_base_mae"] = calculate_original_base_mae(
+                    left_x_values,
+                    trace["y_values"],
+                )
+            for trace in right_individual_edit_traces:
+                trace["original_base_mae"] = calculate_original_base_mae(
+                    right_x_values,
+                    trace["y_values"],
+                )
+
             baseline_edited_vs_edited_base_mae = self._compute_compare_mae(
                 right_model_base_y_values,
                 right_model_base_y_values,
@@ -3643,7 +3880,7 @@ class MLService:
                 edited_vs_original_base_mae = (
                     self._compute_numeric_compare_metric_on_reference_grid(
                         reference_x_values=left_x_values,
-                        reference_y_values=left_effective_y_values,
+                        reference_y_values=left_base_y_values,
                         comparison_x_values=right_x_values,
                         comparison_y_values=right_effective_y_values,
                         metric_name="MAE",
@@ -3652,7 +3889,7 @@ class MLService:
                 edited_vs_original_base_rmse = (
                     self._compute_numeric_compare_metric_on_reference_grid(
                         reference_x_values=left_x_values,
-                        reference_y_values=left_effective_y_values,
+                        reference_y_values=left_base_y_values,
                         comparison_x_values=right_x_values,
                         comparison_y_values=right_effective_y_values,
                         metric_name="RMSE",
@@ -3661,7 +3898,7 @@ class MLService:
                 edited_vs_original_base_r2 = (
                     self._compute_numeric_compare_metric_on_reference_grid(
                         reference_x_values=left_x_values,
-                        reference_y_values=left_effective_y_values,
+                        reference_y_values=left_base_y_values,
                         comparison_x_values=right_x_values,
                         comparison_y_values=right_effective_y_values,
                         metric_name="R2",
@@ -3681,15 +3918,15 @@ class MLService:
                     right_model_base_y_values,
                 )
                 edited_vs_original_base_mae = self._compute_compare_mae(
-                    left_effective_y_values,
+                    left_base_y_values,
                     right_effective_y_values,
                 )
                 edited_vs_original_base_rmse = self._compute_compare_rmse(
-                    left_effective_y_values,
+                    left_base_y_values,
                     right_effective_y_values,
                 )
                 edited_vs_original_base_r2 = self._compute_compare_r2(
-                    left_effective_y_values,
+                    left_base_y_values,
                     right_effective_y_values,
                 )
 
@@ -3705,6 +3942,8 @@ class MLService:
                     "left_effective_y_values": left_effective_y_values,
                     "right_base_y_values": right_base_y_values,
                     "right_effective_y_values": right_effective_y_values,
+                    "left_individual_edit_traces": left_individual_edit_traces,
+                    "right_individual_edit_traces": right_individual_edit_traces,
                     "left_chart_config": left_shape.get("chart_config") or {},
                     "right_chart_config": right_shape.get("chart_config") or {},
                     "comparison_metrics": {
@@ -3781,6 +4020,7 @@ class MLService:
                     edited_data_weighted_contributions,
                 ),
             },
+            "mean_deviation_constraint": mean_deviation_constraint,
         }
 
     def _validate_dataset_compatibility(

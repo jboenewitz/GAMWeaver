@@ -484,6 +484,32 @@ def test_display_title_is_runtime_only_and_excluded_from_export(ml_service):
     assert artifact["feature_names"] == ["age", "month"]
 
 
+def test_x_axis_label_is_runtime_only_and_used_in_chart_config(ml_service):
+    result = ml_service.update_feature_chart_setting(
+        "age",
+        treat_as_categorical=False,
+        x_axis_label="Age (years)",
+    )
+
+    assert result["x_axis_label"] == "Age (years)"
+
+    shape_function = next(
+        feature
+        for feature in ml_service.get_shape_functions()
+        if feature["feature_name"] == "age"
+    )
+    assert shape_function["chart_config"]["x_axis_label"] == "Age (years)"
+
+    artifact = ml_service.export_model_artifact()
+    exported_shape_function = next(
+        feature
+        for feature in artifact["shape_functions"]
+        if feature["feature_name"] == "age"
+    )
+    assert "x_axis_label" not in artifact["feature_chart_settings"]["age"]
+    assert "x_axis_label" not in exported_shape_function["chart_config"]
+
+
 def test_competence_level_setting_persists_through_export_import(
     ml_service,
     monkeypatch,

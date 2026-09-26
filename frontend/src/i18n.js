@@ -191,6 +191,9 @@ const translations = {
     "shapeFunctions.resetAll": "Reset All",
     "shapeFunctions.syncAxes": "Sync Axes",
     "shapeFunctions.axesSynced": "Axes Synced",
+    "shapeFunctions.centerCurves": "Center curves",
+    "shapeFunctions.centerCurvesHint":
+      "Subtract the mean of each curve for this display only.",
     "shapeFunctions.syncAxesHintOn":
       "Axes are synced - click to use per-chart scale",
     "shapeFunctions.syncAxesHintOff":
@@ -242,6 +245,9 @@ const translations = {
     "shapeFunctions.displayTitleLabel": "Display Title",
     "shapeFunctions.displayTitleHint":
       "Cosmetic only. Charts and UI labels use this title, but exports keep the original feature name.",
+    "shapeFunctions.xAxisLabel": "X-Axis Label",
+    "shapeFunctions.xAxisLabelHint":
+      "Optional. Leave blank to use the display title on the x-axis.",
     "shapeFunctions.chartType": "Chart Type",
     "shapeFunctions.numericChartType": "Numeric",
     "shapeFunctions.categoricalChartType": "Categorical",
@@ -615,13 +621,28 @@ const translations = {
       "When off, selected submissions are averaged equally instead of using their saved confidence.",
     "modelCompare.showBaseTraces": "Show base lines and bars",
     "modelCompare.hideBaseTraces": "Hide base lines and bars",
+    "modelCompare.showLineDots": "Show dots on lines",
+    "modelCompare.hideLineDots": "Hide dots on lines",
     "modelCompare.baseTracesDescription":
       "Toggle the original baseline traces for both compared artifacts.",
+    "modelCompare.showIndividualEdits": "Show individual edits",
+    "modelCompare.showAggregatedEdits": "Show aggregated edits",
+    "modelCompare.showIndividualMae": "Show individual MAE errors",
+    "modelCompare.hideIndividualMae": "Hide individual MAE errors",
+    "modelCompare.individualMaeErrors": "Individual participant MAE errors",
+    "modelCompare.showConfidenceInLegend": "Show confidence rating in legend",
+    "modelCompare.hideConfidenceInLegend": "Hide confidence rating in legend",
+    "modelCompare.individualEditsDescription":
+      "Show one solid trace for every selected edit instead of the combined trace; colors identify experts.",
+    "modelCompare.legendRightOfChart": "Move legend to the right",
+    "modelCompare.legendAboveChart": "Move legend above chart",
+    "modelCompare.legendPositionDescription":
+      "Place every chart legend to the right of its plot or in the default position above it.",
     "modelCompare.searchFeatures": "Search features",
     "modelCompare.jumpToFeature": "Jump to feature",
     "modelCompare.featureCharts": "Feature charts",
     "modelCompare.featureChartsDescription":
-      "Dashed traces show each artifact's base shape. Solid traces show the preview after applying selected submissions.",
+      "Dashed traces show each artifact's base shape. Solid traces show either the combined preview or each selected edit.",
     "modelCompare.averagePredictedScore": "Average predicted score",
     "modelCompare.averagePredictedScoreDescription":
       "Estimated uniformly across the feature values shown below; selected edits and confidence weighting are included.",
@@ -633,6 +654,16 @@ const translations = {
       "Each curve is weighted by its exported feature distribution; selected edits and confidence weighting are included.",
     "modelCompare.dataWeightedUnavailable":
       "Data-weighted averages require artifacts exported with feature distribution metadata.",
+    "modelCompare.limitEditedMeanDeviation":
+      "Limit edited mean shift to 10%",
+    "modelCompare.limitEditedMeanDeviationDescription":
+      "Scales every selected edit on the edited artifact by one shared factor; saved edits are unchanged.",
+    "modelCompare.meanDeviationScaled":
+      "Selected edited offsets are shown at {percent}% of their submitted magnitude to meet the limit.",
+    "modelCompare.meanDeviationWithinLimit":
+      "The selected edits are already within the 10% limit.",
+    "modelCompare.meanDeviationCannotMeetLimit":
+      "The unedited right-hand model already differs by more than 10%, so scaling edits alone cannot meet the limit.",
     "modelCompare.originalAveragePredictedScore": "Original artifact",
     "modelCompare.editedAveragePredictedScore": "Edited artifact",
     "modelCompare.averagePredictedScoreDifference": "Edited − original",
@@ -650,16 +681,20 @@ const translations = {
     "modelCompare.rmseVsOriginalBase": "Edited vs original base",
     "modelCompare.r2VsEditedBase": "Edited vs edited base",
     "modelCompare.r2VsOriginalBase": "Edited vs original base",
-    "modelCompare.maeOriginalVsEdited": "Original vs Edited",
-    "modelCompare.rmseOriginalVsEdited": "Original vs Edited",
-    "modelCompare.r2OriginalVsEdited": "Original vs Edited",
+    "modelCompare.maeOriginalVsEdited": "Original vs selected edits",
+    "modelCompare.rmseOriginalVsEdited": "Original vs selected edits",
+    "modelCompare.r2OriginalVsEdited": "Original vs selected edits",
     "modelCompare.metricImproved": "Improved",
     "modelCompare.metricWorsened": "Worsened",
     "modelCompare.metricUnchanged": "Unchanged",
-    "modelCompare.leftBase": "Original base",
+    "modelCompare.reducedVsFullData": "Reduced-data vs full-data",
+    "modelCompare.deltaFromBaseline": "Δ from reduced-data baseline",
+    "modelCompare.relativeChange": "Relative change",
+    "modelCompare.leftBase": "Full-data baseline",
     "modelCompare.leftEffective": "Original",
-    "modelCompare.rightBase": "Edited base",
+    "modelCompare.rightBase": "Reduced-data baseline",
     "modelCompare.rightEffective": "Edited",
+    "modelCompare.aggregatedParticipantEdits": "Aggregated expert edits",
     "modelCompare.editLeftSelections": "Edit original selections",
     "modelCompare.editRightSelections": "Edit edited selections",
   },
@@ -864,6 +899,9 @@ const translations = {
     "shapeFunctions.resetAll": "Alles zurücksetzen",
     "shapeFunctions.syncAxes": "Achsen synchronisieren",
     "shapeFunctions.axesSynced": "Achsen synchronisiert",
+    "shapeFunctions.centerCurves": "Kurven zentrieren",
+    "shapeFunctions.centerCurvesHint":
+      "Nur für diese Ansicht den Mittelwert jeder Kurve abziehen.",
     "shapeFunctions.syncAxesHintOn":
       "Achsen sind synchronisiert - klicken für individuelle Skalierung",
     "shapeFunctions.syncAxesHintOff":
@@ -921,6 +959,9 @@ const translations = {
     "shapeFunctions.displayTitleLabel": "Anzeigetitel",
     "shapeFunctions.displayTitleHint":
       "Nur kosmetisch. Diagramme und UI-Beschriftungen nutzen diesen Titel, Exporte behalten jedoch den ursprünglichen Featurenamen.",
+    "shapeFunctions.xAxisLabel": "X-Achsenbeschriftung",
+    "shapeFunctions.xAxisLabelHint":
+      "Optional. Leer lassen, um den Anzeigetitel auf der X-Achse zu verwenden.",
     "shapeFunctions.chartType": "Diagrammtyp",
     "shapeFunctions.numericChartType": "Numerisch",
     "shapeFunctions.categoricalChartType": "Kategorial",
@@ -1330,13 +1371,28 @@ const translations = {
       "Wenn aus, werden ausgewählte Einreichungen gleich gewichtet statt mit ihrer gespeicherten Sicherheit.",
     "modelCompare.showBaseTraces": "Basislinien und Balken anzeigen",
     "modelCompare.hideBaseTraces": "Basislinien und Balken ausblenden",
+    "modelCompare.showLineDots": "Punkte auf Linien anzeigen",
+    "modelCompare.hideLineDots": "Punkte auf Linien ausblenden",
     "modelCompare.baseTracesDescription":
       "Die ursprünglichen Basistraces für beide verglichenen Artefakte ein- oder ausblenden.",
+    "modelCompare.showIndividualEdits": "Einzelne Bearbeitungen anzeigen",
+    "modelCompare.showAggregatedEdits": "Zusammengefasste Bearbeitungen anzeigen",
+    "modelCompare.showIndividualMae": "Individuelle MAE-Fehler anzeigen",
+    "modelCompare.hideIndividualMae": "Individuelle MAE-Fehler ausblenden",
+    "modelCompare.individualMaeErrors": "Individuelle MAE-Fehler der Teilnehmenden",
+    "modelCompare.showConfidenceInLegend": "Sicherheitsbewertung in Legende anzeigen",
+    "modelCompare.hideConfidenceInLegend": "Sicherheitsbewertung in Legende ausblenden",
+    "modelCompare.individualEditsDescription":
+      "Eine durchgezogene Kurve für jede ausgewählte Bearbeitung statt der zusammengefassten Kurve anzeigen; Farben kennzeichnen die Expert:innen.",
+    "modelCompare.legendRightOfChart": "Legende nach rechts verschieben",
+    "modelCompare.legendAboveChart": "Legende über dem Diagramm anzeigen",
+    "modelCompare.legendPositionDescription":
+      "Die Legende jedes Diagramms rechts neben dem Plot oder an ihrer Standardposition darüber anzeigen.",
     "modelCompare.searchFeatures": "Features suchen",
     "modelCompare.jumpToFeature": "Zum Feature springen",
     "modelCompare.featureCharts": "Feature-Diagramme",
     "modelCompare.featureChartsDescription":
-      "Gestrichelte Linien zeigen die Basisform jedes Artefakts. Durchgezogene Linien zeigen die Vorschau nach den ausgewählten Einreichungen.",
+      "Gestrichelte Linien zeigen die Basisform jedes Artefakts. Durchgezogene Linien zeigen entweder die zusammengefasste Vorschau oder jede ausgewählte Bearbeitung.",
     "modelCompare.averagePredictedScore": "Durchschnittlicher vorhergesagter Wert",
     "modelCompare.averagePredictedScoreDescription":
       "Gleichmäßig über die unten dargestellten Feature-Werte geschätzt; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
@@ -1348,6 +1404,16 @@ const translations = {
       "Jede Kurve wird mit ihrer exportierten Feature-Verteilung gewichtet; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
     "modelCompare.dataWeightedUnavailable":
       "Datensatzgewichtete Mittelwerte benötigen Artefakte, die mit Feature-Verteilungsdaten exportiert wurden.",
+    "modelCompare.limitEditedMeanDeviation":
+      "Änderung des bearbeiteten Mittelwerts auf 10 % begrenzen",
+    "modelCompare.limitEditedMeanDeviationDescription":
+      "Skaliert jede ausgewählte Bearbeitung im bearbeiteten Artefakt mit einem gemeinsamen Faktor; gespeicherte Bearbeitungen bleiben unverändert.",
+    "modelCompare.meanDeviationScaled":
+      "Ausgewählte bearbeitete Offsets werden mit {percent} % ihrer eingereichten Stärke angezeigt, um die Begrenzung einzuhalten.",
+    "modelCompare.meanDeviationWithinLimit":
+      "Die ausgewählten Bearbeitungen liegen bereits innerhalb der 10-%-Begrenzung.",
+    "modelCompare.meanDeviationCannotMeetLimit":
+      "Das unbearbeitete rechte Modell weicht bereits um mehr als 10 % ab; allein durch Skalieren der Bearbeitungen kann die Begrenzung nicht erreicht werden.",
     "modelCompare.originalAveragePredictedScore": "Original-Artefakt",
     "modelCompare.editedAveragePredictedScore": "Bearbeitetes Artefakt",
     "modelCompare.averagePredictedScoreDifference": "Bearbeitet − Original",
@@ -1365,16 +1431,21 @@ const translations = {
     "modelCompare.rmseVsOriginalBase": "Bearbeitet vs Original-Basis",
     "modelCompare.r2VsEditedBase": "Bearbeitet vs bearbeitete Basis",
     "modelCompare.r2VsOriginalBase": "Bearbeitet vs Original-Basis",
-    "modelCompare.maeOriginalVsEdited": "Original vs Bearbeitet",
-    "modelCompare.rmseOriginalVsEdited": "Original vs Bearbeitet",
-    "modelCompare.r2OriginalVsEdited": "Original vs Bearbeitet",
+    "modelCompare.maeOriginalVsEdited": "Original vs ausgewählte Bearbeitungen",
+    "modelCompare.rmseOriginalVsEdited": "Original vs ausgewählte Bearbeitungen",
+    "modelCompare.r2OriginalVsEdited": "Original vs ausgewählte Bearbeitungen",
     "modelCompare.metricImproved": "Verbessert",
     "modelCompare.metricWorsened": "Verschlechtert",
     "modelCompare.metricUnchanged": "Unverändert",
-    "modelCompare.leftBase": "Original-Basis",
+    "modelCompare.reducedVsFullData": "Reduzierte Daten vs vollständige Daten",
+    "modelCompare.deltaFromBaseline": "Δ zur reduzierten Daten-Baseline",
+    "modelCompare.relativeChange": "Relative Veränderung",
+    "modelCompare.leftBase": "Baseline: vollständige Daten",
     "modelCompare.leftEffective": "Original",
-    "modelCompare.rightBase": "Bearbeitete Basis",
+    "modelCompare.rightBase": "Baseline: reduzierte Daten",
     "modelCompare.rightEffective": "Bearbeitet",
+    "modelCompare.aggregatedParticipantEdits":
+      "Zusammengefasste Bearbeitungen der Expert:innen",
     "modelCompare.editLeftSelections": "Original-Auswahl bearbeiten",
     "modelCompare.editRightSelections": "Bearbeitete Auswahl bearbeiten",
   },

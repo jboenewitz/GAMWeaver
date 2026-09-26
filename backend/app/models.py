@@ -333,6 +333,7 @@ class FeatureChartSettingsRequest(BaseModel):
     treat_as_categorical: bool = False
     treat_as_numeric: bool = False
     display_title: Optional[str] = None
+    x_axis_label: Optional[str] = None
     categorical_value_labels: Optional[Dict[str, str]] = None
     numeric_tick_labels: Optional[Dict[str, str]] = None
     value_labels: Optional[Dict[str, str]] = None
@@ -342,6 +343,7 @@ class FeatureChartSettingsResponse(BaseModel):
     """Response with effective chart-display settings for one feature."""
     feature_name: str
     display_title: str = ""
+    x_axis_label: str = ""
     base_feature_type: str
     chart_feature_type: str
     is_numeric: bool
@@ -462,6 +464,15 @@ class ModelCompareFeatureCurveMetrics(BaseModel):
     edited_vs_original_base_r2_status: str
 
 
+class ModelCompareSubmissionTrace(BaseModel):
+    """One selected submission rendered independently on a feature curve."""
+    submission_id: str
+    user_name: str
+    sureness: int = 0
+    y_values: List[float]
+    original_base_mae: Optional[float] = None
+
+
 class ModelCompareFeaturePreview(BaseModel):
     """Combined left/right preview for one feature."""
     feature_name: str
@@ -474,6 +485,12 @@ class ModelCompareFeaturePreview(BaseModel):
     left_effective_y_values: List[float]
     right_base_y_values: List[float]
     right_effective_y_values: List[float]
+    left_individual_edit_traces: List[ModelCompareSubmissionTrace] = Field(
+        default_factory=list
+    )
+    right_individual_edit_traces: List[ModelCompareSubmissionTrace] = Field(
+        default_factory=list
+    )
     left_chart_config: Optional[Dict[str, Any]] = None
     right_chart_config: Optional[Dict[str, Any]] = None
     comparison_metrics: Optional[ModelCompareFeatureCurveMetrics] = None
@@ -486,6 +503,7 @@ class ModelComparePreviewRequest(BaseModel):
     left_selected_submission_ids: List[str] = Field(default_factory=list)
     right_selected_submission_ids: List[str] = Field(default_factory=list)
     use_confidence: bool = True
+    limit_edited_mean_deviation: bool = False
     feature_names: Optional[List[str]] = None
 
 
@@ -505,6 +523,18 @@ class ModelCompareAverageFeatureContribution(BaseModel):
     is_base_offset: bool = False
 
 
+class ModelCompareMeanDeviationConstraint(BaseModel):
+    """Preview-only scaling applied to keep edited-average drift bounded."""
+    enabled: bool
+    applied: bool
+    scale_factor: float
+    limit: float
+    original_average: float
+    unconstrained_edited_average: float
+    constrained_edited_average: float
+    satisfied: bool
+
+
 class ModelComparePreviewResponse(BaseModel):
     """Response with recalculated preview traces for compared features."""
     use_confidence: bool = True
@@ -514,6 +544,7 @@ class ModelComparePreviewResponse(BaseModel):
     average_prediction_feature_contributions: Dict[
         str, Optional[List[ModelCompareAverageFeatureContribution]]
     ] = Field(default_factory=dict)
+    mean_deviation_constraint: ModelCompareMeanDeviationConstraint
 
 
 class ModelComparePrepareResponse(BaseModel):

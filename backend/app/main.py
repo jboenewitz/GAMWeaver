@@ -442,6 +442,7 @@ async def prepare_model_compare(
             left_selected_submission_ids=left_selected_submission_ids,
             right_selected_submission_ids=right_selected_submission_ids,
             use_confidence=True,
+            limit_edited_mean_deviation=False,
             feature_names=shared_features,
         )
         return ModelComparePrepareResponse(
@@ -472,6 +473,7 @@ async def preview_model_compare(
             left_selected_submission_ids=list(request.left_selected_submission_ids),
             right_selected_submission_ids=list(request.right_selected_submission_ids),
             use_confidence=bool(request.use_confidence),
+            limit_edited_mean_deviation=bool(request.limit_edited_mean_deviation),
             feature_names=list(request.feature_names) if request.feature_names else None,
         )
         return ModelComparePreviewResponse(**preview)
@@ -677,6 +679,7 @@ async def update_feature_chart_settings(
             treat_as_categorical=request.treat_as_categorical,
             treat_as_numeric=request.treat_as_numeric,
             display_title=request.display_title,
+            x_axis_label=request.x_axis_label,
             categorical_value_labels=request.categorical_value_labels,
             numeric_tick_labels=request.numeric_tick_labels,
             value_labels=request.value_labels,

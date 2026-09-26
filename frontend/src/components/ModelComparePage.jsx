@@ -6,12 +6,128 @@ import { getShapeFunctionDisplayName } from "../utils/featureDisplay";
 
 const LEFT_COLORS = {
   base: "#2563eb",
-  effective: "#1d4ed8",
 };
 
 const RIGHT_COLORS = {
   base: "#f59e0b",
   effective: "#d97706",
+};
+
+const FOUR_POINT_SCALE_TICKS = [
+  { value: 1, label: "Low" },
+  { value: 2, label: "Rather Low" },
+  { value: 3, label: "Rather High" },
+  { value: 4, label: "High" },
+];
+
+const BOOKS_AT_HOME_SCALE_TICKS = [
+  { value: 1, label: "0-10" },
+  { value: 2, label: "11-25" },
+  { value: 3, label: "26-100" },
+  { value: 4, label: "101-200" },
+  { value: 5, label: "200-500" },
+  { value: 6, label: "more than 500" },
+];
+
+const usesOrdinalScale = (featurePreview, start, end) => {
+  const xValues = [
+    ...(featurePreview?.left_x_values || []),
+    ...(featurePreview?.right_x_values || []),
+  ].map(Number);
+  if (!xValues.length || xValues.some((value) => !Number.isFinite(value))) {
+    return false;
+  }
+
+  const min = Math.min(...xValues);
+  const max = Math.max(...xValues);
+  return Math.abs(min - start) < 1e-9 && Math.abs(max - end) < 1e-9;
+};
+
+const getOrdinalScaleTickValues = (featurePreview, isCategorical, ticks) => {
+  if (!isCategorical) {
+    return ticks.map((tick) => tick.value);
+  }
+
+  const categoricalValues = [
+    ...(featurePreview?.left_x_values || []),
+    ...(featurePreview?.right_x_values || []),
+  ];
+  return ticks.map(
+    (tick) =>
+      categoricalValues.find((value) => Number(value) === tick.value) ??
+      String(tick.value),
+  );
+};
+
+const isBooksAtHomeFeature = (featurePreview) => {
+  const featureIdentity = [
+    featurePreview?.feature_name,
+    featurePreview?.left_chart_config?.display_title,
+    featurePreview?.right_chart_config?.display_title,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  return (
+    featureIdentity.includes("kbuecher") ||
+    featureIdentity.includes("bucher zu hause") ||
+    featureIdentity.includes("books at home")
+  );
+};
+
+// Deliberately excludes blue so individual edits cannot be confused with the
+// original artifact's dashed blue base trace.
+const INDIVIDUAL_EDIT_COLORS = [
+  "#16a34a",
+  "#67e8f9",
+  "#dc2626",
+  "#fdba74",
+  "#c4b5fd",
+  "#bef264",
+  "#5eead4",
+  "#f9a8d4",
+  "#fde047",
+  "#a5b4fc",
+  "#f0abfc",
+  "#fda4af",
+  "#fcd34d",
+];
+
+// Fixed expert labels keep their colors when the selected traces change.
+const EXPERT_EDIT_COLORS = {
+  E1: "#17eb65",
+  E2: "#abf5ff",
+  E3: "#ff3d3d",
+  E4: "#fdeb74",
+  E5: "#c4b5fd",
+  E6: "#bef264",
+  E7: "#f472b6",
+};
+
+const getIndividualEditColor = (userName) => {
+  const label = String(userName || "").trim().toUpperCase();
+  const expertMatch = label.match(/^[EP](\d+)$/);
+  const expertId = expertMatch ? `E${expertMatch[1]}` : null;
+  if (expertId && EXPERT_EDIT_COLORS[expertId]) {
+    return EXPERT_EDIT_COLORS[expertId];
+  }
+
+  const hash = Array.from(label).reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  return INDIVIDUAL_EDIT_COLORS[hash % INDIVIDUAL_EDIT_COLORS.length];
+};
+
+const formatChartExpertLabel = (userName) => {
+  const label = String(userName || "").trim();
+  const expertMatch = label.match(/^[EP](\d+)$/i);
+  return expertMatch
+    ? `Expert${expertMatch[1]} (E${expertMatch[1]})`
+    : label;
 };
 
 const buildSelectionMap = (artifact) =>
@@ -25,6 +141,24 @@ const getSelectedSubmissionIds = (selectionMap = {}) =>
   Object.entries(selectionMap)
     .filter(([, selected]) => Boolean(selected))
     .map(([submissionId]) => submissionId);
+
+const TRANSCRIPT_PARTICIPANT_NAMES = {
+  P1: "Anica",
+  P2: "Laura",
+  P3: "Lilly",
+  P4: "Fuchsi",
+  P5: "Sarah",
+  P6: "Anni",
+  P7: "Stephanie Hagen",
+};
+
+const formatTranscriptParticipantName = (userName, t) => {
+  const name = String(userName || "").trim();
+  if (!name) return t("common.unknown");
+
+  const transcriptName = TRANSCRIPT_PARTICIPANT_NAMES[name.toUpperCase()];
+  return transcriptName ? `${name} – ${transcriptName}` : name;
+};
 
 const countSelected = (selectionMap = {}) =>
   Object.values(selectionMap).filter(Boolean).length;
@@ -41,7 +175,7 @@ const countSelectedForFeature = (artifact, featureName, selectionMap = {}) =>
 
 const formatSubmissionMeta = (submission, t) => {
   const parts = [
-    submission?.user_name || t("common.unknown"),
+    formatTranscriptParticipantName(submission?.user_name, t),
     `${t("modelCompare.confidence")}: ${submission?.sureness ?? 0}/10`,
     `${submission?.point_count ?? 0} ${t("modelCompare.points")}`,
   ];
@@ -67,6 +201,19 @@ const formatSignedMetricValue = (value, language) => {
   if (!Number.isFinite(value)) return "-";
   const prefix = value > 0 ? "+" : "";
   return prefix + formatMetricValue(value, language);
+};
+
+const formatRelativePercentageChange = (value, language) => {
+  if (!Number.isFinite(value)) return "-";
+  const prefix = value > 0 ? "+" : "";
+  return (
+    prefix +
+    new Intl.NumberFormat(getNumberLocale(language), {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(value) +
+    "%"
+  );
 };
 
 const getMetricTone = (status) => {
@@ -113,9 +260,28 @@ const buildFeatureTitle = (featurePreview) => {
   return getShapeFunctionDisplayName(shapeLike);
 };
 
-const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
+const CompareFeatureChart = ({
+  featurePreview,
+  showBaseTraces,
+  showIndividualEditTraces,
+  showConfidenceInLegend,
+  legendOnRight,
+  showLineMarkers,
+  t,
+}) => {
   const featureTitle = buildFeatureTitle(featurePreview);
   const isCategorical = featurePreview?.feature_type === "categorical";
+  const participantEditCounts = new Map();
+  [
+    ...(featurePreview.left_individual_edit_traces || []),
+    ...(featurePreview.right_individual_edit_traces || []),
+  ].forEach((editTrace) => {
+    const participantKey = editTrace.user_name || editTrace.submission_id;
+    participantEditCounts.set(
+      participantKey,
+      (participantEditCounts.get(participantKey) || 0) + 1,
+    );
+  });
 
   const baseTraces = isCategorical
     ? [
@@ -124,7 +290,7 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
           y: featurePreview.left_base_y_values,
           type: "bar",
           name: t("modelCompare.leftBase"),
-          marker: { color: LEFT_COLORS.base, opacity: 0.35 },
+          marker: { color: LEFT_COLORS.base },
           customdata:
             featurePreview.left_x_tick_labels || featurePreview.left_x_values,
           hovertemplate:
@@ -137,7 +303,7 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
           y: featurePreview.right_base_y_values,
           type: "bar",
           name: t("modelCompare.rightBase"),
-          marker: { color: RIGHT_COLORS.base, opacity: 0.35 },
+          marker: { color: RIGHT_COLORS.base },
           customdata:
             featurePreview.right_x_tick_labels || featurePreview.right_x_values,
           hovertemplate:
@@ -165,51 +331,93 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
         },
       ];
 
-  const effectiveTraces = isCategorical
-    ? [
-        {
-          x: featurePreview.left_x_values,
-          y: featurePreview.left_effective_y_values,
+  const buildIndividualEditTraces = (side) => {
+    const isLeft = side === "left";
+    const xValues = isLeft
+      ? featurePreview.left_x_values
+      : featurePreview.right_x_values;
+    const xTickLabels = isLeft
+      ? featurePreview.left_x_tick_labels
+      : featurePreview.right_x_tick_labels;
+    const editTraces = isLeft
+      ? featurePreview.left_individual_edit_traces || []
+      : featurePreview.right_individual_edit_traces || [];
+
+    return editTraces.map((editTrace) => {
+      const participantKey = editTrace.user_name || editTrace.submission_id;
+      const participantLabel = formatChartExpertLabel(participantKey);
+      const color = getIndividualEditColor(participantKey);
+      const confidence = Number(editTrace.sureness) || 0;
+      const showSubmissionId = participantEditCounts.get(participantKey) > 1;
+      const name = `${participantLabel}${
+        showConfidenceInLegend
+          ? ` — ${t("modelCompare.confidence")}: ${confidence}/10`
+          : ""
+      }${
+        showSubmissionId ? ` (${editTrace.submission_id})` : ""
+      }`;
+      if (isCategorical) {
+        return {
+          x: xValues,
+          y: editTrace.y_values,
           type: "bar",
-          name: t("modelCompare.leftEffective"),
-          marker: { color: LEFT_COLORS.effective, opacity: 0.95 },
-          customdata:
-            featurePreview.left_x_tick_labels || featurePreview.left_x_values,
+          name,
+          meta: { sureness: confidence },
+          marker: { color, opacity: 0.75 },
+          customdata: xTickLabels || xValues,
           hovertemplate:
-            "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
-            t("modelCompare.leftEffective") +
-            "</extra>",
-        },
+            "<b>%{customdata}</b><br>%{y:.3f}<extra>" + name + "</extra>",
+        };
+      }
+      return {
+        x: xValues,
+        y: editTrace.y_values,
+        type: "scatter",
+        mode: showLineMarkers ? "lines+markers" : "lines",
+        name,
+        meta: { sureness: confidence },
+        marker: { color, size: 5 },
+        line: { color, width: 3 },
+        opacity: 0.95,
+      };
+    });
+  };
+
+  const individualEditTraces = [
+    ...buildIndividualEditTraces("left"),
+    ...buildIndividualEditTraces("right"),
+  ];
+  if (showConfidenceInLegend) {
+    individualEditTraces.sort(
+      (left, right) => right.meta.sureness - left.meta.sureness,
+    );
+  }
+
+  const effectiveTraces = showIndividualEditTraces
+    ? individualEditTraces
+    : isCategorical
+    ? [
         {
           x: featurePreview.right_x_values,
           y: featurePreview.right_effective_y_values,
           type: "bar",
-          name: t("modelCompare.rightEffective"),
+          name: t("modelCompare.aggregatedParticipantEdits"),
           marker: { color: RIGHT_COLORS.effective, opacity: 0.95 },
           customdata:
             featurePreview.right_x_tick_labels || featurePreview.right_x_values,
           hovertemplate:
             "<b>%{customdata}</b><br>%{y:.3f}<extra>" +
-            t("modelCompare.rightEffective") +
+            t("modelCompare.aggregatedParticipantEdits") +
             "</extra>",
         },
       ]
     : [
         {
-          x: featurePreview.left_x_values,
-          y: featurePreview.left_effective_y_values,
-          type: "scatter",
-          mode: "lines+markers",
-          name: t("modelCompare.leftEffective"),
-          marker: { color: LEFT_COLORS.effective, size: 5 },
-          line: { color: LEFT_COLORS.effective, width: 3 },
-        },
-        {
           x: featurePreview.right_x_values,
           y: featurePreview.right_effective_y_values,
           type: "scatter",
-          mode: "lines+markers",
-          name: t("modelCompare.rightEffective"),
+          mode: showLineMarkers ? "lines+markers" : "lines",
+          name: t("modelCompare.aggregatedParticipantEdits"),
           marker: { color: RIGHT_COLORS.effective, size: 5 },
           line: { color: RIGHT_COLORS.effective, width: 3 },
         },
@@ -218,8 +426,28 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
   const data = showBaseTraces
     ? [...baseTraces, ...effectiveTraces]
     : effectiveTraces;
+  const booksAtHome = isBooksAtHomeFeature(featurePreview);
+  const scaleTicks = booksAtHome
+    ? BOOKS_AT_HOME_SCALE_TICKS
+    : usesOrdinalScale(featurePreview, 1, 4)
+      ? FOUR_POINT_SCALE_TICKS
+      : null;
+  const hasFixedOrdinalScale =
+    scaleTicks &&
+    (booksAtHome ||
+      usesOrdinalScale(
+        featurePreview,
+        scaleTicks[0].value,
+        scaleTicks[scaleTicks.length - 1].value,
+      ));
+  const ordinalScaleTickValues = getOrdinalScaleTickValues(
+    featurePreview,
+    isCategorical,
+    scaleTicks || [],
+  );
 
   const layout = {
+    autosize: true,
     title: {
       text: featureTitle,
       font: { size: 16, color: "#0f172a" },
@@ -229,6 +457,21 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
       title: featureTitle,
       gridcolor: "#e2e8f0",
       tickfont: { size: 10 },
+      ...(hasFixedOrdinalScale
+        ? {
+            ...(!isCategorical
+              ? {
+                  range: [
+                    scaleTicks[0].value,
+                    scaleTicks[scaleTicks.length - 1].value,
+                  ],
+                }
+              : {}),
+            tickmode: "array",
+            tickvals: ordinalScaleTickValues,
+            ticktext: scaleTicks.map((tick) => tick.label),
+          }
+        : {}),
     },
     yaxis: {
       title: t("shapeFunctions.effectOnPrediction"),
@@ -237,23 +480,36 @@ const CompareFeatureChart = ({ featurePreview, showBaseTraces, t }) => {
       zerolinecolor: "#94a3b8",
     },
     height: 360,
-    margin: { l: 55, r: 24, t: 80, b: 55 },
+    margin: legendOnRight
+      ? { l: 55, r: 220, t: 80, b: 55 }
+      : { l: 55, r: 24, t: 80, b: 55 },
     paper_bgcolor: "white",
     plot_bgcolor: "white",
-    legend: {
-      orientation: "h",
-      x: 0,
-      y: 1.15,
-      bgcolor: "rgba(255,255,255,0.9)",
-    },
+    legend: legendOnRight
+      ? {
+          orientation: "v",
+          x: 1.02,
+          xanchor: "left",
+          y: 1,
+          yanchor: "top",
+          bgcolor: "rgba(255,255,255,0.9)",
+        }
+      : {
+          orientation: "h",
+          x: 0,
+          y: 1.15,
+          bgcolor: "rgba(255,255,255,0.9)",
+        },
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="w-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:w-3/5">
       <Plot
         data={data}
         layout={layout}
         config={{ responsive: true, displayModeBar: false }}
+        useResizeHandler
+        style={{ width: "100%" }}
         className="w-full"
       />
     </div>
@@ -264,6 +520,7 @@ const FeatureMetricBadge = ({
   label,
   metricLabel,
   value,
+  baselineValue,
   status,
   higherIsBetter = false,
   language,
@@ -277,6 +534,13 @@ const FeatureMetricBadge = ({
       : toneStatus === "worsened"
         ? t("modelCompare.metricWorsened")
         : t("modelCompare.metricUnchanged");
+  const hasBaselineComparison =
+    Number.isFinite(value) && Number.isFinite(baselineValue);
+  const metricDelta = hasBaselineComparison ? value - baselineValue : null;
+  const relativeMetricChange =
+    hasBaselineComparison && Math.abs(baselineValue) > 1e-12
+      ? (metricDelta / Math.abs(baselineValue)) * 100
+      : null;
 
   return (
     <div className={`rounded-2xl border px-3 py-2 ${tone.container}`}>
@@ -288,7 +552,66 @@ const FeatureMetricBadge = ({
       <div className={`mt-1 text-base font-semibold ${tone.value}`}>
         {metricLabel}: {formatMetricValue(value, language)}
       </div>
+      {hasBaselineComparison && (
+        <div className="mt-1 text-xs text-slate-600">
+          <div>
+            {t("modelCompare.reducedVsFullData")}: {" "}
+            {formatMetricValue(baselineValue, language)}
+          </div>
+          <div>
+            {t("modelCompare.deltaFromBaseline")}: {" "}
+            {formatSignedMetricValue(metricDelta, language)}
+          </div>
+          <div>
+            {t("modelCompare.relativeChange")}: {" "}
+            {formatRelativePercentageChange(relativeMetricChange, language)}
+          </div>
+        </div>
+      )}
       {status && <div className={`text-xs ${tone.status}`}>{statusLabel}</div>}
+    </div>
+  );
+};
+
+const IndividualParticipantMaeList = ({ featurePreview, language, t }) => {
+  const participantTraces = [
+    ...(featurePreview.left_individual_edit_traces || []).map((trace) => ({
+      trace,
+      artifactLabel: t("modelCompare.leftArtifact"),
+    })),
+    ...(featurePreview.right_individual_edit_traces || []).map((trace) => ({
+      trace,
+      artifactLabel: t("modelCompare.rightArtifact"),
+    })),
+  ];
+
+  if (!participantTraces.length) return null;
+
+  return (
+    <div className="rounded-2xl border border-indigo-200 bg-indigo-50/60 p-3">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-800">
+        {t("modelCompare.individualMaeErrors")}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {participantTraces.map(({ trace, artifactLabel }) => (
+          <div
+            key={`${artifactLabel}-${trace.submission_id}`}
+            className="rounded-xl border border-indigo-100 bg-white px-3 py-2 text-sm text-slate-800"
+          >
+            <span className="font-medium">
+              {formatChartExpertLabel(trace.user_name)}
+            </span>{" "}
+            <span className="text-slate-500">({artifactLabel})</span>
+            <span className="mx-1 text-slate-300">·</span>
+            <span className="font-semibold">
+              {t("combined.mae")}: {formatMetricValue(
+                trace.original_base_mae,
+                language,
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -454,7 +777,7 @@ const FeatureSelectionModal = ({
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="font-medium text-slate-900">
-                      {submission.user_name}
+                      {formatTranscriptParticipantName(submission.user_name, t)}
                     </span>
                     {submission.profession && (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
@@ -509,8 +832,15 @@ function ModelComparePage({ onBack, language = "en" }) {
   const [preview, setPreview] = useState(null);
   const [selectionState, setSelectionState] = useState({ left: {}, right: {} });
   const [useConfidence, setUseConfidence] = useState(true);
+  const [limitEditedMeanDeviation, setLimitEditedMeanDeviation] = useState(false);
   const [averageScoreMethod, setAverageScoreMethod] = useState("uniform");
   const [showBaseTraces, setShowBaseTraces] = useState(true);
+  const [showIndividualEditTraces, setShowIndividualEditTraces] = useState(false);
+  const [showIndividualParticipantMae, setShowIndividualParticipantMae] =
+    useState(false);
+  const [showConfidenceInLegend, setShowConfidenceInLegend] = useState(false);
+  const [legendOnRight, setLegendOnRight] = useState(false);
+  const [showLineMarkers, setShowLineMarkers] = useState(true);
   const [featureSearch, setFeatureSearch] = useState("");
   const [jumpFeature, setJumpFeature] = useState("");
   const [loading, setLoading] = useState(false);
@@ -523,14 +853,24 @@ function ModelComparePage({ onBack, language = "en" }) {
     setPreview(null);
     setSelectionState({ left: {}, right: {} });
     setUseConfidence(true);
+    setLimitEditedMeanDeviation(false);
     setAverageScoreMethod("uniform");
     setShowBaseTraces(true);
+    setShowIndividualEditTraces(false);
+    setShowIndividualParticipantMae(false);
+    setShowConfidenceInLegend(false);
+    setLegendOnRight(false);
+    setShowLineMarkers(true);
     setJumpFeature("");
     setSelectionModal(null);
     setError(null);
   };
 
-  const requestPreview = async (nextSelectionState, nextUseConfidence) => {
+  const requestPreview = async (
+    nextSelectionState,
+    nextUseConfidence,
+    nextLimitEditedMeanDeviation = limitEditedMeanDeviation,
+  ) => {
     if (!comparePayload) return;
     setPreviewLoading(true);
     setError(null);
@@ -545,6 +885,7 @@ function ModelComparePage({ onBack, language = "en" }) {
           nextSelectionState.right,
         ),
         use_confidence: nextUseConfidence,
+        limit_edited_mean_deviation: nextLimitEditedMeanDeviation,
         feature_names: comparePayload.shared_features,
       });
       setPreview(result);
@@ -579,6 +920,9 @@ function ModelComparePage({ onBack, language = "en" }) {
       setSelectionState(nextSelectionState);
       setPreview(result.preview);
       setUseConfidence(Boolean(result.preview?.use_confidence));
+      setLimitEditedMeanDeviation(
+        Boolean(result.preview?.mean_deviation_constraint?.enabled),
+      );
       const firstFeature = result.shared_features?.[0] || "";
       setJumpFeature(firstFeature);
     } catch (err) {
@@ -617,6 +961,11 @@ function ModelComparePage({ onBack, language = "en" }) {
   const handleConfidenceToggle = async (checked) => {
     setUseConfidence(checked);
     await requestPreview(selectionState, checked);
+  };
+
+  const handleMeanDeviationLimitToggle = async (checked) => {
+    setLimitEditedMeanDeviation(checked);
+    await requestPreview(selectionState, useConfidence, checked);
   };
 
   const visiblePreviews = useMemo(() => {
@@ -842,6 +1191,37 @@ function ModelComparePage({ onBack, language = "en" }) {
                   {t("modelCompare.dataWeightedAverage")}
                 </button>
               </div>
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-indigo-200 bg-white px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={limitEditedMeanDeviation}
+                  onChange={(event) =>
+                    handleMeanDeviationLimitToggle(event.target.checked)
+                  }
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-sm font-medium text-slate-900">
+                    {t("modelCompare.limitEditedMeanDeviation")}
+                  </span>
+                  <span className="block text-xs text-slate-600">
+                    {t("modelCompare.limitEditedMeanDeviationDescription")}
+                  </span>
+                </span>
+              </label>
+              {preview?.mean_deviation_constraint?.enabled && (
+                <p className="mt-2 text-xs text-slate-600">
+                  {preview.mean_deviation_constraint.applied
+                    ? t("modelCompare.meanDeviationScaled", {
+                        percent: Math.round(
+                          preview.mean_deviation_constraint.scale_factor * 100,
+                        ),
+                      })
+                    : preview.mean_deviation_constraint.satisfied
+                      ? t("modelCompare.meanDeviationWithinLimit")
+                      : t("modelCompare.meanDeviationCannotMeetLimit")}
+                </p>
+              )}
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border border-blue-200 bg-white px-4 py-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">
@@ -931,17 +1311,17 @@ function ModelComparePage({ onBack, language = "en" }) {
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
-                    {t("modelCompare.chartControls")}
-                  </h2>
-                  <p className="text-sm text-slate-600">
-                    {t("modelCompare.chartControlsDescription")}
-                  </p>
-                </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {t("modelCompare.chartControls")}
+                </h2>
+                <p className="text-sm text-slate-600">
+                  {t("modelCompare.chartControlsDescription")}
+                </p>
+              </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="mt-4 flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                   <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                     <input
                       type="checkbox"
@@ -956,9 +1336,6 @@ function ModelComparePage({ onBack, language = "en" }) {
                         {useConfidence
                           ? t("modelCompare.confidenceOn")
                           : t("modelCompare.confidenceOff")}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {t("modelCompare.confidenceDescription")}
                       </div>
                     </div>
                   </label>
@@ -977,42 +1354,127 @@ function ModelComparePage({ onBack, language = "en" }) {
                         ? t("modelCompare.hideBaseTraces")
                         : t("modelCompare.showBaseTraces")}
                     </div>
-                    <div className="text-xs text-slate-500">
-                      {t("modelCompare.baseTracesDescription")}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLineMarkers((current) => !current)}
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                      showLineMarkers
+                        ? "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">
+                      {showLineMarkers
+                        ? t("modelCompare.hideLineDots")
+                        : t("modelCompare.showLineDots")}
                     </div>
                   </button>
 
-                  <input
-                    type="search"
-                    value={featureSearch}
-                    onChange={(event) => setFeatureSearch(event.target.value)}
-                    placeholder={t("modelCompare.searchFeatures")}
-                    className="rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowIndividualEditTraces((current) => !current)
+                    }
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                      showIndividualEditTraces
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">
+                      {showIndividualEditTraces
+                        ? t("modelCompare.showAggregatedEdits")
+                        : t("modelCompare.showIndividualEdits")}
+                    </div>
+                  </button>
 
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={jumpFeature}
-                      onChange={(event) => setJumpFeature(event.target.value)}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowIndividualParticipantMae((current) => !current)
+                    }
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                      showIndividualParticipantMae
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">
+                      {showIndividualParticipantMae
+                        ? t("modelCompare.hideIndividualMae")
+                        : t("modelCompare.showIndividualMae")}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfidenceInLegend((current) => !current)
+                    }
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                      showConfidenceInLegend
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">
+                      {showConfidenceInLegend
+                        ? t("modelCompare.hideConfidenceInLegend")
+                        : t("modelCompare.showConfidenceInLegend")}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLegendOnRight((current) => !current)}
+                    className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                      legendOnRight
+                        ? "border-indigo-200 bg-indigo-50 text-indigo-900 hover:bg-indigo-100"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-sm font-medium">
+                      {legendOnRight
+                        ? t("modelCompare.legendAboveChart")
+                        : t("modelCompare.legendRightOfChart")}
+                    </div>
+                  </button>
+                  </div>
+
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <input
+                      type="search"
+                      value={featureSearch}
+                      onChange={(event) => setFeatureSearch(event.target.value)}
+                      placeholder={t("modelCompare.searchFeatures")}
                       className="rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                    >
-                      {(comparePayload.shared_features || []).map(
-                        (featureName) => (
-                          <option key={featureName} value={featureName}>
-                            {featureName}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                    <button
-                      onClick={handleJumpToFeature}
-                      className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-                    >
-                      {t("modelCompare.jumpToFeature")}
-                    </button>
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={jumpFeature}
+                        onChange={(event) => setJumpFeature(event.target.value)}
+                        className="rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-800 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      >
+                        {(comparePayload.shared_features || []).map(
+                          (featureName) => (
+                            <option key={featureName} value={featureName}>
+                              {featureName}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                      <button
+                        onClick={handleJumpToFeature}
+                        className="rounded-xl border border-slate-300 px-4 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        {t("modelCompare.jumpToFeature")}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
             </section>
 
             <section className="space-y-4">
@@ -1063,6 +1525,14 @@ function ModelComparePage({ onBack, language = "en" }) {
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_mae
                             }
+                            baselineValue={
+                              featurePreview?.comparison_metrics
+                                ?.baseline_edited_vs_original_base_mae
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_status
+                            }
                             language={language}
                             t={t}
                           />
@@ -1072,6 +1542,14 @@ function ModelComparePage({ onBack, language = "en" }) {
                             value={
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_rmse
+                            }
+                            baselineValue={
+                              featurePreview?.comparison_metrics
+                                ?.baseline_edited_vs_original_base_rmse
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_rmse_status
                             }
                             language={language}
                             t={t}
@@ -1083,11 +1561,26 @@ function ModelComparePage({ onBack, language = "en" }) {
                               featurePreview?.comparison_metrics
                                 ?.edited_vs_original_base_r2
                             }
+                            baselineValue={
+                              featurePreview?.comparison_metrics
+                                ?.baseline_edited_vs_original_base_r2
+                            }
+                            status={
+                              featurePreview?.comparison_metrics
+                                ?.edited_vs_original_base_r2_status
+                            }
                             higherIsBetter
                             language={language}
                             t={t}
                           />
                         </div>
+                        {showIndividualParticipantMae && (
+                          <IndividualParticipantMaeList
+                            featurePreview={featurePreview}
+                            language={language}
+                            t={t}
+                          />
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                         <button
@@ -1145,6 +1638,10 @@ function ModelComparePage({ onBack, language = "en" }) {
                     <CompareFeatureChart
                       featurePreview={featurePreview}
                       showBaseTraces={showBaseTraces}
+                      showIndividualEditTraces={showIndividualEditTraces}
+                      showConfidenceInLegend={showConfidenceInLegend}
+                      legendOnRight={legendOnRight}
+                      showLineMarkers={showLineMarkers}
                       t={t}
                     />
                   </div>
