@@ -505,6 +505,10 @@ class ModelComparePreviewRequest(BaseModel):
     use_confidence: bool = True
     limit_edited_mean_deviation: bool = False
     feature_names: Optional[List[str]] = None
+    overall_mae_feature_names: Optional[List[str]] = None
+    mean_deviation_feature_names: Optional[List[str]] = None
+    mean_deviation_scaled_feature_names: Optional[List[str]] = None
+    manual_feature_shifts: Optional[Dict[str, float]] = None
 
 
 class ModelCompareAveragePredictionScores(BaseModel):
@@ -512,6 +516,21 @@ class ModelCompareAveragePredictionScores(BaseModel):
     original: float
     edited: float
     difference: float
+
+
+class ModelCompareOverallShapeFunctionMaeMeasure(BaseModel):
+    """One aggregate full-data shape-function MAE comparison."""
+    baseline: float
+    edited: float
+    status: str
+
+
+class ModelCompareOverallShapeFunctionMae(BaseModel):
+    """Pooled and equal-feature summaries of shape-function MAE."""
+    feature_count: int
+    point_count: int
+    pooled: ModelCompareOverallShapeFunctionMaeMeasure
+    mean_per_feature: ModelCompareOverallShapeFunctionMaeMeasure
 
 
 class ModelCompareAverageFeatureContribution(BaseModel):
@@ -533,12 +552,14 @@ class ModelCompareMeanDeviationConstraint(BaseModel):
     unconstrained_edited_average: float
     constrained_edited_average: float
     satisfied: bool
+    feature_scale_factors: Dict[str, float] = Field(default_factory=dict)
 
 
 class ModelComparePreviewResponse(BaseModel):
     """Response with recalculated preview traces for compared features."""
     use_confidence: bool = True
     feature_previews: List[ModelCompareFeaturePreview] = Field(default_factory=list)
+    overall_shape_function_mae: ModelCompareOverallShapeFunctionMae
     average_prediction_scores: ModelCompareAveragePredictionScores
     data_weighted_average_prediction_scores: Optional[ModelCompareAveragePredictionScores] = None
     average_prediction_feature_contributions: Dict[

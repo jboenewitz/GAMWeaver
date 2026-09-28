@@ -621,6 +621,8 @@ const translations = {
       "When off, selected submissions are averaged equally instead of using their saved confidence.",
     "modelCompare.showBaseTraces": "Show base lines and bars",
     "modelCompare.hideBaseTraces": "Hide base lines and bars",
+    "modelCompare.centerCharts": "Center curves",
+    "modelCompare.restoreChartPositions": "Restore curve positions",
     "modelCompare.showLineDots": "Show dots on lines",
     "modelCompare.hideLineDots": "Hide dots on lines",
     "modelCompare.baseTracesDescription":
@@ -643,34 +645,73 @@ const translations = {
     "modelCompare.featureCharts": "Feature charts",
     "modelCompare.featureChartsDescription":
       "Dashed traces show each artifact's base shape. Solid traces show either the combined preview or each selected edit.",
-    "modelCompare.averagePredictedScore": "Average predicted score",
+    "modelCompare.overallShapeFunctionMae": "Overall shape-function MAE",
+    "modelCompare.overallShapeFunctionMaeDescription":
+      "Compares the reduced-data baseline and selected edits with the full-data shape functions. Lower is closer.",
+    "modelCompare.overallShapeFunctionMaeCoverage":
+      "{features} shape functions · {points} reference points",
+    "modelCompare.pooledShapeFunctionMae": "Pooled curve points",
+    "modelCompare.meanPerFeatureMae": "Equal-feature mean",
+    "modelCompare.overallMaeFeatureSelection":
+      "Choose shape functions ({selected} of {total} selected)",
+    "modelCompare.overallMaeFeatureSelectionDescription":
+      "Only checked shape functions are included in the overall MAE cards above. At least one must remain selected.",
+    "modelCompare.featureMaeDelta": "MAE Δ: {delta}",
+    "modelCompare.averagePredictedScore":
+      "Average prediction comparison",
     "modelCompare.averagePredictedScoreDescription":
-      "Estimated uniformly across the feature values shown below; selected edits and confidence weighting are included.",
-    "modelCompare.uniformAverage": "Uniform curve grid",
-    "modelCompare.dataWeightedAverage": "Data-weighted",
+      "Compares the full-data original artifact with the edited artifact on the same full-data reference values; selected edits and confidence weighting are included.",
+    "modelCompare.uniformAverage": "Full-data curve grid",
+    "modelCompare.dataWeightedAverage": "Full-data distribution",
     "modelCompare.uniformAverageDescription":
-      "Each displayed curve position has equal weight; useful for seeing overall shape movement.",
+      "Each displayed full-data curve position has equal weight for both artifact predictions.",
     "modelCompare.dataWeightedAverageDescription":
-      "Each curve is weighted by its exported feature distribution; selected edits and confidence weighting are included.",
+      "Both artifact predictions are weighted by the full-data artifact's exported feature distribution.",
     "modelCompare.dataWeightedUnavailable":
-      "Data-weighted averages require artifacts exported with feature distribution metadata.",
+      "Data-weighted comparison requires the full-data artifact to include feature distribution metadata.",
     "modelCompare.limitEditedMeanDeviation":
       "Limit edited mean shift to 10%",
     "modelCompare.limitEditedMeanDeviationDescription":
       "Scales every selected edit on the edited artifact by one shared factor; saved edits are unchanged.",
+    "modelCompare.editScaleFactor": "×{factor}",
     "modelCompare.meanDeviationScaled":
       "Selected edited offsets are shown at {percent}% of their submitted magnitude to meet the limit.",
     "modelCompare.meanDeviationWithinLimit":
       "The selected edits are already within the 10% limit.",
     "modelCompare.meanDeviationCannotMeetLimit":
       "The unedited right-hand model already differs by more than 10%, so scaling edits alone cannot meet the limit.",
-    "modelCompare.originalAveragePredictedScore": "Original artifact",
-    "modelCompare.editedAveragePredictedScore": "Edited artifact",
-    "modelCompare.averagePredictedScoreDifference": "Edited − original",
+    "modelCompare.originalAveragePredictedScore": "Full-data original artifact",
+    "modelCompare.editedAveragePredictedScore":
+      "Edited artifact on full-data reference",
+    "modelCompare.averagePredictedScoreDifference": "Edited − full-data original",
+    "modelCompare.averagePredictionRelativeChange": "Relative change: {change}",
     "modelCompare.showAverageContributions": "Show contribution breakdown",
     "modelCompare.averageContributionsDescription":
-      "These additive terms explain the displayed average and how the edits changed it.",
+      "These additive terms compare both artifacts on the full-data reference and explain the displayed difference.",
     "modelCompare.contributionFeature": "Feature",
+    "modelCompare.featureEditShift": "Edit shift",
+    "modelCompare.decreaseFeatureEditShift": "Decrease edited curve by 1",
+    "modelCompare.increaseFeatureEditShift": "Increase edited curve by 1",
+    "modelCompare.contributionFeatureSelection":
+      "Choose contributions ({selected} of {total} selected)",
+    "modelCompare.contributionFeatureSelectionDescription":
+      "Click a feature row to include or exclude it; the prediction-score cards above update to the same selection.",
+    "modelCompare.selectedContributionDifference": "Selected contribution change",
+    "modelCompare.featureMeanShiftLimit": "10% mean limit",
+    "modelCompare.meanShiftFeatureLimitDescription":
+      "Choose the edited features to scale. One optimal factor is calculated for that set; all other feature edits stay unchanged.",
+    "modelCompare.chooseMeanShiftFeatures": "Choose features",
+    "modelCompare.meanShiftFeatureModalTitle":
+      "Choose features for the 10% mean limit",
+    "modelCompare.meanShiftFeatureModalDescription":
+      "The selected features receive one optimal shared factor so the selected overall average moves into the 10% range.",
+    "modelCompare.meanShiftFeatureModalSelection":
+      "{selected} of {total} features selected",
+    "modelCompare.applyMeanShiftFeatureLimit": "Apply optimal factor",
+    "modelCompare.limitFeatureMeanShift": "Limit this feature",
+    "modelCompare.removeFeatureMeanShiftLimit": "Remove feature limit",
+    "modelCompare.selectedContributionAverageView":
+      "Cards show the base offset plus selected feature contributions.",
     "modelCompare.basePredictionOffset": "Base prediction offset",
     "modelCompare.recomputing": "Recomputing preview...",
     "modelCompare.noMatchingFeatures":
@@ -1371,6 +1412,8 @@ const translations = {
       "Wenn aus, werden ausgewählte Einreichungen gleich gewichtet statt mit ihrer gespeicherten Sicherheit.",
     "modelCompare.showBaseTraces": "Basislinien und Balken anzeigen",
     "modelCompare.hideBaseTraces": "Basislinien und Balken ausblenden",
+    "modelCompare.centerCharts": "Kurven zentrieren",
+    "modelCompare.restoreChartPositions": "Kurvenpositionen wiederherstellen",
     "modelCompare.showLineDots": "Punkte auf Linien anzeigen",
     "modelCompare.hideLineDots": "Punkte auf Linien ausblenden",
     "modelCompare.baseTracesDescription":
@@ -1393,34 +1436,78 @@ const translations = {
     "modelCompare.featureCharts": "Feature-Diagramme",
     "modelCompare.featureChartsDescription":
       "Gestrichelte Linien zeigen die Basisform jedes Artefakts. Durchgezogene Linien zeigen entweder die zusammengefasste Vorschau oder jede ausgewählte Bearbeitung.",
-    "modelCompare.averagePredictedScore": "Durchschnittlicher vorhergesagter Wert",
+    "modelCompare.overallShapeFunctionMae": "Gesamt-MAE der Formfunktionen",
+    "modelCompare.overallShapeFunctionMaeDescription":
+      "Vergleicht die Baseline mit reduzierten Daten und ausgewählte Bearbeitungen mit den Formfunktionen der vollständigen Daten. Niedriger bedeutet größere Nähe.",
+    "modelCompare.overallShapeFunctionMaeCoverage":
+      "{features} Formfunktionen · {points} Referenzpunkte",
+    "modelCompare.pooledShapeFunctionMae": "Zusammengefasste Kurvenpunkte",
+    "modelCompare.meanPerFeatureMae": "Gleichgewichteter Feature-Mittelwert",
+    "modelCompare.overallMaeFeatureSelection":
+      "Formfunktionen auswählen ({selected} von {total} ausgewählt)",
+    "modelCompare.overallMaeFeatureSelectionDescription":
+      "Nur angekreuzte Formfunktionen werden in den Gesamt-MAE-Karten oben berücksichtigt. Mindestens eine muss ausgewählt bleiben.",
+    "modelCompare.featureMaeDelta": "MAE-Δ: {delta}",
+    "modelCompare.averagePredictedScore":
+      "Vergleich durchschnittlicher Vorhersagen",
     "modelCompare.averagePredictedScoreDescription":
-      "Gleichmäßig über die unten dargestellten Feature-Werte geschätzt; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
-    "modelCompare.uniformAverage": "Gleichmäßiges Kurvenraster",
-    "modelCompare.dataWeightedAverage": "Datensatzgewichtet",
+      "Vergleicht das Original-Artefakt mit vollständigen Daten mit dem bearbeiteten Artefakt auf denselben Referenzwerten der vollständigen Daten; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
+    "modelCompare.uniformAverage": "Kurvenraster vollständiger Daten",
+    "modelCompare.dataWeightedAverage": "Verteilung vollständiger Daten",
     "modelCompare.uniformAverageDescription":
-      "Jede dargestellte Kurvenposition wird gleich gewichtet; nützlich, um die gesamte Kurvenverschiebung zu sehen.",
+      "Jede dargestellte Kurvenposition der vollständigen Daten erhält für beide Artefaktvorhersagen das gleiche Gewicht.",
     "modelCompare.dataWeightedAverageDescription":
-      "Jede Kurve wird mit ihrer exportierten Feature-Verteilung gewichtet; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
+      "Beide Artefaktvorhersagen werden mit der exportierten Feature-Verteilung des Artefakts mit vollständigen Daten gewichtet.",
     "modelCompare.dataWeightedUnavailable":
-      "Datensatzgewichtete Mittelwerte benötigen Artefakte, die mit Feature-Verteilungsdaten exportiert wurden.",
+      "Der datengewichtete Vergleich benötigt Feature-Verteilungsdaten im Artefakt mit vollständigen Daten.",
     "modelCompare.limitEditedMeanDeviation":
       "Änderung des bearbeiteten Mittelwerts auf 10 % begrenzen",
     "modelCompare.limitEditedMeanDeviationDescription":
       "Skaliert jede ausgewählte Bearbeitung im bearbeiteten Artefakt mit einem gemeinsamen Faktor; gespeicherte Bearbeitungen bleiben unverändert.",
+    "modelCompare.editScaleFactor": "×{factor}",
     "modelCompare.meanDeviationScaled":
       "Ausgewählte bearbeitete Offsets werden mit {percent} % ihrer eingereichten Stärke angezeigt, um die Begrenzung einzuhalten.",
     "modelCompare.meanDeviationWithinLimit":
       "Die ausgewählten Bearbeitungen liegen bereits innerhalb der 10-%-Begrenzung.",
     "modelCompare.meanDeviationCannotMeetLimit":
       "Das unbearbeitete rechte Modell weicht bereits um mehr als 10 % ab; allein durch Skalieren der Bearbeitungen kann die Begrenzung nicht erreicht werden.",
-    "modelCompare.originalAveragePredictedScore": "Original-Artefakt",
-    "modelCompare.editedAveragePredictedScore": "Bearbeitetes Artefakt",
-    "modelCompare.averagePredictedScoreDifference": "Bearbeitet − Original",
+    "modelCompare.originalAveragePredictedScore":
+      "Original-Artefakt mit vollständigen Daten",
+    "modelCompare.editedAveragePredictedScore":
+      "Bearbeitetes Artefakt auf Referenz vollständiger Daten",
+    "modelCompare.averagePredictedScoreDifference":
+      "Bearbeitet − Original mit vollständigen Daten",
+    "modelCompare.averagePredictionRelativeChange":
+      "Relative Veränderung: {change}",
     "modelCompare.showAverageContributions": "Beitragsaufschlüsselung anzeigen",
     "modelCompare.averageContributionsDescription":
-      "Diese additiven Terme erklären den angezeigten Mittelwert und wie die Bearbeitungen ihn verändert haben.",
+      "Diese additiven Terme vergleichen beide Artefakte auf der Referenz der vollständigen Daten und erklären die angezeigte Differenz.",
     "modelCompare.contributionFeature": "Feature",
+    "modelCompare.featureEditShift": "Bearbeitungsverschiebung",
+    "modelCompare.decreaseFeatureEditShift":
+      "Bearbeitete Kurve um 1 verringern",
+    "modelCompare.increaseFeatureEditShift":
+      "Bearbeitete Kurve um 1 erhöhen",
+    "modelCompare.contributionFeatureSelection":
+      "Beiträge auswählen ({selected} von {total} ausgewählt)",
+    "modelCompare.contributionFeatureSelectionDescription":
+      "Klicke auf eine Feature-Zeile, um sie ein- oder auszuschließen; die Vorhersagewert-Karten oben werden mit derselben Auswahl aktualisiert.",
+    "modelCompare.selectedContributionDifference": "Änderung der ausgewählten Beiträge",
+    "modelCompare.featureMeanShiftLimit": "10%-Mittelwertgrenze",
+    "modelCompare.meanShiftFeatureLimitDescription":
+      "Wähle die zu skalierenden bearbeiteten Features. Für diese Menge wird ein optimaler gemeinsamer Faktor berechnet; alle anderen Feature-Bearbeitungen bleiben unverändert.",
+    "modelCompare.chooseMeanShiftFeatures": "Features auswählen",
+    "modelCompare.meanShiftFeatureModalTitle":
+      "Features für die 10%-Mittelwertgrenze auswählen",
+    "modelCompare.meanShiftFeatureModalDescription":
+      "Die ausgewählten Features erhalten einen optimalen gemeinsamen Faktor, damit sich ihr ausgewählter Gesamtmittelwert in den 10%-Bereich bewegt.",
+    "modelCompare.meanShiftFeatureModalSelection":
+      "{selected} von {total} Features ausgewählt",
+    "modelCompare.applyMeanShiftFeatureLimit": "Optimalen Faktor anwenden",
+    "modelCompare.limitFeatureMeanShift": "Dieses Feature begrenzen",
+    "modelCompare.removeFeatureMeanShiftLimit": "Feature-Begrenzung entfernen",
+    "modelCompare.selectedContributionAverageView":
+      "Die Karten zeigen den Basisoffset plus ausgewählte Feature-Beiträge.",
     "modelCompare.basePredictionOffset": "Basis-Vorhersageoffset",
     "modelCompare.recomputing": "Vorschau wird neu berechnet...",
     "modelCompare.noMatchingFeatures":

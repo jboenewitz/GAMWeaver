@@ -475,6 +475,26 @@ async def preview_model_compare(
             use_confidence=bool(request.use_confidence),
             limit_edited_mean_deviation=bool(request.limit_edited_mean_deviation),
             feature_names=list(request.feature_names) if request.feature_names else None,
+            overall_mae_feature_names=(
+                list(request.overall_mae_feature_names)
+                if request.overall_mae_feature_names is not None
+                else None
+            ),
+            mean_deviation_feature_names=(
+                list(request.mean_deviation_feature_names)
+                if request.mean_deviation_feature_names is not None
+                else None
+            ),
+            mean_deviation_scaled_feature_names=(
+                list(request.mean_deviation_scaled_feature_names)
+                if request.mean_deviation_scaled_feature_names is not None
+                else None
+            ),
+            manual_feature_shifts=(
+                dict(request.manual_feature_shifts)
+                if request.manual_feature_shifts is not None
+                else None
+            ),
         )
         return ModelComparePreviewResponse(**preview)
     except HTTPException:

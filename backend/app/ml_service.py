@@ -3468,6 +3468,100 @@ class MLService:
 
         return contributions
 
+    @classmethod
+    def _compute_compare_feature_average_contributions_on_reference(
+        cls,
+        *,
+        reference_artifact: Dict[str, Any],
+        evaluated_artifact: Dict[str, Any],
+        evaluated_offsets: Dict[str, Dict[Any, float]],
+        feature_shifts: Optional[Dict[str, float]] = None,
+        method: str,
+    ) -> Optional[Dict[str, float]]:
+        """Evaluate both artifacts on the full-data artifact's feature support.
+
+        This supplies like-for-like feature contributions for the model
+        comparison's average-prediction section.  The reference artifact is
+        the full-data/original model; the evaluated artifact may be that model
+        itself or the edited model with selected edit offsets applied.
+        """
+        evaluated_shape_map = {
+            str(shape_function.get("feature_name", "")).strip(): shape_function
+            for shape_function in (evaluated_artifact.get("shape_functions") or [])
+        }
+        evaluated_categorical_features = {
+            str(feature_name)
+            for feature_name in (evaluated_artifact.get("cat_features") or [])
+        }
+        contributions: Dict[str, float] = {}
+
+        for reference_shape in reference_artifact.get("shape_functions") or []:
+            feature_name = str(reference_shape.get("feature_name", "")).strip()
+            evaluated_shape = evaluated_shape_map.get(feature_name)
+            if not feature_name or not evaluated_shape:
+                return None
+
+            if method == "uniform":
+                reference_x_values = list(reference_shape.get("x_values") or [])
+                reference_y_values = list(reference_shape.get("y_values") or [])
+                if (
+                    len(reference_x_values) != len(reference_y_values)
+                    or not reference_x_values
+                ):
+                    return None
+                weighted_values = [(value, 1) for value in reference_x_values]
+            elif method == "data_weighted":
+                distribution = reference_shape.get("distribution") or {}
+                if distribution.get("chart_type") == "categorical":
+                    weighted_values = [
+                        (item.get("x_value"), int(item.get("count", 0) or 0))
+                        for item in (distribution.get("counts") or [])
+                        if int(item.get("count", 0) or 0) > 0
+                    ]
+                elif distribution.get("chart_type") == "numeric":
+                    weighted_values = [
+                        (item.get("center"), int(item.get("count", 0) or 0))
+                        for item in (distribution.get("bins") or [])
+                        if int(item.get("count", 0) or 0) > 0
+                    ]
+                else:
+                    return None
+            else:
+                raise ValueError(f"Unknown average contribution method '{method}'")
+
+            total_weight = sum(weight for _, weight in weighted_values)
+            if total_weight <= 0:
+                return None
+
+            contribution = 0.0
+            for value, weight in weighted_values:
+                if evaluated_shape.get("feature_type") == "categorical":
+                    base_value = cls._predict_categorical_shape_value(
+                        evaluated_shape,
+                        value,
+                    )
+                else:
+                    base_value = cls._predict_numeric_shape_value(
+                        evaluated_shape,
+                        value,
+                    )
+                offset = cls._get_compare_offset_for_feature_value(
+                    shape_function=evaluated_shape,
+                    original_is_categorical=(
+                        feature_name in evaluated_categorical_features
+                    ),
+                    value=value,
+                    offsets=evaluated_offsets.get(feature_name, {}),
+                )
+                contribution += weight * (
+                    base_value
+                    + float(offset)
+                    + float((feature_shifts or {}).get(feature_name, 0.0))
+                )
+            contributions[feature_name] = contribution / total_weight
+
+        return contributions
+
     @staticmethod
     def _predict_numeric_shape_value(
         shape_function: Dict[str, Any],
@@ -3496,14 +3590,94 @@ class MLService:
     def _scale_compare_offsets(
         offsets: Dict[str, Dict[Any, float]],
         scale_factor: float,
+        *,
+        feature_names: Optional[set[str]] = None,
     ) -> Dict[str, Dict[Any, float]]:
-        """Scale every selected edit offset by the same preview-only factor."""
+        """Scale selected edit offsets by one preview-only factor."""
         return {
             feature_name: {
-                value: float(offset) * scale_factor
+                value: (
+                    float(offset) * scale_factor
+                    if feature_names is None or feature_name in feature_names
+                    else float(offset)
+                )
                 for value, offset in point_offsets.items()
             }
             for feature_name, point_offsets in offsets.items()
+        }
+
+    @staticmethod
+    def _scale_compare_feature_shifts(
+        feature_shifts: Dict[str, float],
+        scale_factor: float,
+        *,
+        feature_names: Optional[set[str]] = None,
+    ) -> Dict[str, float]:
+        """Scale preview-only whole-feature shifts for the selected features."""
+        return {
+            feature_name: (
+                float(shift) * scale_factor
+                if feature_names is None or feature_name in feature_names
+                else float(shift)
+            )
+            for feature_name, shift in feature_shifts.items()
+        }
+
+    @classmethod
+    def _build_overall_shape_function_mae(
+        cls,
+        per_feature_metrics: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Summarize full-data discrepancy across the compared shape functions.
+
+        ``pooled`` weights a feature by the number of full-data reference-grid
+        points used for its MAE. ``mean_per_feature`` gives every compared
+        shape function the same weight, regardless of its displayed grid size.
+        """
+        valid_metrics = [
+            metric
+            for metric in per_feature_metrics
+            if int(metric.get("point_count", 0) or 0) > 0
+            and np.isfinite(metric.get("baseline", np.nan))
+            and np.isfinite(metric.get("edited", np.nan))
+        ]
+        feature_count = len(valid_metrics)
+        point_count = sum(int(metric["point_count"]) for metric in valid_metrics)
+
+        def summary(baseline: float, edited: float) -> Dict[str, Any]:
+            return {
+                "baseline": baseline,
+                "edited": edited,
+                "status": cls._compare_mae_status(edited, baseline),
+            }
+
+        if not valid_metrics or point_count <= 0:
+            return {
+                "feature_count": 0,
+                "point_count": 0,
+                "pooled": summary(0.0, 0.0),
+                "mean_per_feature": summary(0.0, 0.0),
+            }
+
+        pooled_baseline = sum(
+            float(metric["baseline"]) * int(metric["point_count"])
+            for metric in valid_metrics
+        ) / point_count
+        pooled_edited = sum(
+            float(metric["edited"]) * int(metric["point_count"])
+            for metric in valid_metrics
+        ) / point_count
+        mean_baseline = sum(
+            float(metric["baseline"]) for metric in valid_metrics
+        ) / feature_count
+        mean_edited = sum(
+            float(metric["edited"]) for metric in valid_metrics
+        ) / feature_count
+        return {
+            "feature_count": feature_count,
+            "point_count": point_count,
+            "pooled": summary(pooled_baseline, pooled_edited),
+            "mean_per_feature": summary(mean_baseline, mean_edited),
         }
 
     def build_model_compare_preview(
@@ -3516,6 +3690,10 @@ class MLService:
         use_confidence: bool = True,
         limit_edited_mean_deviation: bool = False,
         feature_names: Optional[List[str]] = None,
+        overall_mae_feature_names: Optional[List[str]] = None,
+        mean_deviation_feature_names: Optional[List[str]] = None,
+        mean_deviation_scaled_feature_names: Optional[List[str]] = None,
+        manual_feature_shifts: Optional[Dict[str, float]] = None,
     ) -> Dict[str, Any]:
         shared_features = self._validate_model_compare_pair(
             left_artifact,
@@ -3531,6 +3709,44 @@ class MLService:
             active_features = requested or shared_features
         else:
             active_features = shared_features
+        overall_mae_feature_set = (
+            {str(feature_name).strip() for feature_name in overall_mae_feature_names}
+            if overall_mae_feature_names is not None
+            else set(active_features)
+        )
+        mean_deviation_feature_set = (
+            {
+                str(feature_name).strip()
+                for feature_name in mean_deviation_feature_names
+                if str(feature_name).strip() in active_features
+            }
+            if mean_deviation_feature_names is not None
+            else set(shared_features)
+        )
+        explicitly_scaled_mean_deviation_feature_set = (
+            {
+                str(feature_name).strip()
+                for feature_name in mean_deviation_scaled_feature_names
+                if str(feature_name).strip() in mean_deviation_feature_set
+            }
+            if mean_deviation_scaled_feature_names is not None
+            else set()
+        )
+        mean_deviation_scaled_feature_set = (
+            explicitly_scaled_mean_deviation_feature_set
+            or mean_deviation_feature_set
+        )
+        should_limit_edited_mean_deviation = bool(
+            limit_edited_mean_deviation
+            or explicitly_scaled_mean_deviation_feature_set
+        )
+        right_manual_feature_shifts = {
+            str(feature_name).strip(): float(shift)
+            for feature_name, shift in (manual_feature_shifts or {}).items()
+            if str(feature_name).strip() in active_features
+            and np.isfinite(float(shift))
+            and abs(float(shift)) > 1e-12
+        }
 
         left_shape_map = {
             str(shape_function.get("feature_name")): shape_function
@@ -3568,118 +3784,203 @@ class MLService:
             str(feature_name)
             for feature_name in (right_artifact.get("cat_features") or [])
         }
-        original_average_prediction_score = (
-            self._compute_compare_average_prediction_score(
-                left_artifact,
-                left_offsets,
+        def score_from_contributions(
+            artifact: Dict[str, Any],
+            contributions: Optional[Dict[str, float]],
+            included_features: Optional[set[str]] = None,
+        ) -> Optional[float]:
+            if contributions is None:
+                return None
+            return float(artifact.get("base_prediction_offset", 0.0) or 0.0) + sum(
+                value
+                for feature_name, value in contributions.items()
+                if included_features is None or feature_name in included_features
+            )
+
+        # The full-data artifact is the fixed reference for this section.
+        # Its base curve is intentionally used without any imported edits.
+        original_uniform_contributions = (
+            self._compute_compare_feature_average_contributions_on_reference(
+                reference_artifact=left_artifact,
+                evaluated_artifact=left_artifact,
+                evaluated_offsets={},
+                method="uniform",
             )
         )
-        unconstrained_edited_average_prediction_score = (
-            self._compute_compare_average_prediction_score(
-                right_artifact,
-                right_offsets,
+        unconstrained_edited_uniform_contributions = (
+            self._compute_compare_feature_average_contributions_on_reference(
+                reference_artifact=left_artifact,
+                evaluated_artifact=right_artifact,
+                evaluated_offsets=right_offsets,
+                feature_shifts=right_manual_feature_shifts,
+                method="uniform",
             )
         )
-        right_base_average_prediction_score = (
-            self._compute_compare_average_prediction_score(right_artifact, {})
+        right_base_uniform_contributions = (
+            self._compute_compare_feature_average_contributions_on_reference(
+                reference_artifact=left_artifact,
+                evaluated_artifact=right_artifact,
+                evaluated_offsets={},
+                method="uniform",
+            )
         )
-        mean_deviation_limit = 0.10 * abs(original_average_prediction_score)
-        scale_factor = 1.0
+        original_average_prediction_score = score_from_contributions(
+            left_artifact,
+            original_uniform_contributions,
+        )
+        mean_deviation_original_average = score_from_contributions(
+            left_artifact,
+            original_uniform_contributions,
+            mean_deviation_feature_set,
+        )
+        unconstrained_mean_deviation_edited_average = score_from_contributions(
+            right_artifact,
+            unconstrained_edited_uniform_contributions,
+            mean_deviation_feature_set,
+        )
+        right_base_mean_deviation_average = score_from_contributions(
+            right_artifact,
+            right_base_uniform_contributions,
+            mean_deviation_feature_set,
+        )
+        unconstrained_scaled_feature_average = score_from_contributions(
+            right_artifact,
+            unconstrained_edited_uniform_contributions,
+            mean_deviation_scaled_feature_set,
+        )
+        right_base_scaled_feature_average = score_from_contributions(
+            right_artifact,
+            right_base_uniform_contributions,
+            mean_deviation_scaled_feature_set,
+        )
         if (
-            limit_edited_mean_deviation
+            original_average_prediction_score is None
+            or mean_deviation_original_average is None
+            or unconstrained_mean_deviation_edited_average is None
+            or right_base_mean_deviation_average is None
+            or unconstrained_scaled_feature_average is None
+            or right_base_scaled_feature_average is None
+        ):
+            raise ValueError("Unable to calculate average predictions on the full-data reference")
+        mean_deviation_limit = 0.10 * abs(mean_deviation_original_average)
+        scale_factor = 1.0
+        right_effective_feature_shifts = dict(right_manual_feature_shifts)
+        if (
+            should_limit_edited_mean_deviation
             and abs(
-                unconstrained_edited_average_prediction_score
-                - original_average_prediction_score
+                unconstrained_mean_deviation_edited_average
+                - mean_deviation_original_average
             )
             > mean_deviation_limit
         ):
-            lower_bound = original_average_prediction_score - mean_deviation_limit
-            upper_bound = original_average_prediction_score + mean_deviation_limit
+            lower_bound = mean_deviation_original_average - mean_deviation_limit
+            upper_bound = mean_deviation_original_average + mean_deviation_limit
             target_average = min(
-                max(unconstrained_edited_average_prediction_score, lower_bound),
+                max(unconstrained_mean_deviation_edited_average, lower_bound),
                 upper_bound,
             )
-            edit_mean_effect = (
-                unconstrained_edited_average_prediction_score
-                - right_base_average_prediction_score
+            scaled_feature_edit_mean_effect = (
+                unconstrained_scaled_feature_average
+                - right_base_scaled_feature_average
             )
-            if abs(edit_mean_effect) > 1e-12:
+            if abs(scaled_feature_edit_mean_effect) > 1e-12:
                 scale_factor = min(
                     1.0,
                     max(
                         0.0,
-                        (target_average - right_base_average_prediction_score)
-                        / edit_mean_effect,
+                        1.0
+                        + (
+                            target_average
+                            - unconstrained_mean_deviation_edited_average
+                        )
+                        / scaled_feature_edit_mean_effect,
                     ),
                 )
                 right_offsets = self._scale_compare_offsets(
                     right_offsets,
                     scale_factor,
+                    feature_names=mean_deviation_scaled_feature_set,
                 )
-                for trace in right_submission_offsets.values():
+                right_effective_feature_shifts = self._scale_compare_feature_shifts(
+                    right_manual_feature_shifts,
+                    scale_factor,
+                    feature_names=mean_deviation_scaled_feature_set,
+                )
+                for feature_name, trace in right_submission_offsets.items():
+                    if feature_name not in mean_deviation_scaled_feature_set:
+                        continue
                     for submission_trace in trace:
                         submission_trace["offsets"] = {
                             value: float(offset) * scale_factor
                             for value, offset in submission_trace["offsets"].items()
                         }
-        edited_average_prediction_score = (
-            self._compute_compare_average_prediction_score(
-                right_artifact,
-                right_offsets,
+        edited_uniform_contributions = (
+            self._compute_compare_feature_average_contributions_on_reference(
+                reference_artifact=left_artifact,
+                evaluated_artifact=right_artifact,
+                evaluated_offsets=right_offsets,
+                feature_shifts=right_effective_feature_shifts,
+                method="uniform",
             )
         )
+        edited_average_prediction_score = score_from_contributions(
+            right_artifact,
+            edited_uniform_contributions,
+        )
+        constrained_mean_deviation_edited_average = score_from_contributions(
+            right_artifact,
+            edited_uniform_contributions,
+            mean_deviation_feature_set,
+        )
+        if (
+            edited_average_prediction_score is None
+            or constrained_mean_deviation_edited_average is None
+        ):
+            raise ValueError("Unable to calculate edited average on the full-data reference")
         mean_deviation_constraint = {
-            "enabled": bool(limit_edited_mean_deviation),
+            "enabled": should_limit_edited_mean_deviation,
             "applied": bool(scale_factor < (1.0 - 1e-12)),
             "scale_factor": scale_factor,
             "limit": mean_deviation_limit,
-            "original_average": original_average_prediction_score,
-            "unconstrained_edited_average": unconstrained_edited_average_prediction_score,
-            "constrained_edited_average": edited_average_prediction_score,
+            "original_average": mean_deviation_original_average,
+            "unconstrained_edited_average": unconstrained_mean_deviation_edited_average,
+            "constrained_edited_average": constrained_mean_deviation_edited_average,
             "satisfied": bool(
-                abs(edited_average_prediction_score - original_average_prediction_score)
+                abs(
+                    constrained_mean_deviation_edited_average
+                    - mean_deviation_original_average
+                )
                 <= mean_deviation_limit + 1e-9
             ),
+            "feature_scale_factors": {
+                feature_name: scale_factor
+                for feature_name in explicitly_scaled_mean_deviation_feature_set
+            },
         }
-        original_data_weighted_average_prediction_score = (
-            self._compute_compare_data_weighted_average_prediction_score(
-                left_artifact,
-                left_offsets,
-            )
-        )
-        edited_data_weighted_average_prediction_score = (
-            self._compute_compare_data_weighted_average_prediction_score(
-                right_artifact,
-                right_offsets,
-            )
-        )
-        original_uniform_contributions = (
-            self._compute_compare_feature_average_contributions(
-                left_artifact,
-                left_offsets,
-                method="uniform",
-            )
-        )
-        edited_uniform_contributions = (
-            self._compute_compare_feature_average_contributions(
-                right_artifact,
-                right_offsets,
-                method="uniform",
-            )
-        )
         original_data_weighted_contributions = (
-            self._compute_compare_feature_average_contributions(
-                left_artifact,
-                left_offsets,
+            self._compute_compare_feature_average_contributions_on_reference(
+                reference_artifact=left_artifact,
+                evaluated_artifact=left_artifact,
+                evaluated_offsets={},
                 method="data_weighted",
             )
         )
         edited_data_weighted_contributions = (
-            self._compute_compare_feature_average_contributions(
-                right_artifact,
-                right_offsets,
+            self._compute_compare_feature_average_contributions_on_reference(
+                reference_artifact=left_artifact,
+                evaluated_artifact=right_artifact,
+                evaluated_offsets=right_offsets,
+                feature_shifts=right_effective_feature_shifts,
                 method="data_weighted",
             )
+        )
+        original_data_weighted_average_prediction_score = score_from_contributions(
+            left_artifact,
+            original_data_weighted_contributions,
+        )
+        edited_data_weighted_average_prediction_score = score_from_contributions(
+            right_artifact,
+            edited_data_weighted_contributions,
         )
 
         def build_contribution_rows(
@@ -3717,6 +4018,7 @@ class MLService:
             return rows
 
         feature_previews = []
+        overall_shape_function_mae_metrics = []
         for feature_name in active_features:
             left_shape = _json_safe(left_shape_map.get(feature_name) or {})
             right_shape = _json_safe(right_shape_map.get(feature_name) or {})
@@ -3752,7 +4054,11 @@ class MLService:
                     value=x_value,
                     offsets=right_offsets.get(feature_name, {}),
                 )
-                right_effective_y_values.append(float(base_y) + float(offset))
+                right_effective_y_values.append(
+                    float(base_y)
+                    + float(offset)
+                    + float(right_effective_feature_shifts.get(feature_name, 0.0))
+                )
 
             def build_individual_edit_traces(
                 submission_offsets: List[Dict[str, Any]],
@@ -3761,6 +4067,7 @@ class MLService:
                 is_categorical: bool,
                 x_values: List[Any],
                 base_y_values: List[float],
+                feature_shift: float = 0.0,
             ) -> List[Dict[str, Any]]:
                 return [
                     {
@@ -3777,6 +4084,7 @@ class MLService:
                                 value=x_value,
                                 offsets=trace["offsets"],
                             )
+                            + float(feature_shift)
                             for x_value, base_y in zip(x_values, base_y_values)
                         ],
                     }
@@ -3796,6 +4104,7 @@ class MLService:
                 is_categorical=feature_name in right_cat_features,
                 x_values=right_x_values,
                 base_y_values=right_model_base_y_values,
+                feature_shift=right_effective_feature_shifts.get(feature_name, 0.0),
             )
 
             feature_type = str(left_shape.get("feature_type", "numeric"))
@@ -3930,6 +4239,26 @@ class MLService:
                     right_effective_y_values,
                 )
 
+            if feature_type == "numeric":
+                right_numeric_x_values = np.asarray(right_x_values, dtype=float)
+                left_numeric_x_values = np.asarray(left_x_values, dtype=float)
+                comparison_point_count = int(
+                    np.count_nonzero(
+                        (left_numeric_x_values >= (np.min(right_numeric_x_values) - 1e-9))
+                        & (left_numeric_x_values <= (np.max(right_numeric_x_values) + 1e-9))
+                    )
+                )
+            else:
+                comparison_point_count = len(left_base_y_values)
+            if feature_name in overall_mae_feature_set:
+                overall_shape_function_mae_metrics.append(
+                    {
+                        "point_count": comparison_point_count,
+                        "baseline": baseline_edited_vs_original_base_mae,
+                        "edited": edited_vs_original_base_mae,
+                    }
+                )
+
             feature_previews.append(
                 {
                     "feature_name": feature_name,
@@ -3990,6 +4319,9 @@ class MLService:
         return {
             "use_confidence": bool(use_confidence),
             "feature_previews": feature_previews,
+            "overall_shape_function_mae": self._build_overall_shape_function_mae(
+                overall_shape_function_mae_metrics,
+            ),
             "average_prediction_scores": {
                 "original": original_average_prediction_score,
                 "edited": edited_average_prediction_score,

@@ -238,6 +238,49 @@ def test_prepare_model_compare_preserves_non_centered_curve_positions(ml_service
     )
 
 
+def test_average_prediction_compares_edited_model_on_full_data_reference_grid(
+    ml_service,
+):
+    """The edited average must use the full-data grid, not its own grid."""
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service, selected_feature_columns=["age"]),
+        filename="full-data.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service, selected_feature_columns=["age"]),
+        filename="edited.json",
+    )
+    _set_prepared_shape_values(
+        original,
+        "age",
+        x_values=[0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0],
+        y_values=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    )
+    _set_prepared_shape_values(
+        edited,
+        "age",
+        x_values=[0.0, 15.0, 30.0],
+        y_values=[0.0, 0.0, 30.0],
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=[],
+        feature_names=["age"],
+    )
+
+    assert preview["average_prediction_scores"] == pytest.approx(
+        {"original": 0.0, "edited": 60 / 7, "difference": 60 / 7}
+    )
+    age_contribution = preview["average_prediction_feature_contributions"][
+        "uniform"
+    ][1]
+    assert age_contribution["original"] == pytest.approx(0.0)
+    assert age_contribution["edited"] == pytest.approx(60 / 7)
+
+
 def test_prepare_model_compare_returns_submission_tree_for_imported_edits(
     ml_service,
 ):
@@ -439,6 +482,134 @@ def test_preview_can_uniformly_scale_edited_offsets_to_limit_mean_drift(ml_servi
     assert age_preview["right_individual_edit_traces"][0]["y_values"][1] == pytest.approx(
         age_preview["right_effective_y_values"][1]
     )
+
+
+def test_preview_mean_limit_uses_only_selected_contribution_features(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-age",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 1.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-age"],
+        use_confidence=True,
+        limit_edited_mean_deviation=True,
+        feature_names=["age", "month"],
+        mean_deviation_feature_names=["month"],
+    )
+
+    constraint = preview["mean_deviation_constraint"]
+    age_preview = _get_feature_preview(preview, "age")
+    assert constraint["applied"] is False
+    assert constraint["scale_factor"] == pytest.approx(1.0)
+    assert (
+        age_preview["right_effective_y_values"][1]
+        - age_preview["right_base_y_values"][1]
+    ) == pytest.approx(1.0)
+
+
+def test_preview_can_limit_only_the_marked_feature_mean_shift(ml_service):
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-age",
+                        "edited_points": [
+                            {"x_value": "x:10", "y_value": 1.0, "weight": 1.0}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-age"],
+        use_confidence=True,
+        feature_names=["age", "month"],
+        mean_deviation_feature_names=["age", "month"],
+        mean_deviation_scaled_feature_names=["age"],
+    )
+
+    constraint = preview["mean_deviation_constraint"]
+    age_preview = _get_feature_preview(preview, "age")
+    assert constraint["enabled"] is True
+    assert constraint["applied"] is True
+    assert constraint["feature_scale_factors"] == pytest.approx({"age": 0.17})
+    assert (
+        age_preview["right_effective_y_values"][1]
+        - age_preview["right_base_y_values"][1]
+    ) == pytest.approx(0.17)
+
+
+def test_preview_applies_manual_shift_to_one_edited_feature(ml_service):
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="original.json",
+    )
+    edited = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="edited.json",
+    )
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=edited,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=[],
+        feature_names=["age", "month"],
+        manual_feature_shifts={"age": 1.0},
+    )
+
+    age_preview = _get_feature_preview(preview, "age")
+    assert (
+        age_preview["right_effective_y_values"][0]
+        - age_preview["right_base_y_values"][0]
+    ) == pytest.approx(1.0)
+    assert preview["average_prediction_scores"]["difference"] == pytest.approx(1.0)
 
 
 def test_preview_unweighted_mode_ignores_saved_confidence(ml_service):
@@ -1238,6 +1409,104 @@ def test_prepare_model_compare_supports_numeric_x_value_mismatches_with_interpol
         1.0
     )
     assert age_preview["comparison_metrics"]["edited_vs_original_base_r2"] == pytest.approx(1.0)
+
+
+def test_preview_returns_overall_shape_function_mae_for_baseline_and_selected_edits(
+    ml_service,
+):
+    """Overall MAE exposes both point-pooled and equal-feature summaries."""
+    edits_payload = {
+        "included": True,
+        "users": [{"name": "alice"}],
+        "edits": [
+            {
+                "user_name": "alice",
+                "shape_functions": [
+                    {
+                        "feature_name": "age",
+                        "feature_type": "numeric",
+                        "submission_id": "sub-age",
+                        "edited_points": [
+                            {"x_value": "x:0", "y_value": -1.0, "weight": 1.0},
+                            {"x_value": "x:10", "y_value": -1.0, "weight": 1.0},
+                            {"x_value": "x:20", "y_value": -1.0, "weight": 1.0},
+                            {"x_value": "x:29", "y_value": -1.0, "weight": 1.0},
+                        ],
+                    },
+                    {
+                        "feature_name": "month",
+                        "feature_type": "categorical",
+                        "submission_id": "sub-month",
+                        "edited_points": [
+                            {"x_value": "1", "y_value": -2.0, "weight": 1.0},
+                            {"x_value": "2", "y_value": -2.0, "weight": 1.0},
+                            {"x_value": "3", "y_value": -2.0, "weight": 1.0},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="full-data.json",
+    )
+    reduced = ml_service.prepare_model_compare_artifact(
+        _attach_edits_export(_build_artifact(ml_service), edits_payload),
+        filename="reduced-data.json",
+    )
+    _set_prepared_shape_values(original, "age", y_values=[0.0, 0.0, 0.0, 0.0])
+    _set_prepared_shape_values(original, "month", y_values=[0.0, 0.0, 0.0])
+    _set_prepared_shape_values(reduced, "age", y_values=[1.0, 1.0, 1.0, 1.0])
+    _set_prepared_shape_values(reduced, "month", y_values=[3.0, 3.0, 3.0])
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=reduced,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=["sub-age", "sub-month"],
+        feature_names=["age", "month"],
+    )
+
+    overall = preview["overall_shape_function_mae"]
+    assert overall["feature_count"] == 2
+    assert overall["point_count"] == 7
+    assert overall["pooled"]["baseline"] == pytest.approx(13 / 7)
+    assert overall["pooled"]["edited"] == pytest.approx(3 / 7)
+    assert overall["pooled"]["status"] == "decreased"
+    assert overall["mean_per_feature"]["baseline"] == pytest.approx(2.0)
+    assert overall["mean_per_feature"]["edited"] == pytest.approx(0.5)
+    assert overall["mean_per_feature"]["status"] == "decreased"
+
+
+def test_preview_limits_overall_shape_function_mae_to_selected_features(ml_service):
+    original = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="full-data.json",
+    )
+    reduced = ml_service.prepare_model_compare_artifact(
+        _build_artifact(ml_service),
+        filename="reduced-data.json",
+    )
+    _set_prepared_shape_values(original, "age", y_values=[0.0, 0.0, 0.0, 0.0])
+    _set_prepared_shape_values(original, "month", y_values=[0.0, 0.0, 0.0])
+    _set_prepared_shape_values(reduced, "age", y_values=[1.0, 1.0, 1.0, 1.0])
+    _set_prepared_shape_values(reduced, "month", y_values=[3.0, 3.0, 3.0])
+
+    preview = ml_service.build_model_compare_preview(
+        left_artifact=original,
+        right_artifact=reduced,
+        left_selected_submission_ids=[],
+        right_selected_submission_ids=[],
+        feature_names=["age", "month"],
+        overall_mae_feature_names=["month"],
+    )
+
+    overall = preview["overall_shape_function_mae"]
+    assert overall["feature_count"] == 1
+    assert overall["point_count"] == 3
+    assert overall["pooled"]["baseline"] == pytest.approx(3.0)
+    assert overall["pooled"]["edited"] == pytest.approx(3.0)
 
 
 def test_prepare_model_compare_rejects_unaligned_categorical_x_values(ml_service):
