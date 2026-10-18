@@ -57,7 +57,7 @@ const formatApiError = (err, fallback = "Request failed") => {
 };
 
 function App() {
-  const showPredictionComparisonOnMain = false;
+  const showPredictionComparisonOnMain = true;
   const [language, setLanguage] = useState(getInitialLanguage);
   const t = createTranslator(language);
 
@@ -589,10 +589,13 @@ function App() {
     }
   };
 
-  const handleUploadDataset = async (file) => {
+  const handleUploadDataset = async (file, useCaseStudyFeatureNames = false) => {
     try {
       setError(null);
-      const result = await apiService.uploadDataset(file);
+      const result = await apiService.uploadDataset(
+        file,
+        useCaseStudyFeatureNames,
+      );
       return result;
     } catch (err) {
       throw new Error(formatApiError(err, t("app.error.uploadDataset")));
@@ -926,7 +929,7 @@ function App() {
           />
         </div>
 
-        {/* Prediction Comparison Section stays available for combined view but is hidden on the main dashboard */}
+        {/* Actual-versus-predicted comparison */}
         {showPredictionComparisonOnMain && (
           <div className="mt-6">
             <PredictionComparisonChart

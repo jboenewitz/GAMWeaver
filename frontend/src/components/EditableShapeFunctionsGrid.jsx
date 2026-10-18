@@ -17,6 +17,7 @@ import {
   getFeatureDisplayName,
   getShapeFunctionDisplayName,
 } from "../utils/featureDisplay";
+import { getReadingSpellingDifficultyAxisTicks } from "../utils/featureAxisTicks";
 
 const NUMERIC_X_PRECISION = 6;
 const NUMERIC_BRUSH_SIGMA_RATIO = 0.08;
@@ -1658,6 +1659,7 @@ const EditableShapeFunctionChart = ({
             ticktext: numericAxisTicks.map((tick) => tick.label),
           }
         : {}),
+      ...(getReadingSpellingDifficultyAxisTicks(feature_name, x_values, !isNumeric) || {}),
       ...(isNumeric ? { range: xRange } : {}),
     },
     yaxis: {

@@ -97,6 +97,8 @@ const translations = {
     "training.trainButton": "Train IGANN Model",
     "training.uploadModalTitle": "Upload Dataset",
     "training.csvFile": "CSV File",
+    "training.useCaseStudyFeatureNames":
+      "Use Case study specific feature names",
     "training.uploadInspect": "Upload & Inspect Columns",
     "training.columnsDetected": "Columns detected",
     "training.targetColumn": "Target Column",
@@ -526,6 +528,31 @@ const translations = {
     "superadmin.noComparisonDataset": "No comparison dataset loaded",
     "superadmin.comparisonTrained": "Comparison trained",
     "superadmin.loadComparisonDataset": "Load Comparison Dataset",
+    "superadmin.sensitivityTitle": "Preprocessing sensitivity check",
+    "superadmin.sensitivityDescription":
+      "Upload the original full and 5% IQB CSVs with their matching unedited IGANN exports. Keep the original CSV filenames. Refit both models using medians learned only from their own training rows, then evaluate each on its original 20% test split. The active model is unaffected.",
+    "superadmin.sensitivityFullCsv": "Full-data CSV",
+    "superadmin.sensitivityFullModel": "Original full-data model JSON",
+    "superadmin.sensitivityReducedCsv": "5% CSV",
+    "superadmin.sensitivityReducedModel": "Original 5% model JSON",
+    "superadmin.sensitivityRun": "Run sensitivity check",
+    "superadmin.sensitivityRunning": "Retraining both models...",
+    "superadmin.sensitivityError": "Sensitivity check failed",
+    "superadmin.sensitivityMethodNote":
+      "The exported model is scored from its saved shape functions, which may approximate native predictions. The controlled delta compares two native refits with identical settings and test rows; only the median-fitting scope changes. Lower MAE and RMSE are better; higher R² is better.",
+    "superadmin.sensitivityFullResult": "Full-data model",
+    "superadmin.sensitivityReducedResult": "5% model",
+    "superadmin.sensitivityRowCounts":
+      "{usable} usable rows · {train} training · {test} test",
+    "superadmin.sensitivityMaePercent":
+      "MAE change from the controlled original refit: {percent}%",
+    "superadmin.sensitivityModel": "Model",
+    "superadmin.sensitivityExported": "Original export (reconstructed)",
+    "superadmin.sensitivityRefitOld": "Refit with original preprocessing",
+    "superadmin.sensitivityCorrected": "Refit with training-only medians",
+    "superadmin.sensitivityDelta": "Change versus original refit",
+    "superadmin.sensitivityMedians": "Medians changed by the correction",
+    "superadmin.sensitivityNoMedianChanges": "No numeric fill medians changed.",
     "superadmin.createUser": "Create User",
     "superadmin.professionPlaceholder": "Enter a profession",
     "superadmin.inviteLink": "Invite Link",
@@ -576,7 +603,7 @@ const translations = {
       "Model and saved shape-function edits imported successfully for {users} users across {submissions} submissions.",
     "superadmin.exportConfirmTitle": "Export Model Artifact?",
     "superadmin.exportConfirmBody":
-      "Choose whether the exported model artifact should also include saved shape-function edits tied to the current model.",
+      "Choose whether the exported model artifact should also include saved shape-function edits tied to the current model. The export also contains the held-out test rows and target values needed for later evaluation.",
     "superadmin.exportIncludeEdits":
       "Include saved shape-function edits",
     "superadmin.exportConfirmAction": "Export Artifact",
@@ -584,10 +611,10 @@ const translations = {
     "modelCompare.subtitle":
       "Upload two exported model JSON artifacts and compare their base and edited feature shapes.",
     "modelCompare.previewOnly": "Preview only - live model remains unchanged",
-    "modelCompare.leftArtifact": "Original artifact",
-    "modelCompare.rightArtifact": "Edited artifact",
-    "modelCompare.leftArtifactSelections": "Original artifact selections",
-    "modelCompare.rightArtifactSelections": "Edited artifact selections",
+    "modelCompare.leftArtifact": "Full-data artifact",
+    "modelCompare.rightArtifact": "Reduced-data artifact",
+    "modelCompare.leftArtifactSelections": "Full-data artifact selections",
+    "modelCompare.rightArtifactSelections": "Reduced-data artifact selections",
     "modelCompare.noFileChosen": "No file chosen yet",
     "modelCompare.compareArtifacts": "Compare artifacts",
     "modelCompare.instructions":
@@ -597,6 +624,54 @@ const translations = {
     "modelCompare.previewError": "Failed to recompute comparison preview",
     "modelCompare.chooseBothFiles":
       "Please choose both exported JSON files before comparing them.",
+    "modelCompare.overlapTitle": "CSV overlap with artifact test sets",
+    "modelCompare.overlapDescription":
+      "Upload the reduced model's source CSV to check its actual training rows against the original test set. For exact verification when the artifacts lack shared source IDs, also upload the older full source CSV. A separate CSV row comparison is shown below.",
+    "modelCompare.overlapCsvLabel": "Reduced-data CSV",
+    "modelCompare.overlapSourceCsvLabel": "Older full source CSV (optional)",
+    "modelCompare.overlapCheck": "Check overlap",
+    "modelCompare.overlapChecking": "Checking overlap...",
+    "modelCompare.overlapError": "Could not check CSV overlap",
+    "modelCompare.overlapUnavailable":
+      "The original artifact has no held-out test rows. Export a model with test data to run this check.",
+    "modelCompare.overlapEditedUnavailable":
+      "The edited artifact has no held-out test rows to subtract. The CSV will be compared with the original test set only.",
+    "modelCompare.overlapResult":
+      "{matches} of {remaining} remaining CSV rows match the original held-out test set ({testRows} test rows).",
+    "modelCompare.overlapDirectResult":
+      "{matches} of {remaining} CSV rows match the original held-out test set ({testRows} test rows).",
+    "modelCompare.overlapSubtraction":
+      "CSV rows: {csvRows}. Removed because they match the edited held-out set ({editedTestRows} test rows): {removed}. Remaining: {remaining}.",
+    "modelCompare.overlapBeforeSubtraction":
+      "Before subtraction, {matches} CSV rows matched the original held-out set.",
+    "modelCompare.overlapWithTarget":
+      "Matching used all model features and the target column.",
+    "modelCompare.overlapFeaturesOnly":
+      "The CSV has no original target column, so matching used model features only.",
+    "modelCompare.overlapMatchedRows": "Remaining rows matching the original test set (numbered after the CSV header):",
+    "modelCompare.overlapDirectMatchedRows": "Rows matching the original test set (numbered after the CSV header):",
+    "modelCompare.overlapRemovedRows": "Removed CSV rows matching the edited test set ({count})",
+    "modelCompare.overlapRowDetail":
+      "CSV row {csvRow} matches held-out row {testRows}",
+    "modelCompare.overlapSampleIds": "sample ID: {ids}",
+    "modelCompare.overlapShowingFirst": "Showing the first {count} matching CSV rows.",
+    "modelCompare.trainingOverlapTitle": "Reduced training rows in the original test set",
+    "modelCompare.trainingOverlapExact":
+      "{matches} of {training} reduced-model training observations occur in the original model's {test}-row held-out test set.",
+    "modelCompare.trainingOverlapSourceVerified":
+      "Verified by mapping complete reduced CSV rows to the older full source CSV and checking both artifact splits.",
+    "modelCompare.trainingOverlapIdsVerified":
+      "Verified using sample IDs from a shared source namespace in both artifacts.",
+    "modelCompare.trainingOverlapTargetOnly":
+      "{matches} of {training} reduced training rows share unique target values with the original {test}-row test set.",
+    "modelCompare.trainingOverlapNeedsSource":
+      "This target-value count does not prove the rows are the same observations. Upload the older full source CSV to verify the exact overlap.",
+    "modelCompare.trainingOverlapUnavailable":
+      "Training-to-test overlap could not be verified: {reason}",
+    "modelCompare.trainingOverlapUsableRows":
+      "Usable reduced-data CSV rows after excluding missing targets: {count}.",
+    "modelCompare.overlapDescriptiveTitle":
+      "Other CSV row matches (not the training leakage count)",
     "modelCompare.exportedAt": "Exported at",
     "modelCompare.dataset": "Dataset",
     "modelCompare.features": "Features",
@@ -617,6 +692,16 @@ const translations = {
       "Switch between confidence-weighted and equal-weight preview, search features, and jump to a chart.",
     "modelCompare.confidenceOn": "Confidence weighting on",
     "modelCompare.confidenceOff": "Confidence weighting off",
+    "modelCompare.showAlternateConfidenceAggregation":
+      "Compare both confidence aggregations",
+    "modelCompare.hideAlternateConfidenceAggregation":
+      "Show selected aggregation only",
+    "modelCompare.featureMetricsOriginalTestSet":
+      "Use original test set for per-feature MAE, RMSE and R²",
+    "modelCompare.featureMetricsUniformGridDescription":
+      "When off, numeric metrics use 100 evenly spaced points across the shared curve range.",
+    "modelCompare.featureMetricsOriginalTestSetUnavailable":
+      "Requires held-out feature rows in the original artifact.",
     "modelCompare.confidenceDescription":
       "When off, selected submissions are averaged equally instead of using their saved confidence.",
     "modelCompare.showBaseTraces": "Show base lines and bars",
@@ -625,13 +710,42 @@ const translations = {
     "modelCompare.restoreChartPositions": "Restore curve positions",
     "modelCompare.showLineDots": "Show dots on lines",
     "modelCompare.hideLineDots": "Hide dots on lines",
+    "modelCompare.makeChartsTaller": "Make charts taller",
+    "modelCompare.restoreChartHeight": "Restore chart height",
     "modelCompare.baseTracesDescription":
       "Toggle the original baseline traces for both compared artifacts.",
     "modelCompare.showIndividualEdits": "Show individual edits",
     "modelCompare.showAggregatedEdits": "Show aggregated edits",
+    "modelCompare.enableChartExpertSelection": "Select experts in feature charts",
+    "modelCompare.disableChartExpertSelection": "Stop selecting experts in feature charts",
+    "modelCompare.chartExpertSelectionHint":
+      "Choose experts to display in this feature's shape and MAE-change charts. Other results stay unchanged.",
     "modelCompare.showIndividualMae": "Show individual MAE errors",
     "modelCompare.hideIndividualMae": "Hide individual MAE errors",
     "modelCompare.individualMaeErrors": "Individual participant MAE errors",
+    "modelCompare.showIndividualMaeChangeChart": "Show expert MAE-change chart",
+    "modelCompare.hideIndividualMaeChangeChart": "Hide expert MAE-change chart",
+    "modelCompare.showConfidenceRatedMae": "Show confidence-rated expert MAE",
+    "modelCompare.hideConfidenceRatedMae": "Hide confidence-rated expert MAE",
+    "modelCompare.expertMaeChange": "Expert MAE change",
+    "modelCompare.expertMaeChangeTitle": "Change in shape-function MAE by expert",
+    "modelCompare.expertMaeChangeAxis": "MAE Δ from reduced-data baseline",
+    "modelCompare.allFeatureMaeChange":
+      "Aggregated MAE change across all features",
+    "modelCompare.allFeatureMaeChangeDescription":
+      "Each bar shows one feature after all exported edits, compared with the unedited models. Both confidence modes ignore expert selections in feature charts. In the combined view, patterned bars include confidence ratings.",
+    "modelCompare.expertAverageConfidence": "Average confidence by expert",
+    "modelCompare.expertAverageConfidenceDescription":
+      "Average saved confidence rating across all exported feature submissions for each expert. Bars are ordered from highest to lowest and do not change with feature chart selections.",
+    "modelCompare.expertAverageConfidenceAxis": "Average confidence rating (1–10)",
+    "modelCompare.expertAverageConfidenceRatings": "Rated submissions",
+    "modelCompare.noExpertConfidenceRatings": "No saved expert confidence ratings are available.",
+    "modelCompare.allFeatureMaeChangeWithoutConfidence":
+      "Without confidence rating",
+    "modelCompare.allFeatureMaeChangeWithConfidence":
+      "With confidence rating included",
+    "modelCompare.showCombinedMaeChart": "Show combined chart",
+    "modelCompare.showSeparateMaeCharts": "Show separate charts",
     "modelCompare.showConfidenceInLegend": "Show confidence rating in legend",
     "modelCompare.hideConfidenceInLegend": "Hide confidence rating in legend",
     "modelCompare.individualEditsDescription":
@@ -652,23 +766,123 @@ const translations = {
       "{features} shape functions · {points} reference points",
     "modelCompare.pooledShapeFunctionMae": "Pooled curve points",
     "modelCompare.meanPerFeatureMae": "Equal-feature mean",
+    "modelCompare.expertCompleteModelMae": "Expert complete-model MAE",
+    "modelCompare.expertCompleteModelMaeDescription":
+      "Each value compares one expert's selected edits across all compared shape functions with the full-data curves.",
+    "modelCompare.expertCompleteModelMaeConfidenceWeighted":
+      "Saved confidence ratings are applied to the expert edits.",
+    "modelCompare.expertCompleteModelMaeEqualWeighted":
+      "Expert edits are averaged equally; saved confidence ratings are not applied.",
+    "modelCompare.expertCompleteModelMaeCoverage":
+      "{features} shape functions · {points} reference points · {submissions} submissions",
     "modelCompare.overallMaeFeatureSelection":
       "Choose shape functions ({selected} of {total} selected)",
     "modelCompare.overallMaeFeatureSelectionDescription":
       "Only checked shape functions are included in the overall MAE cards above. At least one must remain selected.",
     "modelCompare.featureMaeDelta": "MAE Δ: {delta}",
+    "modelCompare.heldOutTestPerformance": "Held-out test performance",
+    "modelCompare.heldOutTestPerformanceDescription":
+      "Evaluates the full-data benchmark, original reduced-data model, and edited reduced-data model against the same held-out targets.",
+    "modelCompare.model": "Model",
+    "modelCompare.fullData": "Full-data benchmark",
+    "modelCompare.reducedData": "Original reduced-data model",
+    "modelCompare.editedReducedData": "Edited reduced-data model",
+    "modelCompare.effectOfExpertEdits": "Effect of expert edits",
+    "modelCompare.selectedModelComparison": "Selected model comparison",
+    "modelCompare.reducedToEdited": "Original reduced-data → edited reduced-data",
+    "modelCompare.fullToReduced": "Full-data benchmark → original reduced-data model",
+    "modelCompare.fullToEdited": "Full-data benchmark → edited reduced-data model",
+    "modelCompare.allThreeComparison": "Full-data benchmark → original reduced-data model → edited reduced-data model",
+    "modelCompare.reducedMinusFull": "reduced − full",
+    "modelCompare.editedMinusFull": "edited − full",
+    "modelCompare.editedMinusReduced": "edited − reduced",
+    "modelCompare.allThree": "All three",
+    "modelCompare.reducedEdited": "Reduced vs. edited",
+    "modelCompare.fullReduced": "Full vs. reduced",
+    "modelCompare.fullEdited": "Full vs. edited",
+    "modelCompare.residualComparison": "Actual value vs. residual",
+    "modelCompare.residualAxis": "Prediction − actual",
+    "modelCompare.zeroResidual": "Zero residual",
+    "modelCompare.metric.mae": "MAE",
+    "modelCompare.metric.rmse": "RMSE",
+    "modelCompare.metric.r2": "R²",
+    "modelCompare.metric.mean_error": "Mean error",
+    "modelCompare.metric.bias_magnitude": "Absolute mean prediction error",
+    "modelCompare.metric.std_dev": "Prediction standard deviation",
+    "modelCompare.meanErrorConvention": "Mean error = mean(prediction − actual). Negative means underprediction; positive means overprediction. Comparison cards use the absolute mean prediction error.",
+    "modelCompare.improved": "Improved",
+    "modelCompare.worsened": "Worsened",
+    "modelCompare.unchanged": "Unchanged",
+    "modelCompare.benchmarkRelationships": "Full ↔ reduced: limited-data gap. Full ↔ edited: remaining gap after editing. Accuracy is measured against actual targets, not agreement with the benchmark.",
+    "modelCompare.benchmarkGaps": "Difference from full-data benchmark",
+    "modelCompare.observationEffects": "Per-observation edit effects and uncertainty",
+    "modelCompare.medianErrorChange": "Median absolute-error change",
+    "modelCompare.trainingCorrectionOption": "Apply training-only intercept correction to match the reduced model's mean prediction",
+    "modelCompare.manualAdjustmentDisabled": "Training-only correction is active. Clear its checkbox in the performance section to enter a manual shift.",
+    "modelCompare.correctionMetadata": "Edited intercept correction enabled: {enabled}; shift: {shift}; source: {source}.",
+    "modelCompare.beforeAfterCorrection": "Edited model before and after intercept correction",
+    "modelCompare.beforeCorrection": "Before correction",
+    "modelCompare.afterCorrection": "After correction",
+    "modelCompare.splitValidation": "Split check: the exported full and reduced test rows match: {shared}. Matching source sample IDs are unavailable for both training sets, so test exclusion cannot be proven from these artifacts. Matching feature rows in exported training data: full {full}, reduced {reduced}. Matches can also be distinct observations.",
+    "modelCompare.splitVerified": "Split verified for {samples} test rows: supplied source sample IDs are disjoint from both models' training IDs.",
+    "modelCompare.preprocessingLeakage": "Preprocessing caveat: these historical models calculated missing-value fills before the train/test split. Test feature values influenced preprocessing; test targets were not used to fit the models or intercept correction.",
+    "modelCompare.mainTrainingPerformance": "Training-set performance (debug)",
+    "modelCompare.mainTrainingPerformanceDescription":
+      "Uses only the dataset rows that trained the main-page model. Validation and test rows are excluded; these in-sample metrics are for debugging.",
+    "modelCompare.heldOutTestDataSource": "Test set",
+    "modelCompare.useOriginalArtifactTestSet": "Full-data held-out test set",
+    "modelCompare.useReducedArtifactTestSet": "Reduced artifact test set",
+    "modelCompare.useMainTrainingData": "Full-data set",
+    "modelCompare.evaluateHeldOutTest": "Evaluate artifacts",
+    "modelCompare.heldOutTestCoverage": "{samples} held-out test samples",
+    "modelCompare.sharedHeldOutNeedsLineage": "For this original IQB export, upload the reduced 5% CSV and old 100% source CSV in the overlap section, then run the overlap check before evaluating. The original 5,249-row test set includes reduced-model training rows.",
+    "modelCompare.sharedHeldOutReady": "Verified shared held-out set: {samples} source rows, excluding reduced-model training observations.",
+    "modelCompare.mainTrainingPerformanceCoverage": "{samples} training samples",
+    "modelCompare.heldOutBeforeEdits": "Original artifact",
+    "modelCompare.heldOutAfterEdits": "Edited artifact",
+    "modelCompare.heldOutDeltaEditedMinusOriginal": "Edited − original",
+    "modelCompare.heldOutResidualStandardDeviation": "Residual standard deviation",
+    "modelCompare.heldOutMeanError": "Mean error",
+    "modelCompare.actualVsPredicted": "Actual vs. predicted",
+    "modelCompare.actualValues": "Actual values",
+    "modelCompare.predictedValues": "Predicted values",
+    "modelCompare.actualVsPredictedIdentityLine": "Perfect prediction",
+    "modelCompare.heldOutTestReady":
+      "Select a test set, then evaluate all three model states.",
+    "modelCompare.heldOutTestUnavailable":
+      "The selected artifact has no held-out test data. Export it again after training with this version, then upload the new artifact.",
     "modelCompare.averagePredictedScore":
       "Average prediction comparison",
     "modelCompare.averagePredictedScoreDescription":
-      "Compares the full-data original artifact with the edited artifact on the same full-data reference values; selected edits and confidence weighting are included.",
-    "modelCompare.uniformAverage": "Full-data curve grid",
-    "modelCompare.dataWeightedAverage": "Full-data distribution",
-    "modelCompare.uniformAverageDescription":
-      "Each displayed full-data curve position has equal weight for both artifact predictions.",
-    "modelCompare.dataWeightedAverageDescription":
-      "Both artifact predictions are weighted by the full-data artifact's exported feature distribution.",
-    "modelCompare.dataWeightedUnavailable":
-      "Data-weighted comparison requires the full-data artifact to include feature distribution metadata.",
+      "Compares the full-data model, the unedited reduced-data model, and the edited reduced-data model on the selected reference; selected edits and confidence weighting are included.",
+    "modelCompare.interceptAdjustmentLabel": "Edited model intercept adjustment",
+    "modelCompare.interceptAdjustmentDescription":
+      "Adds this constant to edited predictions, including the held-out performance test. Apply the 80% training-row suggestion above if you want to cancel the measured edit shift.",
+    "modelCompare.applyInterceptAdjustment": "Apply",
+    "modelCompare.interceptAdjustmentInvalid": "Enter a finite number for the intercept adjustment.",
+    "modelCompare.originalEditedBaseOffset": "Original edited base offset",
+    "modelCompare.activeInterceptAdjustment": "Active adjustment",
+    "modelCompare.adjustedEditedBaseOffset": "Adjusted edited base offset",
+    "modelCompare.testSetAverage": "Original held-out test set",
+    "modelCompare.mainDatasetAverage": "Original model's 80% training set",
+    "modelCompare.testSetAverageDescription":
+      "Both artifacts predict every held-out feature row from the original model JSON; the cards show the mean predictions.",
+    "modelCompare.mainDatasetAverageDescription":
+      "Both artifacts predict the original model's {count} exported training rows (its 80% development split). The mean edit shift is calculated before the intercept adjustment.",
+    "modelCompare.mainDatasetAverageUnavailable":
+      "The original model artifact has no exported training rows. Export it again to calculate the 80% training-set shift.",
+    "modelCompare.developmentMeanEditShift":
+      "Mean edit shift before intercept adjustment",
+    "modelCompare.developmentSuggestedAdjustment":
+      "Suggested intercept adjustment from these training rows",
+    "modelCompare.heldOutConfidenceWeighted":
+      "Held-out predictions use confidence-weighted expert edits.",
+    "modelCompare.heldOutUnweighted":
+      "Held-out predictions use unweighted expert edits at their submitted strength.",
+    "modelCompare.missingIndicatorsExcludedFromAverage":
+      "Generated [missing] indicator features are excluded from these averages and their feature breakdown.",
+    "modelCompare.testSetAverageUnavailable":
+      "The original model JSON has no held-out test rows. Export it again after training to use this option.",
     "modelCompare.limitEditedMeanDeviation":
       "Limit edited mean shift to 10%",
     "modelCompare.limitEditedMeanDeviationDescription":
@@ -682,21 +896,47 @@ const translations = {
       "The unedited right-hand model already differs by more than 10%, so scaling edits alone cannot meet the limit.",
     "modelCompare.originalAveragePredictedScore": "Full-data original artifact",
     "modelCompare.editedAveragePredictedScore":
-      "Edited artifact on full-data reference",
+      "Edited artifact on selected reference",
     "modelCompare.averagePredictedScoreDifference": "Edited − full-data original",
+    "modelCompare.editedMinusReducedAveragePrediction":
+      "Average prediction difference: edited reduced model − unedited reduced model",
     "modelCompare.averagePredictionRelativeChange": "Relative change: {change}",
-    "modelCompare.showAverageContributions": "Show contribution breakdown",
-    "modelCompare.averageContributionsDescription":
-      "These additive terms compare both artifacts on the full-data reference and explain the displayed difference.",
+    "modelCompare.trainingMeanDetailsTitle": "Training mean and intercept values",
+    "modelCompare.trainingMeanDetailsDescription":
+      "Mean predictions reconstructed from the artifacts on the reduced-data model's preprocessed training rows ({count} rows), excluding generated [missing] indicators. Selected expert adaptations and preview scaling are included. The after-correction value uses the currently applied intercept adjustment.",
+    "modelCompare.trainingMeanUnavailable":
+      "Training means are unavailable because this artifact does not contain training feature rows. Re-export the reduced-data model with this version and upload it again.",
+    "modelCompare.reducedTrainingMean": "Reduced-data model mean prediction",
+    "modelCompare.editedTrainingMeanBeforeCorrection":
+      "Expert-adapted mean before intercept correction",
+    "modelCompare.trainingMeanDifferenceBeforeCorrection":
+      "Expert adaptation difference (edited − reduced)",
+    "modelCompare.editedTrainingMeanAfterCorrection":
+      "Expert-adapted mean after applied correction",
+    "modelCompare.originalFullDataIntercept": "Original full-data intercept",
+    "modelCompare.reducedModelIntercept": "Reduced-data model intercept",
+    "modelCompare.editedInterceptBeforeCorrection":
+      "Expert-adapted intercept before correction",
+    "modelCompare.appliedInterceptCorrection": "Applied intercept correction",
+    "modelCompare.editedInterceptAfterCorrection":
+      "Expert-adapted intercept after applied correction",
+    "modelCompare.suggestedMatchingCorrection":
+      "Correction to match reduced-data training mean",
+    "modelCompare.suggestedMatchingIntercept":
+      "Intercept with matching correction",
+    "modelCompare.averageContributionsTitle":
+      "Change in average prediction by feature",
+    "modelCompare.reducedEditedContributionsTitle":
+      "Change in average prediction by feature: edited reduced − original reduced model",
     "modelCompare.contributionFeature": "Feature",
-    "modelCompare.featureEditShift": "Edit shift",
-    "modelCompare.decreaseFeatureEditShift": "Decrease edited curve by 1",
-    "modelCompare.increaseFeatureEditShift": "Increase edited curve by 1",
-    "modelCompare.contributionFeatureSelection":
-      "Choose contributions ({selected} of {total} selected)",
-    "modelCompare.contributionFeatureSelectionDescription":
-      "Click a feature row to include or exclude it; the prediction-score cards above update to the same selection.",
-    "modelCompare.selectedContributionDifference": "Selected contribution change",
+    "modelCompare.meanPredictionChangeColumn":
+      "Mean prediction change (edited − original)",
+    "modelCompare.reducedEditedMeanPredictionChangeColumn":
+      "Mean prediction change (edited reduced − original reduced)",
+    "modelCompare.totalMeanDeviationFromOriginal":
+      "Total mean deviation from original full-data model",
+    "modelCompare.totalMeanDeviationFromOriginalReduced":
+      "Total mean deviation from original reduced model",
     "modelCompare.featureMeanShiftLimit": "10% mean limit",
     "modelCompare.meanShiftFeatureLimitDescription":
       "Choose the edited features to scale. One optimal factor is calculated for that set; all other feature edits stay unchanged.",
@@ -712,7 +952,6 @@ const translations = {
     "modelCompare.removeFeatureMeanShiftLimit": "Remove feature limit",
     "modelCompare.selectedContributionAverageView":
       "Cards show the base offset plus selected feature contributions.",
-    "modelCompare.basePredictionOffset": "Base prediction offset",
     "modelCompare.recomputing": "Recomputing preview...",
     "modelCompare.noMatchingFeatures":
       "No feature charts match the current search.",
@@ -842,6 +1081,8 @@ const translations = {
     "training.trainButton": "IGANN-Modell trainieren",
     "training.uploadModalTitle": "Datensatz hochladen",
     "training.csvFile": "CSV-Datei",
+    "training.useCaseStudyFeatureNames":
+      "Fallspezifische Feature-Namen verwenden",
     "training.uploadInspect": "Hochladen und Spalten prüfen",
     "training.columnsDetected": "Erkannte Spalten",
     "training.targetColumn": "Zielspalte",
@@ -1322,6 +1563,31 @@ const translations = {
     "superadmin.noComparisonDataset": "Kein Vergleichsdatensatz geladen",
     "superadmin.comparisonTrained": "Vergleich trainiert",
     "superadmin.loadComparisonDataset": "Vergleichsdatensatz laden",
+    "superadmin.sensitivityTitle": "Sensitivitätsprüfung der Vorverarbeitung",
+    "superadmin.sensitivityDescription":
+      "Lade die ursprüngliche vollständige und die 5-%-IQB-CSV mit den passenden unbearbeiteten IGANN-Exporten hoch. Behalte die ursprünglichen CSV-Dateinamen bei. Beide Modelle werden mit Medianen aus den jeweiligen Trainingszeilen neu trainiert und auf ihren ursprünglichen 20-%-Testsätzen bewertet. Das aktive Modell bleibt unverändert.",
+    "superadmin.sensitivityFullCsv": "Vollständige CSV",
+    "superadmin.sensitivityFullModel": "Ursprüngliches vollständiges Modell (JSON)",
+    "superadmin.sensitivityReducedCsv": "5-%-CSV",
+    "superadmin.sensitivityReducedModel": "Ursprüngliches 5-%-Modell (JSON)",
+    "superadmin.sensitivityRun": "Sensitivitätsprüfung starten",
+    "superadmin.sensitivityRunning": "Beide Modelle werden neu trainiert...",
+    "superadmin.sensitivityError": "Sensitivitätsprüfung fehlgeschlagen",
+    "superadmin.sensitivityMethodNote":
+      "Der Modellexport wird aus gespeicherten Shape-Funktionen bewertet; dies kann native Vorhersagen annähern. Die kontrollierte Differenz vergleicht zwei native Neutrainings mit gleichen Einstellungen und Testzeilen; nur die Medianberechnung ändert sich. Niedrigere MAE/RMSE und ein höheres R² sind besser.",
+    "superadmin.sensitivityFullResult": "Vollständiges Modell",
+    "superadmin.sensitivityReducedResult": "5-%-Modell",
+    "superadmin.sensitivityRowCounts":
+      "{usable} verwendbare Zeilen · {train} Training · {test} Test",
+    "superadmin.sensitivityMaePercent":
+      "MAE-Änderung gegenüber dem kontrollierten ursprünglichen Neutraining: {percent} %",
+    "superadmin.sensitivityModel": "Modell",
+    "superadmin.sensitivityExported": "Ursprünglicher Export (rekonstruiert)",
+    "superadmin.sensitivityRefitOld": "Neutraining mit ursprünglicher Vorverarbeitung",
+    "superadmin.sensitivityCorrected": "Neutraining mit Trainingsmedianen",
+    "superadmin.sensitivityDelta": "Änderung gegenüber ursprünglichem Neutraining",
+    "superadmin.sensitivityMedians": "Durch die Korrektur veränderte Mediane",
+    "superadmin.sensitivityNoMedianChanges": "Keine numerischen Ersatzmediane haben sich verändert.",
     "superadmin.createUser": "Benutzer erstellen",
     "superadmin.professionPlaceholder": "Beruf eingeben",
     "superadmin.inviteLink": "Einladungslink",
@@ -1364,7 +1630,7 @@ const translations = {
       "Modell und gespeicherte Shape-Function-Bearbeitungen wurden erfolgreich für {users} Benutzer mit {submissions} Einreichungen importiert.",
     "superadmin.exportConfirmTitle": "Modellartefakt exportieren?",
     "superadmin.exportConfirmBody":
-      "Wähle, ob das exportierte Modellartefakt auch gespeicherte Shape-Function-Bearbeitungen des aktuellen Modells enthalten soll.",
+      "Wähle, ob das exportierte Modellartefakt auch gespeicherte Shape-Function-Bearbeitungen des aktuellen Modells enthalten soll. Der Export enthält außerdem die zurückgehaltenen Testzeilen und Zielwerte für eine spätere Bewertung.",
     "superadmin.exportIncludeEdits":
       "Gespeicherte Shape-Function-Bearbeitungen einschließen",
     "superadmin.exportConfirmAction": "Artefakt exportieren",
@@ -1373,10 +1639,10 @@ const translations = {
       "Zwei exportierte Modell-JSON-Dateien hochladen und ihre Basis- und bearbeiteten Feature-Shapes vergleichen.",
     "modelCompare.previewOnly":
       "Nur Vorschau - das Live-Modell bleibt unverändert",
-    "modelCompare.leftArtifact": "Original-Artefakt",
-    "modelCompare.rightArtifact": "Bearbeitetes Artefakt",
-    "modelCompare.leftArtifactSelections": "Auswahl Original-Artefakt",
-    "modelCompare.rightArtifactSelections": "Auswahl bearbeitetes Artefakt",
+    "modelCompare.leftArtifact": "Artefakt mit vollständigen Daten",
+    "modelCompare.rightArtifact": "Artefakt mit reduzierten Daten",
+    "modelCompare.leftArtifactSelections": "Auswahl des Artefakts mit vollständigen Daten",
+    "modelCompare.rightArtifactSelections": "Auswahl des Artefakts mit reduzierten Daten",
     "modelCompare.noFileChosen": "Noch keine Datei ausgewählt",
     "modelCompare.compareArtifacts": "Artefakte vergleichen",
     "modelCompare.instructions":
@@ -1388,6 +1654,54 @@ const translations = {
       "Vergleichsvorschau konnte nicht neu berechnet werden",
     "modelCompare.chooseBothFiles":
       "Bitte wähle beide exportierten JSON-Dateien aus, bevor du sie vergleichst.",
+    "modelCompare.overlapTitle": "CSV-Überschneidung mit den Artefakt-Testsätzen",
+    "modelCompare.overlapDescription":
+      "Die Quell-CSV des reduzierten Modells hochladen, um dessen tatsächliche Trainingszeilen mit dem Original-Testsatz zu vergleichen. Für eine exakte Prüfung ohne gemeinsame Quell-IDs zusätzlich die ältere vollständige Quell-CSV hochladen. Der bisherige CSV-Zeilenvergleich steht darunter separat.",
+    "modelCompare.overlapCsvLabel": "CSV mit reduzierten Daten",
+    "modelCompare.overlapSourceCsvLabel": "Ältere vollständige Quell-CSV (optional)",
+    "modelCompare.overlapCheck": "Überschneidung prüfen",
+    "modelCompare.overlapChecking": "Überschneidung wird geprüft...",
+    "modelCompare.overlapError": "CSV-Überschneidung konnte nicht geprüft werden",
+    "modelCompare.overlapUnavailable":
+      "Das Originalartefakt enthält keine zurückgehaltenen Testzeilen. Exportiere ein Modell mit Testdaten, um diese Prüfung auszuführen.",
+    "modelCompare.overlapEditedUnavailable":
+      "Das bearbeitete Artefakt enthält keine zurückgehaltenen Testzeilen zum Abziehen. Die CSV wird nur mit dem Original-Testsatz verglichen.",
+    "modelCompare.overlapResult":
+      "{matches} von {remaining} verbleibenden CSV-Zeilen stimmen mit dem Original-Testsatz überein ({testRows} Testzeilen).",
+    "modelCompare.overlapDirectResult":
+      "{matches} von {remaining} CSV-Zeilen stimmen mit dem Original-Testsatz überein ({testRows} Testzeilen).",
+    "modelCompare.overlapSubtraction":
+      "CSV-Zeilen: {csvRows}. Wegen Übereinstimmung mit dem Testsatz des bearbeiteten Artefakts ({editedTestRows} Testzeilen) entfernt: {removed}. Verbleibend: {remaining}.",
+    "modelCompare.overlapBeforeSubtraction":
+      "Vor dem Abzug stimmten {matches} CSV-Zeilen mit dem Original-Testsatz überein.",
+    "modelCompare.overlapWithTarget":
+      "Der Vergleich verwendete alle Modell-Features und die Zielspalte.",
+    "modelCompare.overlapFeaturesOnly":
+      "Die CSV enthält keine Original-Zielspalte; der Vergleich verwendete nur Modell-Features.",
+    "modelCompare.overlapMatchedRows": "Verbleibende Zeilen mit Übereinstimmung im Original-Testsatz (nach der CSV-Kopfzeile nummeriert):",
+    "modelCompare.overlapDirectMatchedRows": "Zeilen mit Übereinstimmung im Original-Testsatz (nach der CSV-Kopfzeile nummeriert):",
+    "modelCompare.overlapRemovedRows": "Entfernte CSV-Zeilen mit Übereinstimmung im bearbeiteten Testsatz ({count})",
+    "modelCompare.overlapRowDetail":
+      "CSV-Zeile {csvRow} stimmt mit Testzeile {testRows} überein",
+    "modelCompare.overlapSampleIds": "Stichproben-ID: {ids}",
+    "modelCompare.overlapShowingFirst": "Die ersten {count} übereinstimmenden CSV-Zeilen werden angezeigt.",
+    "modelCompare.trainingOverlapTitle": "Trainingszeilen des reduzierten Modells im Original-Testsatz",
+    "modelCompare.trainingOverlapExact":
+      "{matches} von {training} Trainingsbeobachtungen des reduzierten Modells kommen im zurückgehaltenen Testsatz des Originalmodells mit {test} Zeilen vor.",
+    "modelCompare.trainingOverlapSourceVerified":
+      "Durch Zuordnung vollständiger Zeilen der reduzierten CSV zur älteren vollständigen Quell-CSV und Prüfung beider Artefakt-Aufteilungen verifiziert.",
+    "modelCompare.trainingOverlapIdsVerified":
+      "Anhand gemeinsamer Quell-IDs in beiden Artefakten verifiziert.",
+    "modelCompare.trainingOverlapTargetOnly":
+      "{matches} von {training} reduzierten Trainingszeilen haben eindeutige Zielwerte, die auch im Original-Testsatz mit {test} Zeilen vorkommen.",
+    "modelCompare.trainingOverlapNeedsSource":
+      "Gleiche Zielwerte beweisen noch keine identischen Beobachtungen. Lade die ältere vollständige Quell-CSV hoch, um die genaue Überschneidung zu verifizieren.",
+    "modelCompare.trainingOverlapUnavailable":
+      "Die Überschneidung von Training und Test konnte nicht verifiziert werden: {reason}",
+    "modelCompare.trainingOverlapUsableRows":
+      "Verwertbare Zeilen der reduzierten CSV nach Ausschluss fehlender Zielwerte: {count}.",
+    "modelCompare.overlapDescriptiveTitle":
+      "Weitere CSV-Zeilenübereinstimmungen (nicht die Trainingsdaten-Überschneidung)",
     "modelCompare.exportedAt": "Exportiert am",
     "modelCompare.dataset": "Datensatz",
     "modelCompare.features": "Features",
@@ -1408,6 +1722,16 @@ const translations = {
       "Zwischen sicherheitsgewichteter und gleich gewichteter Vorschau wechseln, Features suchen und zu einem Diagramm springen.",
     "modelCompare.confidenceOn": "Sicherheitsgewichtung an",
     "modelCompare.confidenceOff": "Sicherheitsgewichtung aus",
+    "modelCompare.showAlternateConfidenceAggregation":
+      "Beide Sicherheitsgewichtungen vergleichen",
+    "modelCompare.hideAlternateConfidenceAggregation":
+      "Nur ausgewählte Gewichtung anzeigen",
+    "modelCompare.featureMetricsOriginalTestSet":
+      "Originalen Testsatz für MAE, RMSE und R² je Feature verwenden",
+    "modelCompare.featureMetricsUniformGridDescription":
+      "Wenn ausgeschaltet, verwenden numerische Metriken 100 gleichmäßig verteilte Punkte im gemeinsamen Kurvenbereich.",
+    "modelCompare.featureMetricsOriginalTestSetUnavailable":
+      "Erfordert zurückgehaltene Feature-Zeilen im Originalartefakt.",
     "modelCompare.confidenceDescription":
       "Wenn aus, werden ausgewählte Einreichungen gleich gewichtet statt mit ihrer gespeicherten Sicherheit.",
     "modelCompare.showBaseTraces": "Basislinien und Balken anzeigen",
@@ -1416,13 +1740,42 @@ const translations = {
     "modelCompare.restoreChartPositions": "Kurvenpositionen wiederherstellen",
     "modelCompare.showLineDots": "Punkte auf Linien anzeigen",
     "modelCompare.hideLineDots": "Punkte auf Linien ausblenden",
+    "modelCompare.makeChartsTaller": "Diagramme höher anzeigen",
+    "modelCompare.restoreChartHeight": "Diagrammhöhe zurücksetzen",
     "modelCompare.baseTracesDescription":
       "Die ursprünglichen Basistraces für beide verglichenen Artefakte ein- oder ausblenden.",
     "modelCompare.showIndividualEdits": "Einzelne Bearbeitungen anzeigen",
     "modelCompare.showAggregatedEdits": "Zusammengefasste Bearbeitungen anzeigen",
+    "modelCompare.enableChartExpertSelection": "Expert:innen in Feature-Diagrammen auswählen",
+    "modelCompare.disableChartExpertSelection": "Expert:innen-Auswahl in Feature-Diagrammen beenden",
+    "modelCompare.chartExpertSelectionHint":
+      "Wähle Expert:innen für die Formfunktions- und MAE-Änderungsdiagramme dieses Features. Andere Ergebnisse bleiben unverändert.",
     "modelCompare.showIndividualMae": "Individuelle MAE-Fehler anzeigen",
     "modelCompare.hideIndividualMae": "Individuelle MAE-Fehler ausblenden",
     "modelCompare.individualMaeErrors": "Individuelle MAE-Fehler der Teilnehmenden",
+    "modelCompare.showIndividualMaeChangeChart": "MAE-Änderungsdiagramm der Expert:innen anzeigen",
+    "modelCompare.hideIndividualMaeChangeChart": "MAE-Änderungsdiagramm der Expert:innen ausblenden",
+    "modelCompare.showConfidenceRatedMae": "Sicherheitsgewichteten Expert:innen-MAE anzeigen",
+    "modelCompare.hideConfidenceRatedMae": "Sicherheitsgewichteten Expert:innen-MAE ausblenden",
+    "modelCompare.expertMaeChange": "MAE-Änderung der Expert:innen",
+    "modelCompare.expertMaeChangeTitle": "Änderung des Formfunktions-MAE je Expert:in",
+    "modelCompare.expertMaeChangeAxis": "MAE-Δ zur reduzierten Daten-Baseline",
+    "modelCompare.allFeatureMaeChange":
+      "Zusammengefasste MAE-Änderung über alle Features",
+    "modelCompare.allFeatureMaeChangeDescription":
+      "Jeder Balken zeigt ein Feature nach allen exportierten Bearbeitungen im Vergleich zu den unbearbeiteten Modellen. Beide Sicherheitsmodi sind unabhängig von der Expert:innen-Auswahl in den Feature-Diagrammen. Im kombinierten Diagramm kennzeichnen gemusterte Balken die Sicherheitsgewichtung.",
+    "modelCompare.expertAverageConfidence": "Durchschnittliche Sicherheit je Expert:in",
+    "modelCompare.expertAverageConfidenceDescription":
+      "Durchschnitt der gespeicherten Sicherheitsbewertungen über alle exportierten Feature-Einreichungen je Expert:in. Die Balken sind absteigend sortiert und unabhängig von der Auswahl in Feature-Diagrammen.",
+    "modelCompare.expertAverageConfidenceAxis": "Durchschnittliche Sicherheitsbewertung (1–10)",
+    "modelCompare.expertAverageConfidenceRatings": "Bewertete Einreichungen",
+    "modelCompare.noExpertConfidenceRatings": "Keine gespeicherten Sicherheitsbewertungen von Expert:innen verfügbar.",
+    "modelCompare.allFeatureMaeChangeWithoutConfidence":
+      "Ohne Sicherheitsbewertung",
+    "modelCompare.allFeatureMaeChangeWithConfidence":
+      "Mit Sicherheitsbewertung",
+    "modelCompare.showCombinedMaeChart": "Kombiniertes Diagramm anzeigen",
+    "modelCompare.showSeparateMaeCharts": "Getrennte Diagramme anzeigen",
     "modelCompare.showConfidenceInLegend": "Sicherheitsbewertung in Legende anzeigen",
     "modelCompare.hideConfidenceInLegend": "Sicherheitsbewertung in Legende ausblenden",
     "modelCompare.individualEditsDescription":
@@ -1443,23 +1796,123 @@ const translations = {
       "{features} Formfunktionen · {points} Referenzpunkte",
     "modelCompare.pooledShapeFunctionMae": "Zusammengefasste Kurvenpunkte",
     "modelCompare.meanPerFeatureMae": "Gleichgewichteter Feature-Mittelwert",
+    "modelCompare.expertCompleteModelMae": "MAE des vollständigen Expert:innenmodells",
+    "modelCompare.expertCompleteModelMaeDescription":
+      "Jeder Wert vergleicht die ausgewählten Bearbeitungen einer Person über alle verglichenen Formfunktionen mit den Kurven des vollständigen Datensatzes.",
+    "modelCompare.expertCompleteModelMaeConfidenceWeighted":
+      "Gespeicherte Sicherheitsbewertungen werden auf die Bearbeitungen angewendet.",
+    "modelCompare.expertCompleteModelMaeEqualWeighted":
+      "Bearbeitungen werden gleich gewichtet; gespeicherte Sicherheitsbewertungen werden nicht angewendet.",
+    "modelCompare.expertCompleteModelMaeCoverage":
+      "{features} Formfunktionen · {points} Referenzpunkte · {submissions} Einreichungen",
     "modelCompare.overallMaeFeatureSelection":
       "Formfunktionen auswählen ({selected} von {total} ausgewählt)",
     "modelCompare.overallMaeFeatureSelectionDescription":
       "Nur angekreuzte Formfunktionen werden in den Gesamt-MAE-Karten oben berücksichtigt. Mindestens eine muss ausgewählt bleiben.",
     "modelCompare.featureMaeDelta": "MAE-Δ: {delta}",
+    "modelCompare.heldOutTestPerformance": "Leistung auf zurückgehaltenen Testdaten",
+    "modelCompare.heldOutTestPerformanceDescription":
+      "Bewertet das Modell mit vollständigen Daten, das ursprüngliche reduzierte Modell und das bearbeitete reduzierte Modell anhand derselben zurückgehaltenen Zielwerte.",
+    "modelCompare.model": "Modell",
+    "modelCompare.fullData": "Referenzmodell mit vollständigen Daten",
+    "modelCompare.reducedData": "Ursprüngliches reduziertes Modell",
+    "modelCompare.editedReducedData": "Bearbeitetes reduziertes Modell",
+    "modelCompare.effectOfExpertEdits": "Wirkung der Expertenbearbeitungen",
+    "modelCompare.selectedModelComparison": "Vergleich der ausgewählten Modelle",
+    "modelCompare.reducedToEdited": "Ursprüngliches reduziertes → bearbeitetes reduziertes Modell",
+    "modelCompare.fullToReduced": "Referenzmodell mit vollständigen Daten → ursprüngliches reduziertes Modell",
+    "modelCompare.fullToEdited": "Referenzmodell mit vollständigen Daten → bearbeitetes reduziertes Modell",
+    "modelCompare.allThreeComparison": "Referenzmodell mit vollständigen Daten → ursprüngliches reduziertes Modell → bearbeitetes reduziertes Modell",
+    "modelCompare.reducedMinusFull": "reduziert − vollständig",
+    "modelCompare.editedMinusFull": "bearbeitet − vollständig",
+    "modelCompare.editedMinusReduced": "bearbeitet − reduziert",
+    "modelCompare.allThree": "Alle drei",
+    "modelCompare.reducedEdited": "Reduziert vs. bearbeitet",
+    "modelCompare.fullReduced": "Vollständig vs. reduziert",
+    "modelCompare.fullEdited": "Vollständig vs. bearbeitet",
+    "modelCompare.residualComparison": "Tatsächlicher Wert vs. Residuum",
+    "modelCompare.residualAxis": "Vorhersage − tatsächlich",
+    "modelCompare.zeroResidual": "Residuum null",
+    "modelCompare.metric.mae": "MAE",
+    "modelCompare.metric.rmse": "RMSE",
+    "modelCompare.metric.r2": "R²",
+    "modelCompare.metric.mean_error": "Mittlerer Fehler",
+    "modelCompare.metric.bias_magnitude": "Betrag des mittleren Vorhersagefehlers",
+    "modelCompare.metric.std_dev": "Standardabweichung der Vorhersagen",
+    "modelCompare.meanErrorConvention": "Mittlerer Fehler = Mittelwert(Vorhersage − tatsächlich). Negativ bedeutet Unterschätzung, positiv Überschätzung. Die Vergleichskarten verwenden den Betrag des mittleren Vorhersagefehlers.",
+    "modelCompare.improved": "Verbessert",
+    "modelCompare.worsened": "Verschlechtert",
+    "modelCompare.unchanged": "Unverändert",
+    "modelCompare.benchmarkRelationships": "Vollständig ↔ reduziert: Lücke durch begrenzte Daten. Vollständig ↔ bearbeitet: verbleibende Lücke. Genauigkeit wird anhand tatsächlicher Zielwerte bewertet.",
+    "modelCompare.benchmarkGaps": "Abstand zum Referenzmodell mit vollständigen Daten",
+    "modelCompare.observationEffects": "Wirkung je Beobachtung und Unsicherheit",
+    "modelCompare.medianErrorChange": "Median der Änderung des absoluten Fehlers",
+    "modelCompare.trainingCorrectionOption": "Interzeptkorrektur aus Trainingsdaten anwenden, damit die mittlere Vorhersage des reduzierten Modells erhalten bleibt",
+    "modelCompare.manualAdjustmentDisabled": "Die Korrektur aus Trainingsdaten ist aktiv. Deaktiviere sie im Leistungsbereich, um eine manuelle Verschiebung einzugeben.",
+    "modelCompare.correctionMetadata": "Interzeptkorrektur aktiviert: {enabled}; Verschiebung: {shift}; Quelle: {source}.",
+    "modelCompare.beforeAfterCorrection": "Bearbeitetes Modell vor und nach Interzeptkorrektur",
+    "modelCompare.beforeCorrection": "Vor der Korrektur",
+    "modelCompare.afterCorrection": "Nach der Korrektur",
+    "modelCompare.splitValidation": "Split-Prüfung: Die exportierten Testsätze stimmen überein: {shared}. Abgleichbare Quell-IDs fehlen für mindestens einen Trainingssatz; der Testausschluss ist daher nicht beweisbar. Gleiche Feature-Zeilen in exportierten Trainingsdaten: vollständig {full}, reduziert {reduced}. Treffer können verschiedene Beobachtungen sein.",
+    "modelCompare.splitVerified": "Split für {samples} Testzeilen geprüft: Die angegebenen Quell-IDs überschneiden sich mit keinem der beiden Trainingssätze.",
+    "modelCompare.preprocessingLeakage": "Hinweis zur Vorverarbeitung: Bei diesen historischen Modellen wurden fehlende Werte vor der Aufteilung ergänzt. Testmerkmale beeinflussten die Vorverarbeitung; Testzielwerte wurden weder zum Modelltraining noch zur Interzeptkorrektur verwendet.",
+    "modelCompare.mainTrainingPerformance": "Leistung auf Trainingsdaten (Debug)",
+    "modelCompare.mainTrainingPerformanceDescription":
+      "Verwendet nur die Zeilen, mit denen das Modell auf der Hauptseite trainiert wurde. Validierungs- und Testzeilen sind ausgeschlossen; diese Kennzahlen dienen der Fehlersuche.",
+    "modelCompare.heldOutTestDataSource": "Testsatz",
+    "modelCompare.useOriginalArtifactTestSet": "Zurückgehaltener Testsatz des vollständigen Datensatzes",
+    "modelCompare.useReducedArtifactTestSet": "Testsatz des reduzierten Artefakts",
+    "modelCompare.useMainTrainingData": "Vollständiger Datensatz",
+    "modelCompare.evaluateHeldOutTest": "Artefakte bewerten",
+    "modelCompare.heldOutTestCoverage": "{samples} zurückgehaltene Testbeispiele",
+    "modelCompare.sharedHeldOutNeedsLineage": "Für diesen ursprünglichen IQB-Export die reduzierte 5-%-CSV und die alte 100-%-Quell-CSV im Überschneidungsbereich hochladen und die Prüfung ausführen. Der ursprüngliche Testsatz mit 5.249 Zeilen enthält Trainingszeilen des reduzierten Modells.",
+    "modelCompare.sharedHeldOutReady": "Geprüfter gemeinsamer Testsatz: {samples} Quellzeilen ohne Trainingsbeobachtungen des reduzierten Modells.",
+    "modelCompare.mainTrainingPerformanceCoverage": "{samples} Trainingsbeispiele",
+    "modelCompare.heldOutBeforeEdits": "Original-Artefakt",
+    "modelCompare.heldOutAfterEdits": "Bearbeitetes Artefakt",
+    "modelCompare.heldOutDeltaEditedMinusOriginal": "Bearbeitet − Original",
+    "modelCompare.heldOutResidualStandardDeviation": "Standardabweichung der Residuen",
+    "modelCompare.heldOutMeanError": "Mittlerer Fehler",
+    "modelCompare.actualVsPredicted": "Tatsächlich vs. vorhergesagt",
+    "modelCompare.actualValues": "Tatsächliche Werte",
+    "modelCompare.predictedValues": "Vorhergesagte Werte",
+    "modelCompare.actualVsPredictedIdentityLine": "Perfekte Vorhersage",
+    "modelCompare.heldOutTestReady":
+      "Wähle einen Testsatz und bewerte anschließend alle drei Modellzustände.",
+    "modelCompare.heldOutTestUnavailable":
+      "Das ausgewählte Artefakt enthält keine zurückgehaltenen Testdaten. Exportiere es nach dem Training mit dieser Version erneut und lade das neue Artefakt hoch.",
     "modelCompare.averagePredictedScore":
       "Vergleich durchschnittlicher Vorhersagen",
     "modelCompare.averagePredictedScoreDescription":
-      "Vergleicht das Original-Artefakt mit vollständigen Daten mit dem bearbeiteten Artefakt auf denselben Referenzwerten der vollständigen Daten; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
-    "modelCompare.uniformAverage": "Kurvenraster vollständiger Daten",
-    "modelCompare.dataWeightedAverage": "Verteilung vollständiger Daten",
-    "modelCompare.uniformAverageDescription":
-      "Jede dargestellte Kurvenposition der vollständigen Daten erhält für beide Artefaktvorhersagen das gleiche Gewicht.",
-    "modelCompare.dataWeightedAverageDescription":
-      "Beide Artefaktvorhersagen werden mit der exportierten Feature-Verteilung des Artefakts mit vollständigen Daten gewichtet.",
-    "modelCompare.dataWeightedUnavailable":
-      "Der datengewichtete Vergleich benötigt Feature-Verteilungsdaten im Artefakt mit vollständigen Daten.",
+      "Vergleicht das Modell mit vollständigen Daten sowie das unbearbeitete und das bearbeitete Modell mit reduzierten Daten auf der gewählten Referenz; ausgewählte Bearbeitungen und die Sicherheitsgewichtung sind enthalten.",
+    "modelCompare.interceptAdjustmentLabel": "Interzept-Anpassung des bearbeiteten Modells",
+    "modelCompare.interceptAdjustmentDescription":
+      "Addiert diese Konstante zu den bearbeiteten Vorhersagen, auch im zurückgehaltenen Leistungstest. Die oben gezeigte Empfehlung aus den 80-%-Trainingszeilen gleicht die gemessene Änderung aus.",
+    "modelCompare.applyInterceptAdjustment": "Anwenden",
+    "modelCompare.interceptAdjustmentInvalid": "Gib eine endliche Zahl für die Interzept-Anpassung ein.",
+    "modelCompare.originalEditedBaseOffset": "Ursprünglicher Basisoffset des bearbeiteten Modells",
+    "modelCompare.activeInterceptAdjustment": "Aktive Anpassung",
+    "modelCompare.adjustedEditedBaseOffset": "Angepasster Basisoffset des bearbeiteten Modells",
+    "modelCompare.testSetAverage": "Zurückgehaltener Testsatz des Originals",
+    "modelCompare.mainDatasetAverage": "80-%-Trainingssatz des Originalmodells",
+    "modelCompare.testSetAverageDescription":
+      "Beide Artefakte sagen jede zurückgehaltene Feature-Zeile aus dem ursprünglichen Modell-JSON vorher; die Karten zeigen die mittleren Vorhersagen.",
+    "modelCompare.mainDatasetAverageDescription":
+      "Beide Artefakte sagen die {count} exportierten Trainingszeilen des Originalmodells voraus (sein 80-%-Entwicklungssatz). Die mittlere Änderung wird vor der Interzept-Anpassung berechnet.",
+    "modelCompare.mainDatasetAverageUnavailable":
+      "Das Originalmodell-Artefakt enthält keine exportierten Trainingszeilen. Exportiere es erneut, um die Änderung auf dem 80-%-Trainingssatz zu berechnen.",
+    "modelCompare.developmentMeanEditShift":
+      "Mittlere Änderung durch Bearbeitungen vor der Interzept-Anpassung",
+    "modelCompare.developmentSuggestedAdjustment":
+      "Empfohlene Interzept-Anpassung aus diesen Trainingszeilen",
+    "modelCompare.heldOutConfidenceWeighted":
+      "Die Vorhersagen auf dem zurückgehaltenen Testsatz verwenden nach Konfidenz gewichtete Expertenbearbeitungen.",
+    "modelCompare.heldOutUnweighted":
+      "Die Vorhersagen auf dem zurückgehaltenen Testsatz verwenden ungewichtete Expertenbearbeitungen in ihrer eingereichten Stärke.",
+    "modelCompare.missingIndicatorsExcludedFromAverage":
+      "Erzeugte [missing]-Indikator-Features werden aus diesen Mittelwerten und der Feature-Aufschlüsselung ausgeschlossen.",
+    "modelCompare.testSetAverageUnavailable":
+      "Das ursprüngliche Modell-JSON enthält keine zurückgehaltenen Testzeilen. Exportiere es nach dem Training erneut, um diese Option zu verwenden.",
     "modelCompare.limitEditedMeanDeviation":
       "Änderung des bearbeiteten Mittelwerts auf 10 % begrenzen",
     "modelCompare.limitEditedMeanDeviationDescription":
@@ -1474,25 +1927,49 @@ const translations = {
     "modelCompare.originalAveragePredictedScore":
       "Original-Artefakt mit vollständigen Daten",
     "modelCompare.editedAveragePredictedScore":
-      "Bearbeitetes Artefakt auf Referenz vollständiger Daten",
+      "Bearbeitetes Artefakt auf gewählter Referenz",
     "modelCompare.averagePredictedScoreDifference":
       "Bearbeitet − Original mit vollständigen Daten",
+    "modelCompare.editedMinusReducedAveragePrediction":
+      "Unterschied der mittleren Vorhersage: bearbeitetes − unbearbeitetes Modell mit reduzierten Daten",
     "modelCompare.averagePredictionRelativeChange":
       "Relative Veränderung: {change}",
-    "modelCompare.showAverageContributions": "Beitragsaufschlüsselung anzeigen",
-    "modelCompare.averageContributionsDescription":
-      "Diese additiven Terme vergleichen beide Artefakte auf der Referenz der vollständigen Daten und erklären die angezeigte Differenz.",
+    "modelCompare.trainingMeanDetailsTitle": "Trainingsmittelwerte und Interzeptwerte",
+    "modelCompare.trainingMeanDetailsDescription":
+      "Aus den Artefakten rekonstruierte mittlere Vorhersagen auf den vorverarbeiteten Trainingszeilen des Modells mit reduzierten Daten ({count} Zeilen), ohne erzeugte [missing]-Indikatoren. Ausgewählte Expertenanpassungen und die Skalierung der Vorschau sind berücksichtigt. Der Wert nach Korrektur verwendet die aktuell angewandte Interzept-Anpassung.",
+    "modelCompare.trainingMeanUnavailable":
+      "Trainingsmittelwerte sind nicht verfügbar, da dieses Artefakt keine Trainings-Feature-Zeilen enthält. Exportiere das Modell mit reduzierten Daten mit dieser Version erneut und lade es wieder hoch.",
+    "modelCompare.reducedTrainingMean": "Mittlere Vorhersage des Modells mit reduzierten Daten",
+    "modelCompare.editedTrainingMeanBeforeCorrection":
+      "Mittlere Vorhersage nach Expertenanpassung vor Interzept-Korrektur",
+    "modelCompare.trainingMeanDifferenceBeforeCorrection":
+      "Unterschied durch Expertenanpassung (bearbeitet − reduziert)",
+    "modelCompare.editedTrainingMeanAfterCorrection":
+      "Mittlere Vorhersage nach Expertenanpassung und angewandter Korrektur",
+    "modelCompare.originalFullDataIntercept": "Interzept des Originalmodells mit vollständigen Daten",
+    "modelCompare.reducedModelIntercept": "Interzept des Modells mit reduzierten Daten",
+    "modelCompare.editedInterceptBeforeCorrection":
+      "Interzept nach Expertenanpassung vor Korrektur",
+    "modelCompare.appliedInterceptCorrection": "Angewandte Interzept-Korrektur",
+    "modelCompare.editedInterceptAfterCorrection":
+      "Interzept nach Expertenanpassung und angewandter Korrektur",
+    "modelCompare.suggestedMatchingCorrection":
+      "Korrektur zum Angleichen des reduzierten Trainingsmittelwerts",
+    "modelCompare.suggestedMatchingIntercept":
+      "Interzept mit ausgleichender Korrektur",
+    "modelCompare.averageContributionsTitle":
+      "Änderung der mittleren Vorhersage je Feature",
+    "modelCompare.reducedEditedContributionsTitle":
+      "Änderung der mittleren Vorhersage je Feature: bearbeitetes − unbearbeitetes Modell mit reduzierten Daten",
     "modelCompare.contributionFeature": "Feature",
-    "modelCompare.featureEditShift": "Bearbeitungsverschiebung",
-    "modelCompare.decreaseFeatureEditShift":
-      "Bearbeitete Kurve um 1 verringern",
-    "modelCompare.increaseFeatureEditShift":
-      "Bearbeitete Kurve um 1 erhöhen",
-    "modelCompare.contributionFeatureSelection":
-      "Beiträge auswählen ({selected} von {total} ausgewählt)",
-    "modelCompare.contributionFeatureSelectionDescription":
-      "Klicke auf eine Feature-Zeile, um sie ein- oder auszuschließen; die Vorhersagewert-Karten oben werden mit derselben Auswahl aktualisiert.",
-    "modelCompare.selectedContributionDifference": "Änderung der ausgewählten Beiträge",
+    "modelCompare.meanPredictionChangeColumn":
+      "Änderung der mittleren Vorhersage (bearbeitet − Original)",
+    "modelCompare.reducedEditedMeanPredictionChangeColumn":
+      "Änderung der mittleren Vorhersage (bearbeitet − unbearbeitet, reduzierte Daten)",
+    "modelCompare.totalMeanDeviationFromOriginal":
+      "Gesamtabweichung vom Originalmodell (vollständige Daten)",
+    "modelCompare.totalMeanDeviationFromOriginalReduced":
+      "Gesamtabweichung vom unbearbeiteten Modell (reduzierte Daten)",
     "modelCompare.featureMeanShiftLimit": "10%-Mittelwertgrenze",
     "modelCompare.meanShiftFeatureLimitDescription":
       "Wähle die zu skalierenden bearbeiteten Features. Für diese Menge wird ein optimaler gemeinsamer Faktor berechnet; alle anderen Feature-Bearbeitungen bleiben unverändert.",
@@ -1508,7 +1985,6 @@ const translations = {
     "modelCompare.removeFeatureMeanShiftLimit": "Feature-Begrenzung entfernen",
     "modelCompare.selectedContributionAverageView":
       "Die Karten zeigen den Basisoffset plus ausgewählte Feature-Beiträge.",
-    "modelCompare.basePredictionOffset": "Basis-Vorhersageoffset",
     "modelCompare.recomputing": "Vorschau wird neu berechnet...",
     "modelCompare.noMatchingFeatures":
       "Keine Feature-Diagramme passen zur aktuellen Suche.",

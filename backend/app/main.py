@@ -2,11 +2,15 @@
 
 import json
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Body, Response
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form, Body, Response
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from uuid import uuid4
+
+from .held_out_overlap import compare_csv_to_artifact_test_sets
+from .training_overlap import compare_training_to_original_test
+from .preprocessing_sensitivity import compare_models as compare_preprocessing_sensitivity
 
 from .models import (
     PredictionOutput,
@@ -42,7 +46,7 @@ from .models import (
     ModelComparePreviewResponse,
     ModelComparePrepareResponse,
 )
-from .ml_service import ml_service, _json_safe
+from .ml_service import ml_service, _json_safe, CASE_STUDY_FEATURE_NAME_BY_SOURCE_COLUMN
 from .db_service import db_service
 from .config import settings
 from .security import create_admin_token, verify_admin_token
@@ -166,13 +170,21 @@ async def health_check_root():
 
 
 @app.post("/api/data/upload", response_model=DatasetUploadResponse)
-async def upload_data(request: Request, file: UploadFile = File(...)):
+async def upload_data(
+    request: Request,
+    file: UploadFile = File(...),
+    use_case_study_feature_names: bool = Form(False),
+):
     """Upload CSV and return columns for target selection (superadmin only)."""
     try:
         _require_superadmin(request)
         file_name = file.filename or "dataset.csv"
         file_bytes = await file.read()
-        preview = ml_service.inspect_uploaded_dataset(file_name, file_bytes)
+        preview = ml_service.inspect_uploaded_dataset(
+            file_name,
+            file_bytes,
+            use_case_study_feature_names=use_case_study_feature_names,
+        )
         return DatasetUploadResponse(**preview)
     except HTTPException:
         raise
@@ -313,6 +325,40 @@ async def train_model(http_request: Request, request: Optional[TrainModelRequest
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/model/preprocessing-sensitivity")
+async def preprocessing_sensitivity(
+    request: Request,
+    full_csv: UploadFile = File(...),
+    full_model: UploadFile = File(...),
+    reduced_csv: UploadFile = File(...),
+    reduced_model: UploadFile = File(...),
+):
+    """Retrain unedited IQB models with medians learned on training rows only."""
+    _require_superadmin(request)
+    for csv_file in (full_csv, reduced_csv):
+        if not (csv_file.filename or "").lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail="Upload CSV datasets")
+    full_artifact = await _read_uploaded_json_artifact(full_model)
+    reduced_artifact = await _read_uploaded_json_artifact(reduced_model)
+    for csv_file, artifact in (
+        (full_csv, full_artifact),
+        (reduced_csv, reduced_artifact),
+    ):
+        if isinstance(artifact, dict) and artifact.get("dataset_name"):
+            if Path(csv_file.filename or "").name != Path(artifact["dataset_name"]).name:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Each CSV filename must match its original model export",
+                )
+    try:
+        return compare_preprocessing_sensitivity(
+            await full_csv.read(), full_artifact,
+            await reduced_csv.read(), reduced_artifact,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/comparison/train", response_model=ComparisonTrainResponse)
@@ -459,6 +505,57 @@ async def prepare_model_compare(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/model-compare/held-out-overlap")
+async def check_model_compare_held_out_overlap(
+    http_request: Request,
+    original_file: UploadFile = File(...),
+    edited_file: UploadFile = File(...),
+    csv_file: UploadFile = File(...),
+    source_csv_file: Optional[UploadFile] = File(None),
+):
+    """Report training/test leakage and the separate CSV row comparison."""
+    try:
+        _require_superadmin(http_request)
+        if not (csv_file.filename or "").lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail="Only CSV files are supported")
+        if source_csv_file and not (source_csv_file.filename or "").lower().endswith(".csv"):
+            raise HTTPException(status_code=400, detail="Only CSV source files are supported")
+        original_artifact = await _read_uploaded_json_artifact(original_file)
+        edited_artifact = await _read_uploaded_json_artifact(edited_file)
+        original_prepared = ml_service.prepare_model_compare_artifact(
+            original_artifact,
+            filename=original_file.filename or "original-artifact.json",
+        )
+        edited_prepared = ml_service.prepare_model_compare_artifact(
+            edited_artifact,
+            filename=edited_file.filename or "edited-artifact.json",
+        )
+        ml_service._validate_model_compare_pair(original_prepared, edited_prepared)
+        csv_bytes = await csv_file.read()
+        source_bytes = await source_csv_file.read() if source_csv_file else None
+        descriptive_overlap = compare_csv_to_artifact_test_sets(
+            csv_bytes,
+            original_prepared,
+            edited_prepared,
+            column_aliases=CASE_STUDY_FEATURE_NAME_BY_SOURCE_COLUMN,
+        )
+        try:
+            training_overlap = compare_training_to_original_test(
+                original_prepared,
+                edited_prepared,
+                csv_bytes,
+                source_csv_bytes=source_bytes,
+                column_aliases=CASE_STUDY_FEATURE_NAME_BY_SOURCE_COLUMN,
+            )
+        except ValueError as exc:
+            training_overlap = {"status": "unavailable", "reason": str(exc)}
+        return {**descriptive_overlap, "training_overlap": training_overlap}
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/api/model-compare/preview", response_model=ModelComparePreviewResponse)
 async def preview_model_compare(
     request: ModelComparePreviewRequest,
@@ -494,6 +591,14 @@ async def preview_model_compare(
                 dict(request.manual_feature_shifts)
                 if request.manual_feature_shifts is not None
                 else None
+            ),
+            intercept_adjustment=request.intercept_adjustment,
+            apply_training_intercept_correction=request.apply_training_intercept_correction,
+            feature_metrics_on_original_test_set=request.feature_metrics_on_original_test_set,
+            held_out_test_source=(
+                str(request.held_out_test_source)
+                if request.held_out_test_source is not None
+                else "right"
             ),
         )
         return ModelComparePreviewResponse(**preview)

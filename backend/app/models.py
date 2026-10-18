@@ -107,6 +107,7 @@ class DatasetUploadResponse(BaseModel):
     original_filename: str
     columns: List[str]
     default_target_column: str
+    case_study_feature_columns: Optional[List[str]] = None
 
 
 class FeatureImportance(BaseModel):
@@ -382,6 +383,7 @@ class ModelCompareArtifactMetadata(BaseModel):
     has_edit_export: bool = False
     edit_user_count: int = 0
     edit_submission_count: int = 0
+    has_held_out_test_data: bool = False
     model_source: Optional[str] = None
     artifact_version: Optional[str] = None
 
@@ -429,17 +431,32 @@ class ModelCompareFeatureSubmissions(BaseModel):
     submissions: List[ModelCompareSubmission] = Field(default_factory=list)
 
 
+class ModelCompareHeldOutTestData(BaseModel):
+    """Feature rows and targets reserved from training for artifact evaluation."""
+    feature_rows: List[Dict[str, Any]] = Field(default_factory=list)
+    target_values: List[float] = Field(default_factory=list)
+    sample_ids: Optional[List[str]] = None
+
+
 class ModelComparePreparedArtifact(BaseModel):
     """Canonical compare payload for one uploaded model artifact."""
     metadata: ModelCompareArtifactMetadata
     base_prediction_offset: float = 0.0
+    feature_names: List[str] = Field(default_factory=list)
     selected_feature_columns: List[str]
     cat_features: List[str] = Field(default_factory=list)
     num_features: List[str] = Field(default_factory=list)
+    missing_indicator_map: Dict[str, str] = Field(default_factory=dict)
+    numeric_missing_placeholder_values: Dict[str, float] = Field(default_factory=dict)
     shape_functions: List[ModelCompareShapeFunction] = Field(default_factory=list)
     submissions_by_feature: List[ModelCompareFeatureSubmissions] = Field(
         default_factory=list
     )
+    held_out_test_data: Optional[ModelCompareHeldOutTestData] = None
+    training_feature_rows: Optional[List[Dict[str, Any]]] = None
+    sample_id_namespace: Optional[str] = None
+    training_sample_ids: Optional[List[str]] = None
+    preprocessing_scope: Optional[str] = None
 
 
 class ModelCompareFeatureCurveMetrics(BaseModel):
@@ -471,6 +488,8 @@ class ModelCompareSubmissionTrace(BaseModel):
     sureness: int = 0
     y_values: List[float]
     original_base_mae: Optional[float] = None
+    original_base_mae_without_confidence: Optional[float] = None
+    original_base_mae_with_confidence: Optional[float] = None
 
 
 class ModelCompareFeaturePreview(BaseModel):
@@ -485,6 +504,7 @@ class ModelCompareFeaturePreview(BaseModel):
     left_effective_y_values: List[float]
     right_base_y_values: List[float]
     right_effective_y_values: List[float]
+    right_alternate_confidence_y_values: List[float]
     left_individual_edit_traces: List[ModelCompareSubmissionTrace] = Field(
         default_factory=list
     )
@@ -509,13 +529,35 @@ class ModelComparePreviewRequest(BaseModel):
     mean_deviation_feature_names: Optional[List[str]] = None
     mean_deviation_scaled_feature_names: Optional[List[str]] = None
     manual_feature_shifts: Optional[Dict[str, float]] = None
+    intercept_adjustment: float = Field(default=0.0, allow_inf_nan=False)
+    apply_training_intercept_correction: bool = False
+    held_out_test_source: Optional[str] = None
+    feature_metrics_on_original_test_set: bool = False
 
 
 class ModelCompareAveragePredictionScores(BaseModel):
-    """Average predictions reconstructed from the artifacts' displayed curves."""
+    """Average predictions on a shared curve grid or selected feature rows."""
     original: float
+    reduced: float
     edited: float
     difference: float
+    edited_minus_reduced: float
+
+
+class ModelCompareTrainingMeanPredictionSummary(BaseModel):
+    """Artifact-based means on the reduced model's preprocessed training rows."""
+    training_row_count: int
+    reduced_model_mean: float
+    edited_before_correction_mean: float
+    difference_before_correction: float
+    edited_after_correction_mean: float
+    original_full_data_intercept: float
+    reduced_intercept: float
+    edited_intercept_before_correction: float
+    intercept_adjustment: float
+    edited_intercept_after_correction: float
+    suggested_matching_adjustment: float
+    suggested_matching_intercept: float
 
 
 class ModelCompareOverallShapeFunctionMaeMeasure(BaseModel):
@@ -525,21 +567,80 @@ class ModelCompareOverallShapeFunctionMaeMeasure(BaseModel):
     status: str
 
 
+class ModelCompareExpertCompleteModelMae(BaseModel):
+    """One expert's full selected model compared with the full-data curves."""
+    user_name: str
+    mae: float
+    baseline_mae: float
+    status: str
+    feature_count: int
+    point_count: int
+    submission_count: int
+
+
+class ModelCompareFeatureMaeChange(BaseModel):
+    """One feature's MAE after all exported edits in a fixed confidence mode."""
+    feature_name: str
+    mae: float
+    baseline_mae: float
+    status: str
+    point_count: int
+
+
+class ModelCompareAllFeatureMaeChange(BaseModel):
+    """Fixed per-feature comparisons in both confidence modes."""
+    without_confidence: List[ModelCompareFeatureMaeChange] = Field(default_factory=list)
+    with_confidence: List[ModelCompareFeatureMaeChange] = Field(default_factory=list)
+
+
 class ModelCompareOverallShapeFunctionMae(BaseModel):
     """Pooled and equal-feature summaries of shape-function MAE."""
     feature_count: int
     point_count: int
     pooled: ModelCompareOverallShapeFunctionMaeMeasure
     mean_per_feature: ModelCompareOverallShapeFunctionMaeMeasure
+    expert_complete_model_mae: List[ModelCompareExpertCompleteModelMae] = Field(
+        default_factory=list
+    )
+
+
+class ModelCompareHeldOutTestMetrics(BaseModel):
+    """Predictive metrics evaluated on one fixed held-out test set."""
+    mae: float
+    rmse: float
+    std_dev: float
+    mean_error: float
+    r2: Optional[float]
+
+
+class ModelCompareHeldOutTestPerformance(BaseModel):
+    """Original and edited artifact accuracy on a shared selected dataset."""
+    test_size: int
+    test_data_source: str
+    baseline: ModelCompareHeldOutTestMetrics
+    reduced: ModelCompareHeldOutTestMetrics
+    edited: ModelCompareHeldOutTestMetrics
+    edited_before_intercept_correction: Optional[ModelCompareHeldOutTestMetrics] = None
+    actual_values: List[float] = Field(default_factory=list)
+    baseline_predictions: List[float] = Field(default_factory=list)
+    reduced_predictions: List[float] = Field(default_factory=list)
+    edited_predictions: List[float] = Field(default_factory=list)
+    edited_before_intercept_predictions: Optional[List[float]] = None
+    edit_effect: Dict[str, Any] = Field(default_factory=dict)
+    paired_bootstrap: Dict[str, Any] = Field(default_factory=dict)
+    validation: Dict[str, Any] = Field(default_factory=dict)
+    intercept_correction: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelCompareAverageFeatureContribution(BaseModel):
     """One additive term behind an average-prediction score."""
     feature_name: str
     original: float
+    reduced: float
     edited: float
     difference: float
     is_base_offset: bool = False
+    is_internal_feature: bool = False
 
 
 class ModelCompareMeanDeviationConstraint(BaseModel):
@@ -558,10 +659,20 @@ class ModelCompareMeanDeviationConstraint(BaseModel):
 class ModelComparePreviewResponse(BaseModel):
     """Response with recalculated preview traces for compared features."""
     use_confidence: bool = True
+    intercept_adjustment: float = 0.0
+    original_edited_base_prediction_offset: float = 0.0
+    adjusted_edited_base_prediction_offset: float = 0.0
     feature_previews: List[ModelCompareFeaturePreview] = Field(default_factory=list)
+    all_feature_mae_change: ModelCompareAllFeatureMaeChange
     overall_shape_function_mae: ModelCompareOverallShapeFunctionMae
+    held_out_test_performance: Optional[ModelCompareHeldOutTestPerformance] = None
+    main_training_performance_available: bool = False
     average_prediction_scores: ModelCompareAveragePredictionScores
-    data_weighted_average_prediction_scores: Optional[ModelCompareAveragePredictionScores] = None
+    training_mean_prediction_summary: Optional[ModelCompareTrainingMeanPredictionSummary] = None
+    test_set_average_prediction_scores: Optional[ModelCompareAveragePredictionScores] = None
+    main_dataset_average_prediction_scores: Optional[ModelCompareAveragePredictionScores] = None
+    main_dataset_training_row_count: int = 0
+    main_dataset_average_prediction_shift: Optional[float] = None
     average_prediction_feature_contributions: Dict[
         str, Optional[List[ModelCompareAverageFeatureContribution]]
     ] = Field(default_factory=dict)

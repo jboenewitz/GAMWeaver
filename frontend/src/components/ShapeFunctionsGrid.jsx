@@ -2,6 +2,7 @@ import React from "react";
 import Plot from "react-plotly.js";
 import { createTranslator } from "../i18n";
 import { getShapeFunctionDisplayName } from "../utils/featureDisplay";
+import { getReadingSpellingDifficultyAxisTicks } from "../utils/featureAxisTicks";
 
 const ShapeFunctionChart = ({ shapeFunction, t }) => {
   if (!shapeFunction) return null;
@@ -58,6 +59,7 @@ const ShapeFunctionChart = ({ shapeFunction, t }) => {
             tickangle: -20,
           }
         : {}),
+      ...(getReadingSpellingDifficultyAxisTicks(feature_name, x_values, !isNumeric) || {}),
     },
     yaxis: {
       title: t("shapeFunctions.effectOnPrediction"),

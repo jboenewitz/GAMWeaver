@@ -44,6 +44,15 @@ const SuperadminPage = ({
   const [comparisonFeatureColumns, setComparisonFeatureColumns] = useState([]);
   const [comparisonExpanded, setComparisonExpanded] = useState(false);
   const [updatingChartDisplay, setUpdatingChartDisplay] = useState(false);
+  const [sensitivityFiles, setSensitivityFiles] = useState({
+    full_csv: null,
+    full_model: null,
+    reduced_csv: null,
+    reduced_model: null,
+  });
+  const [sensitivityRunning, setSensitivityRunning] = useState(false);
+  const [sensitivityError, setSensitivityError] = useState("");
+  const [sensitivityResult, setSensitivityResult] = useState(null);
 
   const resetComparisonModal = () => {
     setComparisonFile(null);
@@ -277,6 +286,38 @@ const SuperadminPage = ({
     }
   };
 
+  const handleSensitivityFile = (name, file) => {
+    setSensitivityFiles((previous) => ({ ...previous, [name]: file }));
+    setSensitivityResult(null);
+    setSensitivityError("");
+  };
+
+  const handleRunSensitivity = async () => {
+    setSensitivityRunning(true);
+    setSensitivityError("");
+    setSensitivityResult(null);
+    try {
+      const result = await apiService.comparePreprocessingSensitivity(sensitivityFiles);
+      setSensitivityResult(result);
+    } catch (err) {
+      setSensitivityError(
+        err.response?.data?.detail || err.message || t("superadmin.sensitivityError"),
+      );
+    } finally {
+      setSensitivityRunning(false);
+    }
+  };
+
+  const formatSensitivityMetric = (value) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? value.toFixed(4)
+      : "—";
+
+  const formatSensitivityDelta = (value) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? `${value > 0 ? "+" : ""}${value.toFixed(4)}`
+      : "—";
+
   const handleToggleMissingBars = async () => {
     if (!onUpdateChartDisplaySettings) return;
     setUpdatingChartDisplay(true);
@@ -473,6 +514,132 @@ const SuperadminPage = ({
               {modelStatus?.comparison_is_trained ? t("common.yes") : t("common.no")}
             </div>
           </div>
+        </section>
+
+        <section className="bg-white rounded-xl shadow-md p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">
+              {t("superadmin.sensitivityTitle")}
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              {t("superadmin.sensitivityDescription")}
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {[
+              ["full_csv", "superadmin.sensitivityFullCsv", ".csv,text/csv"],
+              ["full_model", "superadmin.sensitivityFullModel", ".json,application/json"],
+              ["reduced_csv", "superadmin.sensitivityReducedCsv", ".csv,text/csv"],
+              ["reduced_model", "superadmin.sensitivityReducedModel", ".json,application/json"],
+            ].map(([name, label, accept]) => (
+              <label key={name} className="block text-sm font-medium text-gray-700">
+                <span className="block mb-1">{t(label)}</span>
+                <input
+                  type="file"
+                  accept={accept}
+                  onChange={(event) => handleSensitivityFile(name, event.target.files?.[0] || null)}
+                  className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-slate-700"
+                />
+              </label>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={handleRunSensitivity}
+            disabled={busy || sensitivityRunning || !Object.values(sensitivityFiles).every(Boolean)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sensitivityRunning
+              ? t("superadmin.sensitivityRunning")
+              : t("superadmin.sensitivityRun")}
+          </button>
+          {sensitivityError && (
+            <p role="alert" className="text-sm text-red-700">{sensitivityError}</p>
+          )}
+          {sensitivityResult && (
+            <div className="space-y-6" aria-live="polite">
+              <p className="text-xs text-gray-600">
+                {t("superadmin.sensitivityMethodNote")}
+              </p>
+              {[
+                ["full", "superadmin.sensitivityFullResult"],
+                ["reduced", "superadmin.sensitivityReducedResult"],
+              ].map(([key, label]) => {
+                const result = sensitivityResult[key];
+                const changedFills = Object.entries(result.numeric_fills || {}).filter(
+                  ([, fill]) => Math.abs(fill.original - fill.training_only) > 1e-9,
+                );
+                return (
+                  <div key={key} className="rounded-lg border border-gray-200 p-4 space-y-3">
+                    <h3 className="font-semibold text-gray-800">{t(label)}</h3>
+                    <p className="text-sm text-gray-600">
+                      {t("superadmin.sensitivityRowCounts", {
+                        usable: result.usable_rows.toLocaleString(dateLocale),
+                        train: result.train_rows.toLocaleString(dateLocale),
+                        test: result.test_rows.toLocaleString(dateLocale),
+                      })}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t("superadmin.sensitivityMaePercent", {
+                        percent: formatSensitivityDelta(
+                          (100 * result.delta.mae) / result.reproduced_original.mae,
+                        ),
+                      })}
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-sm text-left">
+                        <thead className="border-b border-gray-200 text-gray-600">
+                          <tr>
+                            <th className="py-2 pr-4">{t("superadmin.sensitivityModel")}</th>
+                            <th className="py-2 pr-4">MAE</th>
+                            <th className="py-2 pr-4">RMSE</th>
+                            <th className="py-2">R²</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[
+                            ["original", "superadmin.sensitivityExported"],
+                            ["reproduced_original", "superadmin.sensitivityRefitOld"],
+                            ["corrected", "superadmin.sensitivityCorrected"],
+                          ].map(([name, rowLabel]) => (
+                            <tr key={name} className="border-b border-gray-100">
+                              <th className="py-2 pr-4 font-medium text-gray-700">{t(rowLabel)}</th>
+                              <td className="py-2 pr-4">{formatSensitivityMetric(result[name]?.mae)}</td>
+                              <td className="py-2 pr-4">{formatSensitivityMetric(result[name]?.rmse)}</td>
+                              <td className="py-2">{formatSensitivityMetric(result[name]?.r2)}</td>
+                            </tr>
+                          ))}
+                          <tr className="font-semibold text-gray-800">
+                            <th className="py-2 pr-4">{t("superadmin.sensitivityDelta")}</th>
+                            <td className="py-2 pr-4">{formatSensitivityDelta(result.delta?.mae)}</td>
+                            <td className="py-2 pr-4">{formatSensitivityDelta(result.delta?.rmse)}</td>
+                            <td className="py-2">{formatSensitivityDelta(result.delta?.r2)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      <h4 className="font-medium text-gray-700">
+                        {t("superadmin.sensitivityMedians")}
+                      </h4>
+                      {changedFills.length ? (
+                        <ul className="list-disc ml-5 mt-1 space-y-1">
+                          {changedFills.map(([name, fill]) => (
+                            <li key={name}>
+                              {name}: {formatSensitivityMetric(fill.original)} →{" "}
+                              {formatSensitivityMetric(fill.training_only)}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="mt-1">{t("superadmin.sensitivityNoMedianChanges")}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="bg-white rounded-xl shadow-md p-6">

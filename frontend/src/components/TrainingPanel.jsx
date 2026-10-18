@@ -15,6 +15,8 @@ const TrainingPanel = ({
   const [trainingProgressKey, setTrainingProgressKey] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [useCaseStudyFeatureNames, setUseCaseStudyFeatureNames] =
+    useState(false);
   const [uploading, setUploading] = useState(false);
   const [modalError, setModalError] = useState(null);
   const [uploadPreview, setUploadPreview] = useState(null);
@@ -26,6 +28,7 @@ const TrainingPanel = ({
 
   const resetModal = () => {
     setSelectedFile(null);
+    setUseCaseStudyFeatureNames(false);
     setUploading(false);
     setModalError(null);
     setUploadPreview(null);
@@ -53,13 +56,17 @@ const TrainingPanel = ({
     try {
       setUploading(true);
       setModalError(null);
-      const preview = await onUploadDataset(selectedFile);
+      const preview = await onUploadDataset(
+        selectedFile,
+        useCaseStudyFeatureNames,
+      );
       const defaultTarget =
         preview.default_target_column || preview.columns?.[0] || "";
       setUploadPreview(preview);
       setTargetColumn(defaultTarget);
       setSelectedFeatureColumns(
-        (preview.columns || []).filter((column) => column !== defaultTarget),
+        preview.case_study_feature_columns ||
+          (preview.columns || []).filter((column) => column !== defaultTarget),
       );
     } catch (err) {
       setModalError(err.message || t("training.error.uploadFailed"));
@@ -361,6 +368,21 @@ const TrainingPanel = ({
                     className="block w-full text-sm text-gray-700 file:mr-4 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
                   />
                 </div>
+
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={useCaseStudyFeatureNames}
+                    onChange={(event) => {
+                      setUseCaseStudyFeatureNames(event.target.checked);
+                      setUploadPreview(null);
+                      setTargetColumn("");
+                      setSelectedFeatureColumns([]);
+                      setModalError(null);
+                    }}
+                  />
+                  <span>{t("training.useCaseStudyFeatureNames")}</span>
+                </label>
 
                 <button
                   onClick={handleInspectUpload}

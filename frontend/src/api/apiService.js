@@ -24,9 +24,13 @@ export const apiService = {
   },
 
   // Data endpoints
-  uploadDataset: async (file) => {
+  uploadDataset: async (file, useCaseStudyFeatureNames = false) => {
     const formData = new FormData();
     formData.append("file", file);
+    formData.append(
+      "use_case_study_feature_names",
+      String(useCaseStudyFeatureNames),
+    );
     const response = await api.post("/data/upload", formData, {
       headers: {
         ...adminHeaders(),
@@ -85,6 +89,20 @@ export const apiService = {
     return response.data;
   },
 
+  comparePreprocessingSensitivity: async (files) => {
+    const formData = new FormData();
+    for (const [name, file] of Object.entries(files)) {
+      formData.append(name, file);
+    }
+    const response = await api.post("/model/preprocessing-sensitivity", formData, {
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
   trainComparisonModel: async () => {
     const response = await api.post(
       "/comparison/train",
@@ -127,6 +145,21 @@ export const apiService = {
     formData.append("left_file", leftFile);
     formData.append("right_file", rightFile);
     const response = await api.post("/model-compare/prepare", formData, {
+      headers: {
+        ...adminHeaders(),
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
+
+  checkModelCompareHeldOutOverlap: async (originalFile, editedFile, csvFile, sourceCsvFile) => {
+    const formData = new FormData();
+    formData.append("original_file", originalFile);
+    formData.append("edited_file", editedFile);
+    formData.append("csv_file", csvFile);
+    if (sourceCsvFile) formData.append("source_csv_file", sourceCsvFile);
+    const response = await api.post("/model-compare/held-out-overlap", formData, {
       headers: {
         ...adminHeaders(),
         "Content-Type": "multipart/form-data",
