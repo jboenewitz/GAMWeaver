@@ -353,6 +353,27 @@ const SuperadminPage = ({
     }
   };
 
+  const handleTogglePredictionComparison = async (audience) => {
+    if (!onUpdateChartDisplaySettings) return;
+    const setting =
+      audience === "superadmin"
+        ? "show_prediction_comparison_superadmin"
+        : "show_prediction_comparison_users";
+    setUpdatingChartDisplay(true);
+    setError(null);
+    try {
+      await onUpdateChartDisplaySettings({
+        [setting]: !Boolean(modelStatus?.[setting]),
+      });
+    } catch (err) {
+      setError(
+        err?.message || t("superadmin.error.updateChartDisplaySettings"),
+      );
+    } finally {
+      setUpdatingChartDisplay(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm">
@@ -460,6 +481,46 @@ const SuperadminPage = ({
                   : modelStatus?.show_competence_levels
                     ? t("superadmin.hideCompetenceLevels")
                     : t("superadmin.showCompetenceLevels")}
+              </button>
+            </div>
+          </div>
+          <div className="mt-5 border-t border-slate-200 pt-5">
+            <h3 className="font-semibold text-gray-800">
+              {t("superadmin.predictionComparisonVisibilityTitle")}
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              {t("superadmin.predictionComparisonVisibilityDescription")}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-3">
+              <button
+                type="button"
+                aria-pressed={Boolean(modelStatus?.show_prediction_comparison_superadmin)}
+                onClick={() => handleTogglePredictionComparison("superadmin")}
+                disabled={busy || updatingChartDisplay}
+                className={`rounded-lg px-4 py-2 text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  modelStatus?.show_prediction_comparison_superadmin
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-slate-700 hover:bg-slate-800"
+                }`}
+              >
+                {modelStatus?.show_prediction_comparison_superadmin
+                  ? t("superadmin.hidePredictionComparisonSelf")
+                  : t("superadmin.showPredictionComparisonSelf")}
+              </button>
+              <button
+                type="button"
+                aria-pressed={Boolean(modelStatus?.show_prediction_comparison_users)}
+                onClick={() => handleTogglePredictionComparison("users")}
+                disabled={busy || updatingChartDisplay}
+                className={`rounded-lg px-4 py-2 text-white transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  modelStatus?.show_prediction_comparison_users
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-slate-700 hover:bg-slate-800"
+                }`}
+              >
+                {modelStatus?.show_prediction_comparison_users
+                  ? t("superadmin.hidePredictionComparisonUsers")
+                  : t("superadmin.showPredictionComparisonUsers")}
               </button>
             </div>
           </div>

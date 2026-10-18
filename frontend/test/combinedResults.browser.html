@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Combined Results smoke test</title></head>
+  <body>
+    <div id="root"></div>
+    <pre id="smoke-result">RUNNING</pre>
+    <script type="module">
+      import React from "react";
+      import { createRoot } from "react-dom/client";
+      import apiService from "/src/api/apiService.js";
+      import CombinedResultsPage from "/src/components/CombinedResultsPage.jsx";
+
+      const calls = [];
+      const result = document.getElementById("smoke-result");
+      const shape = (weighted) => ({
+        feature_name: "age", feature_type: "numeric", x_values: [0, 10],
+        y_values: weighted ? [1.5, 2] : [2, 2], original_y_values: [1, 2],
+        comparison_y_values: [0.5, 1.5],
+      });
+      apiService.getModelStatus = async () => ({
+        is_trained: true, analytics_available: false, target_column: "score",
+        feature_schema: [{name: "age", feature_type: "numeric", default_value: 1}],
+      });
+      apiService.getCombinedPredictionsComparison = async (weighted) => {
+        calls.push(`comparison:${weighted}`);
+        return {
+          combined_shape_functions: [{feature_name: "age"}],
+          combined_shape_functions_display: [shape(weighted)],
+        };
+      };
+      apiService.getUsersWithEdits = async () => ({users: [{id: 1, name: "Alice"}]});
+      apiService.getEditLogs = async () => ({features: []});
+      apiService.getPerUserShapeFunctions = async (weighted) => {
+        calls.push(`overlay:${weighted}`);
+        return {users: [{user_id: 1, user_name: "Alice", shape_functions: [shape(weighted)]}]};
+      };
+      apiService.predictCombined = async () => {
+        calls.push("predict");
+        return {predicted_count: 3};
+      };
+
+      window.addEventListener("error", (event) => {
+        result.textContent = `FAIL: ${event.message}`;
+      });
+      createRoot(document.getElementById("root")).render(
+        React.createElement(CombinedResultsPage, {
+          onBack: () => {}, currentUser: {id: 1, name: "Alice"}, language: "en",
+        }),
+      );
+
+      const waitFor = (predicate) => new Promise((resolve, reject) => {
+        const start = Date.now();
+        const poll = () => {
+          const value = predicate();
+          if (value) return resolve(value);
+          if (Date.now() - start > 15000) return reject(new Error("Timed out waiting for page"));
+          setTimeout(poll, 50);
+        };
+        poll();
+      });
+      const button = (label) => [...document.querySelectorAll("button")]
+        .find((item) => item.textContent.trim() === label);
+      try {
+        (await waitFor(() => button("Show User Overlay"))).click();
+        await waitFor(() => button("Hide User Overlay"));
+        if (!document.body.textContent.includes("Alice")) throw new Error("User legend missing");
+        if (!calls.includes("overlay:true")) throw new Error("Weighted overlay not loaded");
+
+        button("Weighting: On").click();
+        await waitFor(() => button("Weighting: Off"));
+        if (!calls.includes("overlay:false") || !calls.includes("comparison:false")) {
+          throw new Error("Unweighted data not loaded");
+        }
+
+        button("Hide User Overlay").click();
+        await waitFor(() => button("Show User Overlay"));
+        apiService.getPerUserShapeFunctions = async () => {
+          throw new Error("Overlay unavailable");
+        };
+        button("Show User Overlay").click();
+        await waitFor(() => document.querySelector('[role="alert"]')?.textContent.includes("Overlay unavailable"));
+        if (!button("Show User Overlay")) throw new Error("Failed overlay remained enabled");
+
+        document.querySelector('form button[type="submit"]').click();
+        await waitFor(() => calls.includes("predict"));
+        await waitFor(() => document.querySelector("form")?.nextElementSibling?.textContent.includes("3"));
+
+        const weightedRequests = calls.filter((call) => call === "comparison:true").length;
+        button("Refresh").click();
+        await waitFor(() => calls.filter((call) => call === "comparison:true").length > weightedRequests);
+        result.textContent = "PASS: overlay, weighting, hide, error, prediction, and refresh";
+      } catch (error) {
+        result.textContent = `FAIL: ${error.stack || error.message}`;
+      }
+    </script>
+  </body>
+</html>

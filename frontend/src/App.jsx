@@ -14,6 +14,7 @@ import CombinedResultsPage from "./components/CombinedResultsPage";
 import SuperadminPage from "./components/SuperadminPage";
 import ModelComparePage from "./components/ModelComparePage";
 import LanguageToggleButton from "./components/LanguageToggleButton";
+import { isPredictionComparisonVisible } from "./utils/predictionComparisonVisibility";
 import {
   createTranslator,
   getInitialLanguage,
@@ -57,7 +58,6 @@ const formatApiError = (err, fallback = "Request failed") => {
 };
 
 function App() {
-  const showPredictionComparisonOnMain = true;
   const [language, setLanguage] = useState(getInitialLanguage);
   const t = createTranslator(language);
 
@@ -70,6 +70,10 @@ function App() {
 
   // State
   const [modelStatus, setModelStatus] = useState(null);
+  const showPredictionComparisonOnMain = isPredictionComparisonVisible(
+    modelStatus,
+    currentUser,
+  );
   const [dataSummary, setDataSummary] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [shapeFunctions, setShapeFunctions] = useState([]);
@@ -577,8 +581,16 @@ function App() {
   const handleUpdateChartDisplaySettings = async (settings) => {
     try {
       setError(null);
-      await apiService.updateChartDisplaySettings(settings);
-      await fetchModelStatus();
+      const updated = await apiService.updateChartDisplaySettings(settings);
+      setModelStatus((previous) =>
+        previous ? { ...previous, ...updated } : previous,
+      );
+      if (
+        "show_missing_bars" in settings ||
+        "show_competence_levels" in settings
+      ) {
+        await fetchModelStatus();
+      }
     } catch (err) {
       const message = formatApiError(
         err,

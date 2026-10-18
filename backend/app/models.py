@@ -165,6 +165,8 @@ class ModelStatusResponse(BaseModel):
     primary_n_estimators: Optional[int] = None
     show_missing_bars: bool = False
     show_competence_levels: bool = False
+    show_prediction_comparison_superadmin: bool = False
+    show_prediction_comparison_users: bool = False
 
 
 class ComparisonDataLoadRequest(BaseModel):
@@ -362,14 +364,18 @@ class FeatureChartSettingsResponse(BaseModel):
 
 class ChartDisplaySettingsRequest(BaseModel):
     """Global superadmin chart-display settings."""
-    show_missing_bars: bool = False
-    show_competence_levels: bool = False
+    show_missing_bars: Optional[bool] = None
+    show_competence_levels: Optional[bool] = None
+    show_prediction_comparison_superadmin: Optional[bool] = None
+    show_prediction_comparison_users: Optional[bool] = None
 
 
 class ChartDisplaySettingsResponse(BaseModel):
     """Response with global chart-display settings."""
     show_missing_bars: bool
     show_competence_levels: bool
+    show_prediction_comparison_superadmin: bool
+    show_prediction_comparison_users: bool
 
 
 class ModelCompareArtifactMetadata(BaseModel):

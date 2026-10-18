@@ -2,6 +2,11 @@ import React, { useState, useEffect } from "react";
 import apiService from "../api/apiService";
 import Plot from "react-plotly.js";
 import {
+  buildUserOverlayView,
+  getCombinedRequestErrorMessage,
+  selectCombinedResultsData,
+} from "../utils/combinedResultsView";
+import {
   createTranslator,
   getDateLocale,
   getPredictionTargetLabel,
@@ -206,6 +211,7 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   const [showUserOverlay, setShowUserOverlay] = useState(false);
   const [perUserShapeFunctions, setPerUserShapeFunctions] = useState(null);
   const [loadingOverlay, setLoadingOverlay] = useState(false);
+  const [overlayError, setOverlayError] = useState(null);
   const [useWeighting, setUseWeighting] = useState(true);
   const [unweightedComparisonData, setUnweightedComparisonData] =
     useState(null);
@@ -280,9 +286,17 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
         try {
           const perUser =
             await apiService.getPerUserShapeFunctions(useWeighting);
-          setPerUserShapeFunctions(perUser.users || []);
-        } catch (_) {
-          // silently fail — overlay will show stale data
+          if (!Array.isArray(perUser?.users)) {
+            throw new Error(t("combined.loadOverlayFailed"));
+          }
+          setPerUserShapeFunctions(perUser.users);
+          setOverlayError(null);
+        } catch (err) {
+          setPerUserShapeFunctions(null);
+          setShowUserOverlay(false);
+          setOverlayError(
+            getCombinedRequestErrorMessage(err, t("combined.loadOverlayFailed")),
+          );
         }
       } else {
         setPerUserShapeFunctions(null);
@@ -299,46 +313,63 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   };
 
   const handleOverlayToggle = async () => {
-    const next = !showUserOverlay;
-    setShowUserOverlay(next);
-    if (next) {
-      setLoadingOverlay(true);
-      try {
-        const data = await apiService.getPerUserShapeFunctions(useWeighting);
-        setPerUserShapeFunctions(data.users || []);
-      } catch (_) {
-        // silently fail
-      } finally {
-        setLoadingOverlay(false);
+    if (showUserOverlay) {
+      setShowUserOverlay(false);
+      setOverlayError(null);
+      return;
+    }
+    setLoadingOverlay(true);
+    setOverlayError(null);
+    try {
+      const data = await apiService.getPerUserShapeFunctions(useWeighting);
+      if (!Array.isArray(data?.users)) {
+        throw new Error(t("combined.loadOverlayFailed"));
       }
+      setPerUserShapeFunctions(data.users);
+      setShowUserOverlay(true);
+    } catch (err) {
+      setShowUserOverlay(false);
+      setPerUserShapeFunctions(null);
+      setOverlayError(
+        getCombinedRequestErrorMessage(err, t("combined.loadOverlayFailed")),
+      );
+    } finally {
+      setLoadingOverlay(false);
     }
   };
 
   const handleWeightingToggle = async () => {
     const next = !useWeighting;
-    setUseWeighting(next);
     setLoadingOverlay(true);
+    setOverlayError(null);
     try {
-      // Always re-fetch per-user overlay with new weighting, and lazily fetch
-      // unweighted combined data on first toggle-off
-      const fetches = [];
+      let nextPerUserShapeFunctions = perUserShapeFunctions;
+      let nextUnweightedComparisonData = unweightedComparisonData;
       if (showUserOverlay) {
-        fetches.push(
-          apiService
-            .getPerUserShapeFunctions(next)
-            .then((data) => setPerUserShapeFunctions(data.users || [])),
-        );
+        const data = await apiService.getPerUserShapeFunctions(next);
+        if (!Array.isArray(data?.users)) {
+          throw new Error(t("combined.loadOverlayFailed"));
+        }
+        nextPerUserShapeFunctions = data.users;
       }
       if (!next && !unweightedComparisonData) {
-        fetches.push(
-          apiService
-            .getCombinedPredictionsComparison(false)
-            .then((data) => setUnweightedComparisonData(data)),
-        );
+        nextUnweightedComparisonData =
+          await apiService.getCombinedPredictionsComparison(false);
+        if (
+          !Array.isArray(
+            nextUnweightedComparisonData?.combined_shape_functions_display,
+          )
+        ) {
+          throw new Error(t("combined.updateWeightingFailed"));
+        }
       }
-      await Promise.all(fetches);
-    } catch (_) {
-      // silently fail
+      setPerUserShapeFunctions(nextPerUserShapeFunctions);
+      setUnweightedComparisonData(nextUnweightedComparisonData);
+      setUseWeighting(next);
+    } catch (err) {
+      setOverlayError(
+        getCombinedRequestErrorMessage(err, t("combined.updateWeightingFailed")),
+      );
     } finally {
       setLoadingOverlay(false);
     }
@@ -413,13 +444,10 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   const renderMetricsComparison = () => {
     if (!analyticsAvailable || !comparisonData?.metrics) return null;
 
-  const activeData =
-      (useWeighting ? comparisonData : unweightedComparisonData) ??
-      comparisonData;
-    const hasComparisonOverlay = activeData.combined_shape_functions_display.some(
-      (sf) =>
-        Array.isArray(sf.comparison_y_values) &&
-        sf.comparison_y_values.length === sf.x_values.length,
+    const activeData = selectCombinedResultsData(
+      comparisonData,
+      unweightedComparisonData,
+      useWeighting,
     );
     if (
       !Number.isFinite(activeData?.metrics?.original_rmse) ||
@@ -507,9 +535,11 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   const renderScatterPlot = () => {
     if (!analyticsAvailable || !comparisonData) return null;
 
-    const activeData =
-      (useWeighting ? comparisonData : unweightedComparisonData) ??
-      comparisonData;
+    const activeData = selectCombinedResultsData(
+      comparisonData,
+      unweightedComparisonData,
+      useWeighting,
+    );
     const { original_predictions, interactive_predictions, actual_values } =
       activeData;
     if (
@@ -587,7 +617,12 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
   };
 
   const renderCombinedShapeFunctions = () => {
-    if (!comparisonData?.combined_shape_functions_display?.length) {
+    const activeData = selectCombinedResultsData(
+      comparisonData,
+      unweightedComparisonData,
+      useWeighting,
+    );
+    if (!activeData?.combined_shape_functions_display?.length) {
       return (
         <div className={`${GLASS_CARD_CLASS} text-center text-slate-500`}>
           {t("combined.shapeFunctionsNone")}
@@ -595,34 +630,14 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
       );
     }
 
-    const activeData =
-      (useWeighting ? comparisonData : unweightedComparisonData) ??
-      comparisonData;
-
     // Check if there are any edits
     const hasEdits = activeData.combined_shape_functions?.length > 0;
-
-    // Build per-user traces lookup: { feature_name: { user_name: y_values } }
-    // Used only for the overlay mode (always shows raw individual user edits)
-    const userTracesMap = {};
-    if (perUserShapeFunctions) {
-      perUserShapeFunctions.forEach((userSF) => {
-        userSF.shape_functions.forEach((sf) => {
-          if (!userTracesMap[sf.feature_name]) {
-            userTracesMap[sf.feature_name] = {};
-          }
-          userTracesMap[sf.feature_name][userSF.user_name] = sf.y_values;
-        });
-      });
-    }
+    const { userNames, userTracesMap, hasComparisonOverlay } =
+      buildUserOverlayView(activeData, perUserShapeFunctions);
 
     // The server already computed the correct combined y_values for the active
     // weighting mode — sf.y_values from activeData is always ready to use.
     const getCombinedY = (sf) => sf.y_values;
-
-    const userNames = perUserShapeFunctions
-      ? perUserShapeFunctions.map((u) => u.user_name)
-      : [];
 
     return (
       <div className={GLASS_CARD_CLASS}>
@@ -642,7 +657,7 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
               }`}
               title={t("combined.weightingToggleTitle")}
             >
-              {loadingOverlay && !useWeighting
+              {loadingOverlay
                 ? t("common.loading")
                 : useWeighting
                   ? t("combined.weightingOn")
@@ -657,7 +672,7 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
-              {loadingOverlay && useWeighting
+              {loadingOverlay
                 ? t("common.loading")
                 : showUserOverlay
                   ? t("combined.hideUserOverlay")
@@ -665,6 +680,15 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
             </button>
           </div>
         </div>
+
+        {overlayError && (
+          <div
+            role="alert"
+            className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          >
+            {overlayError}
+          </div>
+        )}
 
         {/* Horizontal color legend — visible when overlay is active */}
         {showUserOverlay && !loadingOverlay && (
@@ -755,9 +779,9 @@ function CombinedResultsPage({ onBack, currentUser, language = "en" }) {
                   plotData.push({
                     x: sf.x_values,
                     y: userY,
-                  type: "scatter",
-                  mode: "lines",
-                  name: name,
+                    type: "scatter",
+                    mode: "lines",
+                    name: name,
                     line: { color, width: 1.5 },
                     showlegend: false,
                   });

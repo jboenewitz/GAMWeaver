@@ -124,7 +124,7 @@ def test_edited_artifact_is_rejected_before_training():
 
 
 def test_sensitivity_endpoint_requires_superadmin():
-    from backend.app.main import preprocessing_sensitivity
+    from backend.app.admin_routes import preprocessing_sensitivity
 
     file = SpooledTemporaryFile(max_size=1024)
     file.write(b"x")

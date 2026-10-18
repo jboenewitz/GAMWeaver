@@ -11,6 +11,8 @@ from starlette.requests import Request
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.app.ml_service import MLService
+from backend.app.dataset_provenance import DatasetProvenanceMixin
+from backend.app.models import FeatureChartSettingsRequest
 from backend.app.security import create_admin_token
 
 
@@ -522,6 +524,8 @@ def test_competence_level_setting_persists_through_export_import(
     assert settings == {
         "show_missing_bars": True,
         "show_competence_levels": True,
+        "show_prediction_comparison_superadmin": False,
+        "show_prediction_comparison_users": False,
     }
     assert ml_service.get_model_status()["show_competence_levels"] is True
 
@@ -535,6 +539,28 @@ def test_competence_level_setting_persists_through_export_import(
 
     assert imported.show_competence_levels is True
     assert imported.get_chart_display_settings()["show_competence_levels"] is True
+
+
+def test_prediction_comparison_visibility_persists_without_clearing_edits(ml_service):
+    original_shapes = {"age": {"feature_name": "age"}}
+    original_offsets = {"age": {0.0: 2.0}}
+    ml_service.original_shape_functions = original_shapes
+    ml_service.shape_function_offsets = original_offsets
+
+    settings = ml_service.update_chart_display_settings(
+        show_prediction_comparison_users=True,
+    )
+
+    assert settings["show_prediction_comparison_users"] is True
+    assert settings["show_prediction_comparison_superadmin"] is False
+    assert settings["show_missing_bars"] is False
+    assert ml_service.original_shape_functions is original_shapes
+    assert ml_service.shape_function_offsets is original_offsets
+    assert ml_service.get_model_status()["show_prediction_comparison_users"] is True
+
+    ml_service.show_prediction_comparison_users = False
+    DatasetProvenanceMixin._restore_active_dataset_metadata(ml_service)
+    assert ml_service.show_prediction_comparison_users is True
 
 
 def test_export_import_roundtrip_preserves_missing_indicator_features(
@@ -724,18 +750,17 @@ def test_standard_import_preserves_source_curve_positions(
 
 
 def test_feature_chart_settings_require_superadmin(ml_service, monkeypatch):
-    from backend.app import main as main_module
+    from backend.app import admin_routes
 
-    monkeypatch.setattr(main_module, "ml_service", ml_service)
-    monkeypatch.setattr(main_module.db_service, "ensure_superadmin", lambda: None)
+    monkeypatch.setattr(admin_routes, "ml_service", ml_service)
 
     request = Request({"type": "http", "headers": []})
 
     with pytest.raises(HTTPException) as exc_info:
         anyio.run(
-            main_module.update_feature_chart_settings,
+            admin_routes.update_feature_chart_settings,
             "age",
-            main_module.FeatureChartSettingsRequest(
+            FeatureChartSettingsRequest(
                 numeric_tick_labels={"0": "Start"},
             ),
             request,
@@ -745,13 +770,12 @@ def test_feature_chart_settings_require_superadmin(ml_service, monkeypatch):
 
 
 def test_superadmin_can_still_use_legacy_value_labels_request(ml_service, monkeypatch):
-    from backend.app import main as main_module
+    from backend.app import admin_routes
 
-    monkeypatch.setattr(main_module, "ml_service", ml_service)
-    monkeypatch.setattr(main_module.db_service, "ensure_superadmin", lambda: None)
-    monkeypatch.setattr(main_module.settings, "auth_token_secret", "test-secret")
-    monkeypatch.setattr(main_module.settings, "superadmin_username", "superadmin")
-    monkeypatch.setattr(main_module.settings, "admin_token_ttl_hours", 1)
+    monkeypatch.setattr(admin_routes, "ml_service", ml_service)
+    monkeypatch.setattr(admin_routes.settings, "auth_token_secret", "test-secret")
+    monkeypatch.setattr(admin_routes.settings, "superadmin_username", "superadmin")
+    monkeypatch.setattr(admin_routes.settings, "admin_token_ttl_hours", 1)
 
     token = create_admin_token("superadmin", "test-secret", 3600)
     request = Request(
@@ -762,9 +786,9 @@ def test_superadmin_can_still_use_legacy_value_labels_request(ml_service, monkey
     )
 
     response = anyio.run(
-        main_module.update_feature_chart_settings,
+        admin_routes.update_feature_chart_settings,
         "month",
-        main_module.FeatureChartSettingsRequest(
+        FeatureChartSettingsRequest(
             value_labels={"1": "January"},
             treat_as_numeric=False,
         ),
@@ -814,7 +838,7 @@ def test_load_comparison_data_keeps_internal_missing_indicator_features(
     df_loaded = pd.DataFrame({"age": [1.0, 2.0], "month": ["1", "2"], "target": [10.0, 20.0]})
 
     monkeypatch.setattr(
-        "backend.app.ml_service.prepare_training_data",
+        "backend.app.dataset_runtime.prepare_training_data",
         lambda **kwargs: (
             X_train,
             X_test,

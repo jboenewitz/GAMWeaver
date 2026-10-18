@@ -446,6 +446,8 @@ const translations = {
     "combined.weightingOn": "Weighting: On",
     "combined.weightingOff": "Weighting: Off",
     "combined.showUserOverlay": "Show User Overlay",
+    "combined.loadOverlayFailed": "Could not load user overlays. Please try again.",
+    "combined.updateWeightingFailed": "Could not change weighting. Please try again.",
     "combined.hideUserOverlay": "Hide User Overlay",
     "combined.legend": "Legend:",
     "combined.original": "Original",
@@ -568,6 +570,14 @@ const translations = {
     "superadmin.hideMissingBars": "Hide missing bars",
     "superadmin.showCompetenceLevels": "Show competence table",
     "superadmin.hideCompetenceLevels": "Hide competence table",
+    "superadmin.predictionComparisonVisibilityTitle":
+      "Prediction Comparison visibility",
+    "superadmin.predictionComparisonVisibilityDescription":
+      "Choose who can see the Prediction Comparison section on the main page. Both views are hidden by default.",
+    "superadmin.showPredictionComparisonSelf": "Show for me",
+    "superadmin.hidePredictionComparisonSelf": "Hide for me",
+    "superadmin.showPredictionComparisonUsers": "Show for other users",
+    "superadmin.hidePredictionComparisonUsers": "Hide for other users",
     "superadmin.updatingChartDisplay": "Updating chart display...",
     "superadmin.error.updateChartDisplaySettings":
       "Chart display settings could not be updated",
@@ -1461,6 +1471,10 @@ const translations = {
     "combined.weightingOn": "Gewichtung: An",
     "combined.weightingOff": "Gewichtung: Aus",
     "combined.showUserOverlay": "Benutzer-Overlay anzeigen",
+    "combined.loadOverlayFailed":
+      "Benutzer-Overlays konnten nicht geladen werden. Bitte erneut versuchen.",
+    "combined.updateWeightingFailed":
+      "Die Gewichtung konnte nicht geändert werden. Bitte erneut versuchen.",
     "combined.hideUserOverlay": "Benutzer-Overlay ausblenden",
     "combined.legend": "Legende:",
     "combined.original": "Original",
@@ -1549,6 +1563,14 @@ const translations = {
     "superadmin.hideMissingBars": "Fehlend-Balken ausblenden",
     "superadmin.showCompetenceLevels": "Kompetenztabelle anzeigen",
     "superadmin.hideCompetenceLevels": "Kompetenztabelle ausblenden",
+    "superadmin.predictionComparisonVisibilityTitle":
+      "Sichtbarkeit des Vorhersagevergleichs",
+    "superadmin.predictionComparisonVisibilityDescription":
+      "Lege fest, wer den Vorhersagevergleich auf der Hauptseite sehen kann. Beide Ansichten sind standardmäßig ausgeblendet.",
+    "superadmin.showPredictionComparisonSelf": "Für mich anzeigen",
+    "superadmin.hidePredictionComparisonSelf": "Für mich ausblenden",
+    "superadmin.showPredictionComparisonUsers": "Für andere anzeigen",
+    "superadmin.hidePredictionComparisonUsers": "Für andere ausblenden",
     "superadmin.updatingChartDisplay":
       "Diagrammanzeige wird aktualisiert...",
     "superadmin.error.updateChartDisplaySettings":
